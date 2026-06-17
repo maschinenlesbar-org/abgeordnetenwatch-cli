@@ -1,0 +1,37 @@
+{
+  "name": "abgeordnetenwatch-skills",
+  "owner": {
+    "name": "Sebastian Schürmann",
+    "email": "sebs@2xs.org"
+  },
+  "metadata": {
+    "description": "German parliamentary-data skills powered by the abgeordnetenwatch-cli (abgeordnetenwatch.de API v2)"
+  },
+  "plugins": [
+    {
+      "name": "abgeordnetenwatch",
+      "source": "./",
+      "description": "Pull a politician's roll-call voting record, surface disclosed side income, and break down how a parliament voted on a bill — all over the open, key-free abgeordnetenwatch.de API (CC0 data) via the abgeordnetenwatch-cli.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Sebastian Schürmann",
+        "email": "sebs@2xs.org"
+      },
+      "license": "AGPL-3.0-or-later",
+      "repository": "https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli",
+      "homepage": "https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli#readme",
+      "category": "transparency",
+      "keywords": [
+        "abgeordnetenwatch",
+        "bundestag",
+        "parliament",
+        "politicians",
+        "voting-record",
+        "sidejobs",
+        "transparency",
+        "open-data",
+        "germany"
+      ]
+    }
+  ]
+}

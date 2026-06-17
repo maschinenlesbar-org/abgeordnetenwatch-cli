@@ -1,0 +1,1442 @@
+openapi: 3.0.3
+
+info:
+  title: abgeordnetenwatch.de API
+  version: "2.9.0"
+  description: |
+    _Read-only REST API for German parliamentary data — politicians, mandates, parliaments,
+    votes, committees, side jobs and more._
+
+
+    Unofficial but complete OpenAPI description of the **abgeordnetenwatch.de** REST API
+    (version 2.x), reconstructed by probing the live API on 2026-06-16. abgeordnetenwatch.de
+    does not publish its own machine-readable specification; this document is derived from the
+    live responses and the per-entity documentation at
+    `https://www.abgeordnetenwatch.de/api/entitaeten/{entity}`.
+
+    The API is **read-only** (`GET` only), needs **no API key**, and all data is released under
+    **CC0 1.0** (public domain). Please send a descriptive `User-Agent`; the service rate-limits
+    bursts with HTTP `429`.
+
+    ## Response envelope
+
+    Every response is a JSON object with a `meta` block and a `data` payload:
+
+    - **Collection** endpoints (e.g. `GET /politicians`) return `data` as an **array** and a
+      `meta.result` with `count`, `total`, `range_start`, `range_end`.
+    - **Single-entity** endpoints (e.g. `GET /politicians/{id}`) return `data` as a single
+      **object** and a `meta.result` with `entity_id` and `entity_type`.
+    - **Errors** return `meta.status: "error"` with a human-readable `meta.status_message`
+      (e.g. HTTP `500` for an unknown id).
+
+    ## Pagination
+
+    Use `range_start` (0-based offset) and `range_end`. **`range_end` is capped at 100** — the
+    page size, not an absolute index; requesting more still returns at most 100 items. Read
+    `meta.result.total` for the full match count and page with `range_start`.
+
+    ## Sorting
+
+    `sort_by=<field>` plus `sort_direction=asc|desc`.
+
+    ## Filtering
+
+    Filter on any scalar field of an entity by adding it as a query parameter:
+
+    - **Equality:** `?sex=f`, `?year_of_birth=1980`
+    - **Related entity by id:** pass the related entity's id directly, e.g.
+      `?politician=184945` or `?parliament_period=166`. The bracket form
+      `?parliament_period[entity.id]=166` is equivalent.
+    - **Comparison operators** use a bracket suffix `?<field>[<op>]=<value>` with `<op>` one of:
+      `eq` (=), `ne` (≠), `gt` (>), `gte` (≥), `lt` (<), `lte` (≤),
+      `cn` (string contains), `sw` (string starts-with).
+      Example: `?year_of_birth[gt]=1990`, `?last_name[sw]=Mü`.
+
+    An unknown operator returns HTTP `500`. Because field filters are entity-specific and
+    open-ended, they are described here rather than enumerated as parameters on every path.
+
+  license:
+    name: CC0 1.0
+    url: https://creativecommons.org/publicdomain/zero/1.0/deed.de
+  contact:
+    name: abgeordnetenwatch.de
+    url: https://www.abgeordnetenwatch.de/api
+  termsOfService: https://www.abgeordnetenwatch.de/ueber-uns/transparenz/datenlizenz
+  x-api-changelog: https://www.abgeordnetenwatch.de/api/version-changelog/aktuell
+
+externalDocs:
+  description: Official API documentation (entity reference)
+  url: https://www.abgeordnetenwatch.de/api
+
+servers:
+  - url: https://www.abgeordnetenwatch.de/api/v2
+    description: Production (only public server)
+
+tags:
+  - name: Parliaments
+    description: Parliaments and their legislative/election periods.
+  - name: People
+    description: Politicians and their candidacies / mandates.
+  - name: Votes
+    description: Polls (roll-call votes) and individual vote records.
+  - name: Committees
+    description: Committees and committee memberships.
+  - name: Parties & Fractions
+    description: Parties, parliamentary fractions and election programs.
+  - name: Elections
+    description: Electoral lists and constituencies.
+  - name: Side jobs
+    description: Disclosed side jobs and the organizations behind them.
+  - name: Taxonomy
+    description: Controlled vocabularies — topics, cities, countries.
+
+paths:
+
+  /parliaments:
+    get:
+      tags: [Parliaments]
+      summary: List parliaments
+      operationId: listParliaments
+      description: All parliaments tracked by abgeordnetenwatch (Bundestag, EU, the 16 state parliaments).
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of parliaments.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Parliament' }
+  /parliaments/{id}:
+    get:
+      tags: [Parliaments]
+      summary: Get a parliament
+      operationId: getParliament
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single parliament.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Parliament' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /parliament-periods:
+    get:
+      tags: [Parliaments]
+      summary: List parliament periods
+      operationId: listParliamentPeriods
+      description: Legislative periods and election events belonging to a parliament.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of parliament periods.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ParliamentPeriod' }
+  /parliament-periods/{id}:
+    get:
+      tags: [Parliaments]
+      summary: Get a parliament period
+      operationId: getParliamentPeriod
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single parliament period.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParliamentPeriod' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /politicians:
+    get:
+      tags: [People]
+      summary: List politicians
+      operationId: listPoliticians
+      description: |
+        All politicians (~35,800). Commonly filtered, e.g. `?last_name[sw]=Mü`, `?sex=f`,
+        `?year_of_birth[gte]=1980`.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of politicians.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Politician' }
+  /politicians/{id}:
+    get:
+      tags: [People]
+      summary: Get a politician
+      operationId: getPolitician
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single politician.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Politician' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /candidacies-mandates:
+    get:
+      tags: [People]
+      summary: List candidacies & mandates
+      operationId: listCandidaciesMandates
+      description: |
+        A candidacy or mandate links a politician to a parliament period. Filter by related
+        entity, e.g. `?politician=184945` or `?parliament_period=166`.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of candidacies/mandates.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CandidacyMandate' }
+  /candidacies-mandates/{id}:
+    get:
+      tags: [People]
+      summary: Get a candidacy or mandate
+      operationId: getCandidacyMandate
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single candidacy/mandate.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CandidacyMandate' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /committees:
+    get:
+      tags: [Committees]
+      summary: List committees
+      operationId: listCommittees
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of committees.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Committee' }
+  /committees/{id}:
+    get:
+      tags: [Committees]
+      summary: Get a committee
+      operationId: getCommittee
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single committee.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Committee' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /committee-memberships:
+    get:
+      tags: [Committees]
+      summary: List committee memberships
+      operationId: listCommitteeMemberships
+      description: Membership of a mandate in a committee, with the held role.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of committee memberships.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CommitteeMembership' }
+  /committee-memberships/{id}:
+    get:
+      tags: [Committees]
+      summary: Get a committee membership
+      operationId: getCommitteeMembership
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single committee membership.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommitteeMembership' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /polls:
+    get:
+      tags: [Votes]
+      summary: List polls
+      operationId: listPolls
+      description: A poll is a single roll-call vote (namentliche Abstimmung) in a parliament.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of polls.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Poll' }
+  /polls/{id}:
+    get:
+      tags: [Votes]
+      summary: Get a poll
+      operationId: getPoll
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single poll.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Poll' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /votes:
+    get:
+      tags: [Votes]
+      summary: List votes
+      operationId: listVotes
+      description: |
+        An individual mandate's vote in a poll (~613,000). Filter by `?poll=<id>` or
+        `?mandate=<id>` to retrieve one poll's results or one MP's voting record.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of votes.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Vote' }
+  /votes/{id}:
+    get:
+      tags: [Votes]
+      summary: Get a vote
+      operationId: getVote
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single vote.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Vote' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /parties:
+    get:
+      tags: [Parties & Fractions]
+      summary: List parties
+      operationId: listParties
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of parties.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Party' }
+  /parties/{id}:
+    get:
+      tags: [Parties & Fractions]
+      summary: Get a party
+      operationId: getParty
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single party.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Party' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /fractions:
+    get:
+      tags: [Parties & Fractions]
+      summary: List fractions
+      operationId: listFractions
+      description: A parliamentary fraction (Fraktion) within a specific parliament period.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of fractions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Fraction' }
+  /fractions/{id}:
+    get:
+      tags: [Parties & Fractions]
+      summary: Get a fraction
+      operationId: getFraction
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single fraction.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Fraction' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /election-program:
+    get:
+      tags: [Parties & Fractions]
+      summary: List election programs
+      operationId: listElectionPrograms
+      description: |
+        A party's election program (Wahlprogramm) for a parliament period, with a link to the
+        PDF. Note the **singular** path segment `election-program`.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of election programs.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ElectionProgram' }
+  /election-program/{id}:
+    get:
+      tags: [Parties & Fractions]
+      summary: Get an election program
+      operationId: getElectionProgram
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single election program.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ElectionProgram' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /electoral-lists:
+    get:
+      tags: [Elections]
+      summary: List electoral lists
+      operationId: listElectoralLists
+      description: A party's candidate list (Landesliste) for a parliament period.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of electoral lists.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ElectoralList' }
+  /electoral-lists/{id}:
+    get:
+      tags: [Elections]
+      summary: Get an electoral list
+      operationId: getElectoralList
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single electoral list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ElectoralList' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /constituencies:
+    get:
+      tags: [Elections]
+      summary: List constituencies
+      operationId: listConstituencies
+      description: An electoral constituency (Wahlkreis) within a parliament period.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of constituencies.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Constituency' }
+  /constituencies/{id}:
+    get:
+      tags: [Elections]
+      summary: Get a constituency
+      operationId: getConstituency
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single constituency.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Constituency' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /sidejobs:
+    get:
+      tags: [Side jobs]
+      summary: List side jobs
+      operationId: listSidejobs
+      description: A disclosed paid side activity (Nebentätigkeit) of one or more mandates.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of side jobs.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Sidejob' }
+  /sidejobs/{id}:
+    get:
+      tags: [Side jobs]
+      summary: Get a side job
+      operationId: getSidejob
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single side job.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Sidejob' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /sidejob-organizations:
+    get:
+      tags: [Side jobs]
+      summary: List side-job organizations
+      operationId: listSidejobOrganizations
+      description: An organization that pays a disclosed side job.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of side-job organizations.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SidejobOrganization' }
+  /sidejob-organizations/{id}:
+    get:
+      tags: [Side jobs]
+      summary: Get a side-job organization
+      operationId: getSidejobOrganization
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single side-job organization.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SidejobOrganization' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /topics:
+    get:
+      tags: [Taxonomy]
+      summary: List topics
+      operationId: listTopics
+      description: Controlled topic vocabulary (Themen) attached to polls, committees and side jobs.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of topics.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TaxonomyTerm' }
+  /topics/{id}:
+    get:
+      tags: [Taxonomy]
+      summary: Get a topic
+      operationId: getTopic
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single topic.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TaxonomyTerm' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /cities:
+    get:
+      tags: [Taxonomy]
+      summary: List cities
+      operationId: listCities
+      description: City vocabulary referenced by side jobs and side-job organizations.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of cities.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TaxonomyTerm' }
+  /cities/{id}:
+    get:
+      tags: [Taxonomy]
+      summary: Get a city
+      operationId: getCity
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single city.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TaxonomyTerm' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+  /countries:
+    get:
+      tags: [Taxonomy]
+      summary: List countries
+      operationId: listCountries
+      description: Country vocabulary referenced by side jobs and side-job organizations.
+      parameters:
+        - $ref: '#/components/parameters/RangeStart'
+        - $ref: '#/components/parameters/RangeEnd'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortDirection'
+      responses:
+        '200':
+          description: A page of countries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TaxonomyTerm' }
+  /countries/{id}:
+    get:
+      tags: [Taxonomy]
+      summary: Get a country
+      operationId: getCountry
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: A single country.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DetailEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TaxonomyTerm' }
+        '500': { $ref: '#/components/responses/EntityError' }
+
+components:
+
+  parameters:
+    RangeStart:
+      name: range_start
+      in: query
+      description: 0-based offset of the first item to return.
+      required: false
+      schema: { type: integer, minimum: 0, default: 0 }
+    RangeEnd:
+      name: range_end
+      in: query
+      description: Page size — number of items to return. **Capped at 100.**
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+    SortBy:
+      name: sort_by
+      in: query
+      description: Name of an entity field to sort by (e.g. `last_name`, `id`).
+      required: false
+      schema: { type: string }
+    SortDirection:
+      name: sort_direction
+      in: query
+      description: Sort order.
+      required: false
+      schema: { type: string, enum: [asc, desc], default: asc }
+    Id:
+      name: id
+      in: path
+      description: Numeric entity id.
+      required: true
+      schema: { type: integer }
+
+  responses:
+    EntityError:
+      description: |
+        No entity with the given id exists. **The API returns HTTP `500`** (not `404`)
+        for a missing id, with the reason in `meta.status_message`. The same `500` is
+        returned for an invalid filter operator.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            meta:
+              abgeordnetenwatch_api:
+                version: "2.9.0"
+                changelog: https://www.abgeordnetenwatch.de/api/version-changelog/aktuell
+                licence: CC0 1.0
+                licence_link: https://creativecommons.org/publicdomain/zero/1.0/deed.de
+                documentation: https://www.abgeordnetenwatch.de/api/entitaeten/parliament
+              status: error
+              status_message: "There is no parliament entity with id 99999999"
+            data: null
+
+  schemas:
+
+    # ---- Envelopes & meta ----
+
+    ApiInfo:
+      type: object
+      description: API metadata block, identical on every response.
+      properties:
+        version: { type: string, example: "2.9.0" }
+        changelog: { type: string, format: uri }
+        licence: { type: string, example: "CC0 1.0" }
+        licence_link: { type: string, format: uri }
+        documentation:
+          type: string
+          format: uri
+          description: URL of the human documentation page for this entity type.
+
+    ListResultMeta:
+      type: object
+      properties:
+        count: { type: integer, description: Number of items in this page., example: 100 }
+        total: { type: integer, description: Total number of matching items across all pages., example: 35812 }
+        range_start: { type: integer, example: 0 }
+        range_end: { type: integer, description: Effective page size (≤ 100)., example: 100 }
+
+    DetailResultMeta:
+      type: object
+      properties:
+        entity_id: { type: string, example: "2" }
+        entity_type: { type: string, example: "party" }
+
+    ListEnvelope:
+      type: object
+      required: [meta, data]
+      properties:
+        meta:
+          type: object
+          properties:
+            abgeordnetenwatch_api: { $ref: '#/components/schemas/ApiInfo' }
+            status: { type: string, enum: [ok, error], example: ok }
+            status_message: { type: string, example: "" }
+            result: { $ref: '#/components/schemas/ListResultMeta' }
+        data:
+          type: array
+          items: { type: object }
+
+    DetailEnvelope:
+      type: object
+      required: [meta, data]
+      properties:
+        meta:
+          type: object
+          properties:
+            abgeordnetenwatch_api: { $ref: '#/components/schemas/ApiInfo' }
+            status: { type: string, enum: [ok, error], example: ok }
+            status_message: { type: string, example: "" }
+            result: { $ref: '#/components/schemas/DetailResultMeta' }
+        data: { type: object }
+
+    ErrorEnvelope:
+      type: object
+      required: [meta]
+      properties:
+        meta:
+          type: object
+          properties:
+            abgeordnetenwatch_api: { $ref: '#/components/schemas/ApiInfo' }
+            status: { type: string, enum: [error], example: error }
+            status_message: { type: string, example: "There is no parliament entity with id 99999999" }
+        data:
+          nullable: true
+          type: object
+
+    # ---- Shared building blocks ----
+
+    EntityReference:
+      type: object
+      description: |
+        Compact reference to another entity, embedded wherever one entity points at another.
+        Follow `api_url` to fetch the full object.
+      required: [id, entity_type, label, api_url]
+      properties:
+        id: { type: integer }
+        entity_type: { type: string, example: party }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Public website URL; present on most but not all references.
+
+    # ---- Entities ----
+
+    Parliament:
+      type: object
+      description: A parliament — the Bundestag, the EU Parliament, or one of the 16 state parliaments.
+      properties:
+        id: { type: integer, example: 18 }
+        entity_type: { type: string, example: parliament }
+        label: { type: string, example: Schleswig-Holstein }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri }
+        label_external_long:
+          type: string
+          nullable: true
+          example: Landtag Schleswig-Holstein
+        current_project:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+          description: The currently active parliament period.
+
+    ParliamentPeriod:
+      type: object
+      description: A legislative period or an election event belonging to a parliament.
+      properties:
+        id: { type: integer, example: 138 }
+        entity_type: { type: string, example: parliament_period }
+        label: { type: string, example: "Schleswig-Holstein 2022 - 2027" }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri }
+        parliament:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          description: The parliament this period belongs to.
+        previous_period:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        type:
+          type: string
+          enum: [legislature, election]
+          description: "`legislature` = a sitting period; `election` = an election event."
+        election_date: { type: string, format: date, nullable: true }
+        start_date_period: { type: string, format: date, nullable: true }
+        end_date_period: { type: string, format: date, nullable: true }
+
+    Politician:
+      type: object
+      description: An individual politician.
+      properties:
+        id: { type: integer, example: 28881 }
+        entity_type: { type: string, example: politician }
+        label: { type: string, example: Martina Michels }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri }
+        first_name: { type: string, example: Martina }
+        last_name: { type: string, example: Michels }
+        birth_name: { type: string, nullable: true }
+        sex:
+          type: string
+          nullable: true
+          enum: [m, f, d]
+          description: "`m`, `f`, or `d` (diverse). May be null."
+        year_of_birth: { type: integer, nullable: true, example: 1955 }
+        party:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+          description: Current party.
+        party_past:
+          type: string
+          nullable: true
+          description: Former party affiliation, if recorded.
+        education: { type: string, nullable: true, example: Dipl. Philosophin }
+        residence: { type: string, nullable: true }
+        occupation: { type: string, nullable: true, example: MdEP }
+        statistic_questions:
+          type: integer
+          nullable: true
+          description: Number of citizen questions received (abgeordnetenwatch Q&A).
+        statistic_questions_answered:
+          type: integer
+          nullable: true
+          description: Number of those questions answered.
+        ext_id_bundestagsverwaltung:
+          type: string
+          nullable: true
+          description: External id assigned by the Bundestag administration.
+        qid_wikidata:
+          type: string
+          nullable: true
+          example: Q1324719
+          description: Wikidata Q-identifier.
+        field_title:
+          type: string
+          nullable: true
+          description: Academic title, if any.
+
+    CandidacyMandate:
+      type: object
+      description: |
+        Links a politician to a parliament period either as a candidate or as a (won) mandate.
+        Carries the electoral details and the politician's fraction membership(s).
+      properties:
+        id: { type: integer, example: 70564 }
+        entity_type: { type: string, example: candidacy_mandate }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        id_external_administration: { type: string, nullable: true }
+        id_external_administration_description: { type: string, nullable: true }
+        type:
+          type: string
+          enum: [candidacy, mandate]
+          description: "`mandate` = a held seat; `candidacy` = stood for election."
+        parliament_period: { $ref: '#/components/schemas/EntityReference' }
+        politician: { $ref: '#/components/schemas/EntityReference' }
+        start_date: { type: string, format: date, nullable: true }
+        end_date: { type: string, format: date, nullable: true }
+        info:
+          type: string
+          nullable: true
+          description: Free-text note, e.g. how the mandate was obtained.
+        electoral_data:
+          allOf: [ { $ref: '#/components/schemas/ElectoralData' } ]
+          nullable: true
+        fraction_membership:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/FractionMembership' }
+
+    ElectoralData:
+      type: object
+      description: How a candidacy/mandate was contested — list and/or constituency.
+      properties:
+        id: { type: integer }
+        entity_type: { type: string, example: electoral_data }
+        label: { type: string }
+        electoral_list:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        list_position: { type: integer, nullable: true }
+        constituency:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        constituency_result:
+          type: number
+          nullable: true
+          description: Share of votes won in the constituency (percent).
+        constituency_result_count:
+          type: integer
+          nullable: true
+          description: Absolute number of constituency votes won.
+        mandate_won:
+          type: string
+          nullable: true
+          enum: [constituency, list, moved_up]
+          description: How the mandate was won, when applicable.
+
+    FractionMembership:
+      type: object
+      description: Membership of a mandate in a parliamentary fraction over a time span.
+      properties:
+        id: { type: integer }
+        entity_type: { type: string, example: fraction_membership }
+        label: { type: string }
+        fraction: { $ref: '#/components/schemas/EntityReference' }
+        valid_from: { type: string, format: date, nullable: true }
+        valid_until: { type: string, format: date, nullable: true }
+
+    Committee:
+      type: object
+      description: A parliamentary committee (entity_type is the Drupal `node`).
+      properties:
+        id: { type: integer, example: 6563 }
+        entity_type: { type: string, example: node }
+        label: { type: string, example: Zwischenausschuss }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri }
+        field_legislature:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          description: The parliament period this committee belongs to.
+        field_topics:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/EntityReference' }
+
+    CommitteeMembership:
+      type: object
+      description: A mandate's membership in a committee, with the role held.
+      properties:
+        id: { type: integer, example: 29261 }
+        entity_type: { type: string, example: committee_membership }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        committee: { $ref: '#/components/schemas/EntityReference' }
+        candidacy_mandate: { $ref: '#/components/schemas/EntityReference' }
+        committee_role:
+          type: string
+          nullable: true
+          enum: [member, chairperson, vice_chairperson, alternate_member]
+        committee_roles_additional:
+          type: string
+          nullable: true
+          description: Any additional role description.
+
+    Poll:
+      type: object
+      description: A single roll-call vote (namentliche Abstimmung).
+      properties:
+        id: { type: integer, example: 6569 }
+        entity_type: { type: string, example: node }
+        label: { type: string, example: EU-USA-Handelsabkommen }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri }
+        field_accepted:
+          type: boolean
+          nullable: true
+          description: Whether the motion was accepted.
+        field_committees:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/EntityReference' }
+        field_intro:
+          type: string
+          nullable: true
+          description: HTML description of the poll.
+        field_legislature: { $ref: '#/components/schemas/EntityReference' }
+        field_poll_date: { type: string, format: date, nullable: true }
+        field_related_links:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/RelatedLink' }
+        field_topics:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/EntityReference' }
+
+    Vote:
+      type: object
+      description: How one mandate voted in one poll.
+      properties:
+        id: { type: integer, example: 661683 }
+        entity_type: { type: string, example: vote }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        mandate: { $ref: '#/components/schemas/EntityReference' }
+        poll: { $ref: '#/components/schemas/EntityReference' }
+        vote:
+          type: string
+          enum: [yes, no, abstain, no_show]
+          description: The cast vote; `no_show` = did not participate.
+        reason_no_show: { type: string, nullable: true }
+        reason_no_show_other: { type: string, nullable: true }
+        fraction:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+          description: Fraction the mandate belonged to at the time of the vote.
+
+    Party:
+      type: object
+      description: A political party.
+      properties:
+        id: { type: integer, example: 2 }
+        entity_type: { type: string, example: party }
+        label: { type: string, example: CDU }
+        api_url: { type: string, format: uri }
+        full_name: { type: string, nullable: true, example: Christlich Demokratische Union Deutschlands }
+        short_name: { type: string, nullable: true, example: CDU }
+
+    Fraction:
+      type: object
+      description: A parliamentary fraction within a parliament period.
+      properties:
+        id: { type: integer, example: 438 }
+        entity_type: { type: string, example: fraction }
+        label: { type: string, example: "CDU (Rheinland-Pfalz 2026 - 2031)" }
+        api_url: { type: string, format: uri }
+        full_name: { type: string, nullable: true }
+        short_name: { type: string, nullable: true }
+        legislature:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          description: The parliament period the fraction belongs to.
+
+    ElectionProgram:
+      type: object
+      description: A party's election program (Wahlprogramm) for a parliament period.
+      properties:
+        id: { type: integer, example: 653 }
+        entity_type: { type: string, example: election_program }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        parliament_period: { $ref: '#/components/schemas/EntityReference' }
+        party: { $ref: '#/components/schemas/EntityReference' }
+        link:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/RelatedLink' }
+        file:
+          type: string
+          format: uri
+          nullable: true
+          description: URL of the program PDF.
+
+    ElectoralList:
+      type: object
+      description: A party's candidate list for a parliament period.
+      properties:
+        id: { type: integer, example: 855 }
+        entity_type: { type: string, example: electoral_list }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        name: { type: string, example: Landesliste SPD }
+        parliament_period: { $ref: '#/components/schemas/EntityReference' }
+
+    Constituency:
+      type: object
+      description: An electoral constituency (Wahlkreis).
+      properties:
+        id: { type: integer, example: 14466 }
+        entity_type: { type: string, example: constituency }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        number: { type: integer, nullable: true, example: 52 }
+        name: { type: string, example: Wörth am Rhein }
+
+    Sidejob:
+      type: object
+      description: A disclosed paid side activity of one or more mandates.
+      properties:
+        id: { type: integer, example: 21133 }
+        entity_type: { type: string, example: sidejob }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        job_title_extra: { type: string, nullable: true }
+        mandates:
+          type: array
+          items: { $ref: '#/components/schemas/EntityReference' }
+          description: The mandate(s) this side job is disclosed for.
+        category:
+          type: string
+          nullable: true
+          description: Category code (numeric string referencing an internal taxonomy).
+        income_level:
+          type: string
+          nullable: true
+          description: Income-band code (e.g. "1".."10") when an exact figure is not given.
+        income:
+          type: number
+          nullable: true
+          description: Exact income amount, when disclosed.
+        income_total:
+          type: number
+          nullable: true
+        interval:
+          type: string
+          nullable: true
+          description: Payment interval code (e.g. "1", "2"); null = one-off / unspecified.
+        data_change_date: { type: string, format: date, nullable: true }
+        created:
+          type: integer
+          nullable: true
+          description: Creation timestamp (Unix epoch seconds).
+        sidejob_organization:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        additional_information:
+          type: string
+          nullable: true
+          description: HTML free-text note.
+        field_city:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        field_country:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        field_topics:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/EntityReference' }
+
+    SidejobOrganization:
+      type: object
+      description: An organization that pays a disclosed side job.
+      properties:
+        id: { type: integer, example: 6504 }
+        entity_type: { type: string, example: sidejob_organization }
+        label: { type: string }
+        api_url: { type: string, format: uri }
+        field_city:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        field_country:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+        field_topics:
+          type: array
+          nullable: true
+          items: { $ref: '#/components/schemas/EntityReference' }
+
+    TaxonomyTerm:
+      type: object
+      description: |
+        A controlled-vocabulary term — used by `/topics`, `/cities` and `/countries`
+        (all share `entity_type: taxonomy_term`).
+      properties:
+        id: { type: integer, example: 8 }
+        entity_type: { type: string, example: taxonomy_term }
+        label: { type: string, example: Recht }
+        api_url: { type: string, format: uri }
+        abgeordnetenwatch_url: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+        parent:
+          allOf: [ { $ref: '#/components/schemas/EntityReference' } ]
+          nullable: true
+          description: Parent term, for hierarchical vocabularies.
+
+    RelatedLink:
+      type: object
+      description: A link object (Drupal link field) — used by polls and election programs.
+      properties:
+        uri: { type: string, nullable: true, example: "entity:node/4907" }
+        title: { type: string, nullable: true }
+        options:
+          nullable: true
+          description: Drupal link options (usually null or an object/array).
