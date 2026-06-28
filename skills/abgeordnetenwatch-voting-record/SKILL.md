@@ -3,10 +3,10 @@ name: abgeordnetenwatch-voting-record
 description: >
   Pull and summarise a German politician's roll-call voting record from the
   abgeordnetenwatch.de API, using the abgeordnetenwatch-cli. Trigger when the
-  user asks "how did <MP> vote?", "voting record of <politician>", "how often
-  did X vote with their party?", "show me <name>'s votes on <topic>", or wants
-  an attendance / yes-no breakdown for a member of the Bundestag, EU Parliament
-  or a Landtag.
+  user asks "how did an MP vote?", "voting record of a politician", "how often
+  did X vote with their party?", "show me a politician's votes on a topic", or
+  wants an attendance / yes-no breakdown for a member of the Bundestag, EU
+  Parliament or a Landtag.
 version: 1.0.0
 userInvocable: true
 ---

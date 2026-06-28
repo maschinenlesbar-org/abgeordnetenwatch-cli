@@ -4,8 +4,8 @@ description: >
   Break down how a parliament voted on a specific roll-call vote (namentliche
   Abstimmung) — fraction by fraction — from the abgeordnetenwatch.de API, using
   the abgeordnetenwatch-cli. Trigger when the user asks "how did the Bundestag
-  vote on <bill>?", "which parties backed <motion>?", "show the roll-call result
-  for <poll>", "how did the fractions split on <topic>?", or wants the per-party
+  vote on a bill?", "which parties backed a motion?", "show the roll-call result
+  for a vote", "how did the fractions split on a topic?", or wants the per-party
   yes/no breakdown of a named vote.
 version: 1.0.0
 userInvocable: true

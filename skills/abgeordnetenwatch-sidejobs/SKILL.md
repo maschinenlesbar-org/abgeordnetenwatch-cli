@@ -3,8 +3,9 @@ name: abgeordnetenwatch-sidejobs
 description: >
   Surface a German politician's disclosed side income (Nebentätigkeiten) from
   the abgeordnetenwatch.de API, using the abgeordnetenwatch-cli. Trigger when the
-  user asks "what side jobs does <MP> have?", "Nebeneinkünfte von <name>", "who
-  pays <politician>?", "which MPs have the most side income?", or wants a
+  user asks "what side jobs does an MP have?", "Nebeneinkünfte von einem
+  Politiker", "who pays a politician?", "which MPs have the most side income?",
+  or wants a
   transparency check on a member's outside earnings and who funds them.
 version: 1.0.0
 userInvocable: true
