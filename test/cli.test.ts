@@ -80,10 +80,21 @@ test("an unknown entity is a usage error (exit 2) listing valid names", async ()
   assert.match(cap.err.join("\n"), /politicians/);
 });
 
-test("a malformed filter is a usage error (exit 2)", async () => {
-  const { deps } = makeDeps({});
+test("a malformed filter is a usage error (exit 2) and prints guidance", async () => {
+  const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "notafilter"], deps);
   assert.equal(code, 2);
+  // The guidance must reach the user, not be swallowed (regression: a filter
+  // rejected from inside the action exited 2 with empty stdout AND stderr).
+  assert.match(cap.err.join("\n"), /Invalid filter "notafilter"/);
+  assert.match(cap.err.join("\n"), /key=value/);
+});
+
+test("a filter with an empty key is rejected with guidance", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["count", "politicians", "=f"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Invalid filter "=f"/);
 });
 
 test("a 404 from the client maps to exit code 4", async () => {

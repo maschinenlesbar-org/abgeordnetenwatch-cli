@@ -23,6 +23,28 @@ function entityArg(value: string): EntityCollection {
   return value;
 }
 
+/**
+ * commander value-parser for one `key=value` token of the variadic `[filters...]`
+ * argument. Validating here — at parse time — means a malformed filter surfaces as
+ * a commander usage error (exit 2) with its guidance printed to stderr, exactly
+ * like a bad entity or a bad --range-end. Throwing the same error later, from
+ * inside the action (as parseFilters alone did), leaves the message unprinted:
+ * commander has already finished parsing, so run.ts maps it to exit 2 but never
+ * writes it.
+ *
+ * Tokens are accumulated and returned verbatim; the action's parseFilters builds
+ * the filters object from these already-validated tokens.
+ */
+function filterArg(value: string, previous: string[] = []): string[] {
+  const eq = value.indexOf("=");
+  if (eq <= 0) {
+    throw new InvalidArgumentError(
+      `Invalid filter "${value}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
+    );
+  }
+  return [...previous, value];
+}
+
 /** Build ListParams from this command's parsed options + positional filters. */
 function listParamsFrom(opts: Record<string, unknown>, filterArgs: string[]): ListParams {
   const params: ListParams = {};
@@ -42,7 +64,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .command("list")
     .description("List a collection, with optional filters, sorting and paging")
     .argument("<entity>", `entity collection (${ENTITY_COLLECTIONS.length} available; see 'entities')`, entityArg)
-    .argument("[filters...]", "field filters as key=value, e.g. sex=f 'year_of_birth[gt]=1990'")
+    .argument("[filters...]", "field filters as key=value, e.g. sex=f 'year_of_birth[gt]=1990'", filterArg)
     .option("--range-start <n>", "0-based offset of the first item", parseIntArg)
     .option("--range-end <n>", "page size (number of items; API caps at 100)", parseIntArg)
     .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)")
@@ -85,7 +107,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .command("count")
     .description("Count how many entities match the given filters")
     .argument("<entity>", "entity collection (see 'entities')", entityArg)
-    .argument("[filters...]", "field filters as key=value")
+    .argument("[filters...]", "field filters as key=value", filterArg)
     .action(
       action(deps, async ({ client, global, opts }, positionals) => {
         const entity = positionals[0] as EntityCollection;
