@@ -97,6 +97,29 @@ test("a filter with an empty key is rejected with guidance", async () => {
   assert.match(cap.err.join("\n"), /Invalid filter "=f"/);
 });
 
+test("a duplicate filter key is rejected (no silent last-wins)", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["list", "politicians", "sex=f", "sex=m"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Duplicate filter key "sex"/);
+});
+
+test("distinct operators on the same field are allowed (not a duplicate)", async () => {
+  let received: unknown;
+  const { deps } = makeDeps({
+    list: (async (_entity: string, params: { filters?: unknown }) => {
+      received = params.filters;
+      return { meta: {}, data: [] };
+    }) as unknown as AbgeordnetenwatchClient["list"],
+  });
+  const code = await run(
+    ["list", "politicians", "year_of_birth[gt]=1980", "year_of_birth[lt]=1990", "--compact"],
+    deps,
+  );
+  assert.equal(code, 0);
+  assert.deepEqual(received, { "year_of_birth[gt]": "1980", "year_of_birth[lt]": "1990" });
+});
+
 test("a 404 from the client maps to exit code 4", async () => {
   const { deps, cap } = makeDeps({
     get: (async () => {

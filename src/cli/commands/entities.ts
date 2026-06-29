@@ -42,6 +42,16 @@ function filterArg(value: string, previous: string[] = []): string[] {
       `Invalid filter "${value}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
     );
   }
+  // Reject an exact repeated key. parseFilters builds a plain object, so a
+  // duplicate would otherwise silently win last (`sex=f sex=m` -> sex=m) with no
+  // warning. Distinct operators on the same field are different keys
+  // (`year_of_birth[gt]` vs `year_of_birth[lt]`) and remain allowed.
+  const key = value.slice(0, eq);
+  if (previous.some((token) => token.slice(0, token.indexOf("=")) === key)) {
+    throw new InvalidArgumentError(
+      `Duplicate filter key "${key}". Specify each field (and operator) at most once.`,
+    );
+  }
   return [...previous, value];
 }
 
