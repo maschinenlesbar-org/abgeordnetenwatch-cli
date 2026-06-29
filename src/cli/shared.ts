@@ -28,6 +28,26 @@ export function parseIntArg(value: string): number {
 }
 
 /**
+ * commander value-parser for `--user-agent`. Control characters (notably CR/LF)
+ * are illegal in an HTTP header value: node's http layer throws a low-level
+ * TypeError when the request is built, which previously surfaced to the user as
+ * an opaque "Unexpected error". Reject them up front as a usage error; this also
+ * forecloses header injection via the User-Agent value. Checked by char code so
+ * no control-character literal need appear in the source.
+ */
+export function parseUserAgentArg(value: string): string {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) {
+      throw new InvalidArgumentError(
+        "Control characters (including CR/LF) are not allowed in --user-agent.",
+      );
+    }
+  }
+  return value;
+}
+
+/**
  * Parse positional `key=value` filter arguments into a filters object.
  *
  * The key may carry a bracket operator (`year_of_birth[gt]=1990`) or be a plain

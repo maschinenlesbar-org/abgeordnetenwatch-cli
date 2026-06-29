@@ -179,6 +179,15 @@ test("an invalid --sort-direction is rejected client-side", async () => {
   assert.match(cap.err.join("\n"), /Invalid sort direction "sideways"/);
 });
 
+test("a --user-agent with CR/LF is rejected, not an unexpected crash", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["--user-agent", "bad\r\nInjected: x", "entities", "--compact"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Control characters/);
+  // Must not leak the old catch-all message.
+  assert.doesNotMatch(cap.err.join("\n"), /Unexpected error/);
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

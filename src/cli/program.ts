@@ -8,7 +8,7 @@ import { Command } from "commander";
 import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { AbgeordnetenwatchClient } from "../client/client.js";
-import { parseIntArg } from "./shared.js";
+import { parseIntArg, parseUserAgentArg } from "./shared.js";
 import { registerEntityCommands } from "./commands/entities.js";
 
 /**
@@ -47,7 +47,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .version(VERSION)
     .option("--base-url <url>", "API base URL", "https://www.abgeordnetenwatch.de")
     .option("--timeout <ms>", "per-request timeout in milliseconds", parseIntArg, 30_000)
-    .option("--user-agent <ua>", "User-Agent header value")
+    .option("--user-agent <ua>", "User-Agent header value", parseUserAgentArg)
     .option("--max-retries <n>", "retries for transient 429/503 responses", parseIntArg, 2)
     .option(
       "--max-response-bytes <n>",
