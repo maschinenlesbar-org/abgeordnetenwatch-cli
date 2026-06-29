@@ -62,6 +62,31 @@ function stripSensitiveHeaders(headers: Record<string, string>): void {
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// Upper bound on how long a Retry-After header may make us wait, so a pathological
+// or hostile value (e.g. "Retry-After: 86400") cannot hang the CLI for hours.
+const MAX_RETRY_AFTER_MS = 30_000;
+
+/** Coerce a possibly-repeated header value to a single string (or undefined). */
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Parse a Retry-After header into a delay in milliseconds. Per RFC 9110 the value
+ * is either a non-negative number of seconds or an HTTP-date. Returns undefined
+ * when the header is absent or unparseable, so the caller falls back to linear
+ * backoff.
+ */
+function parseRetryAfter(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  if (/^[0-9]+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const when = Date.parse(trimmed);
+  if (Number.isNaN(when)) return undefined;
+  return Math.max(0, when - Date.now());
+}
+
 export class RequestEngine {
   private readonly baseUrl: string;
   private readonly transport: Transport;
@@ -123,7 +148,14 @@ export class RequestEngine {
       const retryable = status === 429 || status === 503;
       if (retryable && attempt < this.maxRetries) {
         attempt += 1;
-        await this.sleep(this.retryDelayMs * attempt);
+        // Honour a Retry-After header (delta-seconds or HTTP-date) when present,
+        // clamped to MAX_RETRY_AFTER_MS; otherwise fall back to linear backoff.
+        const retryAfter = parseRetryAfter(headerValue(response.headers["retry-after"]));
+        const delay =
+          retryAfter !== undefined
+            ? Math.min(retryAfter, MAX_RETRY_AFTER_MS)
+            : this.retryDelayMs * attempt;
+        await this.sleep(delay);
         continue;
       }
 

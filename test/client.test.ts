@@ -113,3 +113,60 @@ test("retries a 429 then succeeds", async () => {
   assert.equal(res.data.length, 1);
   assert.equal(calls, 2);
 });
+
+test("honours a numeric Retry-After header (seconds) on 429", async () => {
+  const delays: number[] = [];
+  let calls = 0;
+  const mt = makeMockTransport(() => {
+    calls += 1;
+    return calls === 1
+      ? { status: 429, headers: { "retry-after": "2" }, body: Buffer.alloc(0) }
+      : jsonResponse(listEnvelope([{ id: 1 }]));
+  });
+  const client = new AbgeordnetenwatchClient({
+    transport: mt.transport,
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+  });
+  await client.list("votes");
+  assert.deepEqual(delays, [2000]); // 2s from the header, not the 200ms linear backoff
+});
+
+test("clamps a far-future HTTP-date Retry-After to the maximum", async () => {
+  const delays: number[] = [];
+  let calls = 0;
+  const mt = makeMockTransport(() => {
+    calls += 1;
+    return calls === 1
+      ? { status: 503, headers: { "retry-after": "Wed, 21 Oct 2099 07:28:00 GMT" }, body: Buffer.alloc(0) }
+      : jsonResponse(listEnvelope([{ id: 1 }]));
+  });
+  const client = new AbgeordnetenwatchClient({
+    transport: mt.transport,
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+  });
+  await client.list("votes");
+  assert.deepEqual(delays, [30_000]);
+});
+
+test("falls back to linear backoff when no Retry-After is present", async () => {
+  const delays: number[] = [];
+  let calls = 0;
+  const mt = makeMockTransport(() => {
+    calls += 1;
+    return calls < 3 ? jsonResponse({}, 429) : jsonResponse(listEnvelope([{ id: 1 }]));
+  });
+  const client = new AbgeordnetenwatchClient({
+    transport: mt.transport,
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+    maxRetries: 2,
+    retryDelayMs: 200,
+  });
+  await client.list("votes");
+  assert.deepEqual(delays, [200, 400]);
+});
