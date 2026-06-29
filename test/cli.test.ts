@@ -172,6 +172,13 @@ test("get forwards a valid numeric id to the client", async () => {
   assert.deepEqual(received, { entity: "parties", id: "42" });
 });
 
+test("an invalid --sort-direction is rejected client-side", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["list", "politicians", "--sort-direction", "sideways"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Invalid sort direction "sideways"/);
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

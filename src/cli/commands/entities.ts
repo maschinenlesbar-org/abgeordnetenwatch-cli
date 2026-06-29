@@ -41,6 +41,18 @@ function idArg(value: string): string {
 }
 
 /**
+ * commander value-parser for `--sort-direction`. The API only accepts asc/desc
+ * and answers anything else with an HTTP 500; validate locally so a typo is a
+ * usage error (exit 2) with a clear message.
+ */
+function sortDirectionArg(value: string): "asc" | "desc" {
+  if (value !== "asc" && value !== "desc") {
+    throw new InvalidArgumentError(`Invalid sort direction "${value}". Use "asc" or "desc".`);
+  }
+  return value;
+}
+
+/**
  * Valid bracket-filter operators, mirroring the FilterOperator union in
  * client/types.ts. Kept as a runtime list so the CLI can reject an unknown
  * operator locally instead of forwarding it to a generic API HTTP 500.
@@ -115,7 +127,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .option("--range-start <n>", "0-based offset of the first item", parseIntArg)
     .option("--range-end <n>", "page size (number of items; API caps at 100)", parseIntArg)
     .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)")
-    .option("--sort-direction <dir>", "asc or desc")
+    .option("--sort-direction <dir>", "asc or desc", sortDirectionArg)
     .option("--data-only", "print just the data array (not the meta envelope)")
     .addHelpText(
       "after",
