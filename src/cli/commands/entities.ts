@@ -24,6 +24,13 @@ function entityArg(value: string): EntityCollection {
 }
 
 /**
+ * Valid bracket-filter operators, mirroring the FilterOperator union in
+ * client/types.ts. Kept as a runtime list so the CLI can reject an unknown
+ * operator locally instead of forwarding it to a generic API HTTP 500.
+ */
+const FILTER_OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "cn", "sw"] as const;
+
+/**
  * commander value-parser for one `key=value` token of the variadic `[filters...]`
  * argument. Validating here — at parse time — means a malformed filter surfaces as
  * a commander usage error (exit 2) with its guidance printed to stderr, exactly
@@ -47,6 +54,19 @@ function filterArg(value: string, previous: string[] = []): string[] {
   // warning. Distinct operators on the same field are different keys
   // (`year_of_birth[gt]` vs `year_of_birth[lt]`) and remain allowed.
   const key = value.slice(0, eq);
+  // If the key carries a bracket operator (`field[op]`), validate the operator
+  // against the known set so a typo (`last_name[zz]`) is caught here rather than
+  // surfacing as an opaque API HTTP 500. A plain field or related-entity id has
+  // no bracket and is passed through untouched.
+  const bracket = /\[([^\]]*)\]$/.exec(key);
+  if (bracket) {
+    const op = bracket[1] ?? "";
+    if (!(FILTER_OPERATORS as readonly string[]).includes(op)) {
+      throw new InvalidArgumentError(
+        `Unknown filter operator "[${op}]" in "${key}". Valid operators: ${FILTER_OPERATORS.join(", ")}.`,
+      );
+    }
+  }
   if (previous.some((token) => token.slice(0, token.indexOf("=")) === key)) {
     throw new InvalidArgumentError(
       `Duplicate filter key "${key}". Specify each field (and operator) at most once.`,

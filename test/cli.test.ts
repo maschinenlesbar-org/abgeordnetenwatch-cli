@@ -120,6 +120,14 @@ test("distinct operators on the same field are allowed (not a duplicate)", async
   assert.deepEqual(received, { "year_of_birth[gt]": "1980", "year_of_birth[lt]": "1990" });
 });
 
+test("an unknown bracket filter operator is rejected client-side", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["list", "politicians", "last_name[zz]=A"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Unknown filter operator "\[zz\]"/);
+  assert.match(cap.err.join("\n"), /eq, ne, gt/);
+});
+
 test("a 404 from the client maps to exit code 4", async () => {
   const { deps, cap } = makeDeps({
     get: (async () => {
