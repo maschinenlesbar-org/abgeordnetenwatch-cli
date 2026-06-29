@@ -145,6 +145,33 @@ test("a 404 from the client maps to exit code 4", async () => {
   assert.match(cap.err.join("\n"), /no party entity/);
 });
 
+test("get rejects id 0 client-side (it dumped the whole collection)", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["get", "politicians", "0"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Invalid id "0"/);
+});
+
+test("get rejects a non-numeric id client-side", async () => {
+  const { deps, cap } = makeDeps({});
+  const code = await run(["get", "politicians", "abc"], deps);
+  assert.equal(code, 2);
+  assert.match(cap.err.join("\n"), /Invalid id "abc"/);
+});
+
+test("get forwards a valid numeric id to the client", async () => {
+  let received: unknown;
+  const { deps } = makeDeps({
+    get: (async (entity: string, id: unknown) => {
+      received = { entity, id };
+      return { meta: {}, data: { id: 42 } };
+    }) as unknown as AbgeordnetenwatchClient["get"],
+  });
+  const code = await run(["get", "parties", "42", "--compact"], deps);
+  assert.equal(code, 0);
+  assert.deepEqual(received, { entity: "parties", id: "42" });
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

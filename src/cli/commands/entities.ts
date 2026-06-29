@@ -24,6 +24,23 @@ function entityArg(value: string): EntityCollection {
 }
 
 /**
+ * commander value-parser for the `<id>` positional of `get`. The API treats
+ * `/<collection>/0` as the collection itself, so `get politicians 0` silently
+ * dumped the whole list instead of one entity; a non-numeric id round-tripped to
+ * a generic HTTP 500. Validating here rejects both as a usage error (exit 2) with
+ * a clear message. Ids are positive integers (the API numbers entities from 1).
+ */
+function idArg(value: string): string {
+  if (!/^[0-9]+$/.test(value)) {
+    throw new InvalidArgumentError(`Invalid id "${value}". Expected a numeric entity id.`);
+  }
+  if (/^0+$/.test(value)) {
+    throw new InvalidArgumentError(`Invalid id "${value}". Entity ids start at 1.`);
+  }
+  return value;
+}
+
+/**
  * Valid bracket-filter operators, mirroring the FilterOperator union in
  * client/types.ts. Kept as a runtime list so the CLI can reject an unknown
  * operator locally instead of forwarding it to a generic API HTTP 500.
@@ -122,7 +139,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .command("get")
     .description("Fetch a single entity by id")
     .argument("<entity>", "entity collection (see 'entities')", entityArg)
-    .argument("<id>", "numeric entity id")
+    .argument("<id>", "numeric entity id", idArg)
     .option("--data-only", "print just the data object (not the meta envelope)")
     .action(
       action(deps, async ({ client, global, opts }, positionals) => {
