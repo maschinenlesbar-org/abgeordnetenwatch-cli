@@ -188,6 +188,24 @@ test("a --user-agent with CR/LF is rejected, not an unexpected crash", async () 
   assert.doesNotMatch(cap.err.join("\n"), /Unexpected error/);
 });
 
+test("a 429 prints rate-limit guidance and exits 1", async () => {
+  const { deps, cap } = makeDeps({
+    list: (async () => {
+      throw new AwApiError({
+        status: 429,
+        url: "u",
+        method: "GET",
+        body: "",
+        detail: "Too Many Requests",
+      });
+    }) as unknown as AbgeordnetenwatchClient["list"],
+  });
+  const code = await run(["list", "politicians"], deps);
+  assert.equal(code, 1);
+  assert.match(cap.err.join("\n"), /rate-limiting or temporarily unavailable/);
+  assert.match(cap.err.join("\n"), /--max-retries/);
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

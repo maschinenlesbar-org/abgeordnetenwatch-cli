@@ -58,6 +58,15 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
             "(valid: eq, ne, gt, gte, lt, lte, cn, sw) and field names.",
         );
       }
+      // 429/503 are transient: the automatic retries (honouring Retry-After) were
+      // already exhausted by the time we get here, so point the user at waiting
+      // and at the knob that raises the retry count.
+      if (err.isRetryable) {
+        deps.io.err(
+          "Hint: the API is rate-limiting or temporarily unavailable. Wait a " +
+            "moment and retry; --max-retries raises the number of automatic retries.",
+        );
+      }
       // Map a few notable statuses to distinct exit codes for scripting.
       // A genuine 404 (an unknown collection path) is distinct from the 500 the
       // API returns for a missing id.
