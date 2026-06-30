@@ -1,5 +1,9 @@
 # abgeordnetenwatch-cli
 
+[![CI](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/actions/workflows/ci.yml)
+[![Release](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/actions/workflows/release.yml/badge.svg)](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/actions/workflows/release.yml)
+[![npm](https://img.shields.io/npm/v/@maschinenlesbar.org/abgeordnetenwatch-cli)](https://www.npmjs.com/package/@maschinenlesbar.org/abgeordnetenwatch-cli)
+
 Query Germany's **parliamentary-monitoring data** — politicians, mandates,
 votes, committees and disclosed side jobs — from your terminal.
 `abgeordnetenwatch` is a command-line tool and TypeScript client for the open
