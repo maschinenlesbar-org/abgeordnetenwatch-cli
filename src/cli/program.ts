@@ -46,7 +46,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     )
     .version(VERSION)
     .option("--base-url <url>", "API base URL", "https://www.abgeordnetenwatch.de")
-    .option("--timeout <ms>", "per-request timeout in milliseconds", parseIntArg, 30_000)
+    .option("--timeout <ms>", "per-request timeout in milliseconds (0 disables)", parseIntArg, 30_000)
     .option("--user-agent <ua>", "User-Agent header value", parseUserAgentArg)
     .option("--max-retries <n>", "retries for transient 429/503 responses", parseIntArg, 2)
     .option(
