@@ -73,9 +73,10 @@ Add filters as `key=value` arguments after the entity:
 
 ### Paging
 
-The API returns at most **100 items per page** (`--range-end` is the page size,
-capped at 100). Use `--range-start` to offset into the next page; `count` reports
-the true total.
+`--range-end` is the **page size** (number of items). The API honours it up to
+**1000**; a value above 1000 is ignored and the API falls back to its default
+page size of 100. Use `--range-start` to offset into the next page; `count`
+reports the true total.
 
 ## Entities
 

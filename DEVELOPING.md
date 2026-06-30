@@ -60,7 +60,8 @@ npm start -- --help # run the CLI from source build
 
 ## Notes from the live API (2026-06)
 
-- `range_end` is a **page size capped at 100**, not an absolute index.
+- `range_end` is a **page size**, not an absolute index. The API honours it up to
+  **1000**; a value above 1000 is ignored and it falls back to the default of 100.
 - A **missing id returns HTTP 500** (not 404), with the reason in
   `meta.status_message`; an invalid filter operator also returns 500.
 - Filter operators: `eq, ne, gt, gte, lt, lte, cn, sw` (`in`, `ct` are rejected).

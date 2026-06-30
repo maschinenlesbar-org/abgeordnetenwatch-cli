@@ -73,7 +73,10 @@ export type FilterOperator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "cn" | 
 export interface ListParams {
   /** 0-based offset of the first item to return. */
   rangeStart?: number;
-  /** Page size — number of items to return. Capped at 100 by the API. */
+  /**
+   * Page size — number of items to return. The API honours this up to 1000; a
+   * value above 1000 is ignored and it falls back to its default page size (100).
+   */
   rangeEnd?: number;
   /** Field name to sort by (e.g. `last_name`, `id`). */
   sortBy?: string;

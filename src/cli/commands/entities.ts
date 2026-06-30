@@ -125,7 +125,11 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .argument("<entity>", `entity collection (${ENTITY_COLLECTIONS.length} available; see 'entities')`, entityArg)
     .argument("[filters...]", "field filters as key=value, e.g. sex=f 'year_of_birth[gt]=1990'", filterArg)
     .option("--range-start <n>", "0-based offset of the first item", parseIntArg)
-    .option("--range-end <n>", "page size (number of items; API caps at 100)", parseIntArg)
+    .option(
+      "--range-end <n>",
+      "page size (number of items; API honours up to 1000, else falls back to 100)",
+      parseIntArg,
+    )
     .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)")
     .option("--sort-direction <dir>", "asc or desc", sortDirectionArg)
     .option("--data-only", "print just the data array (not the meta envelope)")
