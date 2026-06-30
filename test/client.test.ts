@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
-import { AwApiError, AwParseError } from "../src/client/errors.js";
+import { AwApiError, AwError, AwParseError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
 const listEnvelope = (data: unknown[], total = data.length) => ({
@@ -88,6 +88,18 @@ test("a 404 surfaces as AwApiError carrying the API status_message", async () =>
       assert.ok(err instanceof AwApiError);
       assert.equal(err.status, 404);
       assert.match(err.message, /no party entity with id 99999999/);
+      return true;
+    },
+  );
+});
+
+test("rejects a non-http base URL with a message naming it", () => {
+  assert.throws(
+    () => new AbgeordnetenwatchClient({ baseUrl: "ftp://example.com" }),
+    (err: unknown) => {
+      assert.ok(err instanceof AwError);
+      assert.match(err.message, /ftp:/);
+      assert.match(err.message, /example\.com/);
       return true;
     },
   );

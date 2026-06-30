@@ -4,7 +4,7 @@
 
 import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { AwApiError, AwParseError } from "./errors.js";
+import { AwApiError, AwError, AwParseError } from "./errors.js";
 
 export const DEFAULT_BASE_URL = "https://www.abgeordnetenwatch.de";
 const DEFAULT_USER_AGENT = "abgeordnetenwatch-cli";
@@ -62,6 +62,27 @@ function stripSensitiveHeaders(headers: Record<string, string>): void {
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Validate the configured base URL up front. Without this the only scheme check
+ * lived in the transport, which rejects the *fully built* request URL — so a bad
+ * `--base-url ftp://x` produced a message echoing `ftp://x/api/v2/...` rather than
+ * the value the user actually passed. Throwing here keeps the message about the
+ * base URL itself.
+ */
+function assertValidBaseUrl(baseUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new AwError(`Invalid base URL "${baseUrl}".`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new AwError(
+      `Unsupported base URL scheme "${parsed.protocol}" in "${baseUrl}"; only http and https are supported.`,
+    );
+  }
+}
+
 // Upper bound on how long a Retry-After header may make us wait, so a pathological
 // or hostile value (e.g. "Retry-After: 86400") cannot hang the CLI for hours.
 const MAX_RETRY_AFTER_MS = 30_000;
@@ -101,6 +122,7 @@ export class RequestEngine {
 
   constructor(options: EngineOptions = {}) {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    assertValidBaseUrl(this.baseUrl);
     this.transport = options.transport ?? nodeHttpTransport;
     this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
     this.extraHeaders = options.headers ?? {};
