@@ -67,3 +67,19 @@ npm start -- --help # run the CLI from source build
 - Filter operators: `eq, ne, gt, gte, lt, lte, cn, sw` (`in`, `ct` are rejected).
 - `firstPublicationDate`-style timestamps and most fields are nullable — see
   `openapi.yaml`, which was reconstructed by probing the live API.
+
+## Networking policy (engine.ts)
+
+- **Redirects are followed** (up to `maxRedirects`, default **5**). abgeordnetenwatch
+  301-redirects a collection path without its trailing slash (`/api/v2` ->
+  `/api/v2/`), so following them is required for the client to work. A 3xx with no
+  usable `Location`, or one past the limit, surfaces as an `AwApiError`.
+- **Credential headers are stripped on a cross-origin redirect.** If a redirect
+  target's host differs from the current one, `Authorization`, `Cookie` and
+  `X-API-Key` are dropped before the next hop, so they never leak to an arbitrary
+  host named in `Location`. (This API needs no auth, but the guard is unconditional.)
+- **Transient `429`/`503` are retried** up to `maxRetries` (default 2). The retry
+  delay honours a `Retry-After` header (delta-seconds or HTTP-date), clamped to 30s;
+  absent or unparseable, it falls back to linear backoff (`retryDelayMs * attempt`).
+- **Only `http:`/`https:` base URLs are accepted** — the scheme is validated in the
+  engine constructor, and again per-request in the transport.
