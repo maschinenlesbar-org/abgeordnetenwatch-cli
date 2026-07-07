@@ -59,6 +59,19 @@ function stripSensitiveHeaders(headers: Record<string, string>): void {
   }
 }
 
+/**
+ * Strip control characters (all C0/C1 except tab and newline, plus DEL) out of a
+ * string that originates in an attacker-controlled response — the error `detail`
+ * and the echoed Content-Type. `JSON.parse` decodes a `\u001b` escape in an
+ * error body into a real ESC byte, so without this a hostile/MITM'd endpoint could drive ANSI/OSC
+ * escape sequences into the user's terminal when the message is printed to stderr.
+ * The success path is already safe (`JSON.stringify` escapes these), so this only
+ * needs to cover text that flows into an error message.
+ */
+function sanitizeServerText(text: string): string {
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+}
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -221,7 +234,7 @@ export class RequestEngine {
     const mediaType = (res.contentType.split(";", 1)[0] ?? "").trim().toLowerCase();
     if (mediaType && mediaType !== "application/json" && !mediaType.endsWith("+json")) {
       throw new AwParseError(
-        `Unexpected content type "${res.contentType}" from ${path} (expected JSON).`,
+        `Unexpected content type "${sanitizeServerText(res.contentType)}" from ${path} (expected JSON).`,
       );
     }
     const text = res.data.toString("utf8");
@@ -250,6 +263,9 @@ export class RequestEngine {
     } catch {
       // Non-JSON error body; leave detail undefined.
     }
+    // `detail` came from the response body; strip control characters so a hostile
+    // endpoint cannot inject terminal escape sequences via the stderr error message.
+    if (detail !== undefined) detail = sanitizeServerText(detail);
     return new AwApiError({ status, url, method, body: text, detail });
   }
 }
