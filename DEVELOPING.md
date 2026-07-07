@@ -75,9 +75,11 @@ npm start -- --help # run the CLI from source build
   `/api/v2/`), so following them is required for the client to work. A 3xx with no
   usable `Location`, or one past the limit, surfaces as an `AwApiError`.
 - **Credential headers are stripped on a cross-origin redirect.** If a redirect
-  target's host differs from the current one, `Authorization`, `Cookie` and
-  `X-API-Key` are dropped before the next hop, so they never leak to an arbitrary
-  host named in `Location`. (This API needs no auth, but the guard is unconditional.)
+  target's origin (scheme + host + port) differs from the current one —
+  including a same-host `https:` -> `http:` downgrade — `Authorization`, `Cookie`
+  and `X-API-Key` are dropped before the next hop, so they never leak to an
+  arbitrary host named in `Location`, nor cross the wire in cleartext. (This API
+  needs no auth, but the guard is unconditional.)
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2). The retry
   delay honours a `Retry-After` header (delta-seconds or HTTP-date), clamped to 30s;
   absent or unparseable, it falls back to linear backoff (`retryDelayMs * attempt`).

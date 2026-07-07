@@ -203,8 +203,11 @@ export class RequestEngine {
           const nextUrl = new URL(location, url);
           // Credential-strip guard: if the redirect target is a different origin,
           // drop any sensitive headers so Authorization/cookie-style credentials
-          // are never sent to an arbitrary host named in Location.
-          if (nextUrl.host !== new URL(url).host) {
+          // are never sent to an arbitrary host named in Location. Compare full
+          // origin (scheme + host + port), not just host, so a same-host
+          // https->http *downgrade* also strips — otherwise credentials would
+          // cross the wire in cleartext.
+          if (nextUrl.origin !== new URL(url).origin) {
             stripSensitiveHeaders(headers);
           }
           url = nextUrl.toString();
