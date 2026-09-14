@@ -46,7 +46,7 @@ argument against it.
 npm run build       # tsc → dist/
 npm test            # build, then run node:test suites against dist/
 npm run typecheck   # tsc --noEmit
-npm run docs        # typedoc → out/
+npm run docs        # typedoc → out/ (first: npm ci --prefix tools/docs)
 npm start -- --help # run the CLI from source build
 ```
 
