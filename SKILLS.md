@@ -36,15 +36,19 @@ scope notes).
 
 ### Plugin marketplace (recommended)
 
-This repo is a Claude Code **plugin marketplace**:
+The skills are published as the `abgeordnetenwatch` plugin in the
+[maschinenlesbar.org plugin marketplace](https://github.com/maschinenlesbar-org/plugins),
+which lists the plugins for all maschinenlesbar.org CLIs. Installation is two commands
+inside Claude Code:
 
 ```
-/plugin marketplace add maschinenlesbar-org/abgeordnetenwatch-cli
-/plugin install abgeordnetenwatch@abgeordnetenwatch-skills
+/plugin marketplace add maschinenlesbar-org/plugins
+/plugin install abgeordnetenwatch@maschinenlesbar
 ```
 
-The first command registers the marketplace; the second installs the `abgeordnetenwatch`
-plugin, which bundles all three skills. Update later with `/plugin marketplace update`.
+The first command registers the marketplace (once, for all maschinenlesbar.org plugins);
+the second installs the `abgeordnetenwatch` plugin, which bundles all three skills.
+Update later with `/plugin marketplace update maschinenlesbar`.
 
 ### Manual (copy the skill folders)
 
