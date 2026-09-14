@@ -1,0 +1,16 @@
+# The only repo-specific texts of the website. Everything else comes from the
+# repository: the English intro from README.md, the commands from the built CLI.
+
+# How the API is accessed: open | key (env: VAR) | account (token, user, password: VARs)
+access:
+  type: open
+
+de:
+  # German version of the README's intro paragraph. Keep it in step with README.md.
+  intro: >-
+    **Daten zur Parlamentsbeobachtung** in Deutschland – Abgeordnete, Mandate, Abstimmungen,
+    Ausschüsse und offengelegte Nebentätigkeiten – direkt im Terminal abfragen.
+    `abgeordnetenwatch` ist ein Kommandozeilen-Tool und TypeScript-Client für die offene
+    [abgeordnetenwatch.de API v2](https://www.abgeordnetenwatch.de/api): jede der 18
+    Entitätssammlungen auflisten, filtern und sortieren, einzelne Datensätze abrufen, Treffer
+    zählen und das JSON direkt an [`jq`](https://jqlang.github.io/jq/) weitergeben.
