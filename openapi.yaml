@@ -31,13 +31,15 @@ info:
 
     ## Pagination
 
-    Use `range_start` (0-based offset) and `range_end`. **`range_end` is capped at 100** — the
-    page size, not an absolute index; requesting more still returns at most 100 items. Read
-    `meta.result.total` for the full match count and page with `range_start`.
+    Use `range_start` (0-based offset) and `range_end`. **`range_end` is the page size**, not an
+    absolute index. It defaults to 100 and is honoured up to 1000; a larger value falls back to
+    100. Read `meta.result.total` for the full match count and page with `range_start`.
 
     ## Sorting
 
-    `sort_by=<field>` plus `sort_direction=asc|desc`.
+    `sort_by=<field>` plus `sort_direction=asc|desc`. With `sort_by` alone the API sorts
+    **descending**. Not every field is sortable: polls, committees and topics reject `id`
+    (HTTP `500`, `id is not a valid value for sort_by`); polls sort by `field_poll_date`.
 
     ## Filtering
 
@@ -230,7 +232,9 @@ paths:
       operationId: listCandidaciesMandates
       description: |
         A candidacy or mandate links a politician to a parliament period. Filter by related
-        entity, e.g. `?politician=184945` or `?parliament_period=166`.
+        entity, e.g. `?politician=184945` or `?parliament_period=166`. Without `current_on` only
+        the records current today are returned; `?current_on=all` returns every record,
+        `?current_on=2022-01-01` those current on that date.
       parameters:
         - $ref: '#/components/parameters/RangeStart'
         - $ref: '#/components/parameters/RangeEnd'
@@ -884,21 +888,21 @@ components:
     RangeEnd:
       name: range_end
       in: query
-      description: Page size — number of items to return. **Capped at 100.**
+      description: Page size — number of items to return. **Honoured up to 1000**; a larger value falls back to 100.
       required: false
-      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
     SortBy:
       name: sort_by
       in: query
-      description: Name of an entity field to sort by (e.g. `last_name`, `id`).
+      description: Name of an entity field to sort by (e.g. `last_name`, `id`). Not every field is sortable; polls, committees and topics reject `id` with HTTP `500`.
       required: false
       schema: { type: string }
     SortDirection:
       name: sort_direction
       in: query
-      description: Sort order.
+      description: Sort order. When omitted, a `sort_by` sorts descending.
       required: false
-      schema: { type: string, enum: [asc, desc], default: asc }
+      schema: { type: string, enum: [asc, desc], default: desc }
     Id:
       name: id
       in: path
@@ -950,7 +954,7 @@ components:
         count: { type: integer, description: Number of items in this page., example: 100 }
         total: { type: integer, description: Total number of matching items across all pages., example: 35812 }
         range_start: { type: integer, example: 0 }
-        range_end: { type: integer, description: Effective page size (≤ 100)., example: 100 }
+        range_end: { type: integer, description: Effective page size (≤ 1000)., example: 100 }
 
     DetailResultMeta:
       type: object
@@ -1214,7 +1218,7 @@ components:
         committee_role:
           type: string
           nullable: true
-          enum: [member, chairperson, vice_chairperson, alternate_member]
+          enum: [member, chairperson, vice_chairperson, alternate_member, spokesperson, advisory_member]
         committee_roles_additional:
           type: string
           nullable: true
@@ -1360,7 +1364,7 @@ components:
         income_level:
           type: string
           nullable: true
-          description: Income-band code (e.g. "1".."10") when an exact figure is not given.
+          description: Income-band code (e.g. "1".."10"). Older disclosures (up to Bundestag 2017 - 2021) carry only the band; recent ones usually carry it together with the exact `income`.
         income:
           type: number
           nullable: true
