@@ -58,6 +58,30 @@ test("real transport follows a 301 redirect (trailing-slash style)", async () =>
   );
 });
 
+test("timeoutMs bounds the whole response, not just idle gaps", async () => {
+  // A server that trickles a byte every 50 ms for 2 s never goes idle for the timeout.
+  await withServer(
+    (_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write("[");
+      const drip = setInterval(() => res.write(" "), 50);
+      const finish = setTimeout(() => res.end("]"), 2000);
+      res.on("close", () => {
+        clearInterval(drip);
+        clearTimeout(finish);
+      });
+    },
+    async (baseUrl) => {
+      const started = Date.now();
+      await assert.rejects(
+        () => nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 300 }),
+        (err) => err instanceof AwNetworkError && /timed out after 300ms/.test(err.message),
+      );
+      assert.ok(Date.now() - started < 1500, `took ${Date.now() - started} ms`);
+    },
+  );
+});
+
 test("the default transport rejects a non-http(s) URL with AwNetworkError", async () => {
   await assert.rejects(
     () => nodeHttpTransport({ method: "GET", url: "file:///etc/passwd" }),
