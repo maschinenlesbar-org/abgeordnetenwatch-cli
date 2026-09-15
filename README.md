@@ -65,6 +65,9 @@ abgeordnetenwatch list votes poll=6569 --data-only | jq '.[].vote' | sort | uniq
 `--data-only` (on `list`/`get`) prints just the `data` payload instead of the
 full `{ meta, data }` envelope.
 
+New to terms like *mandate*, *poll* or *fraction*? The **[Glossary](GLOSSARY.md)**
+explains every entity, its key fields and the filter syntax.
+
 ### Filtering
 
 Add filters as `key=value` arguments after the entity:
