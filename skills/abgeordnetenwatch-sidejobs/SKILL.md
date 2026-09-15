@@ -30,9 +30,13 @@ mandate id first (same first two steps as **abgeordnetenwatch-voting-record**):
 ```bash
 abgeordnetenwatch list politicians 'last_name[cn]=Stracke' --range-end 10 --data-only --compact \
   | jq -c '.[] | {id, label, party: .party.label}'
-abgeordnetenwatch list candidacies-mandates politician=<POLITICIAN_ID> --data-only --compact \
+abgeordnetenwatch list candidacies-mandates politician=<POLITICIAN_ID> current_on=all --data-only --compact \
   | jq -c '.[] | select(.type=="mandate") | {mandate_id: .id, period: .parliament_period.label}'
 ```
+
+> **Keep `current_on=all`.** Without it the API returns only the mandate current today, so a
+> member's earlier periods never show up. Side jobs are disclosed per mandate: pick the period
+> the user means (default: the most recent, listed first) and offer the others.
 
 ## Step 2 — Pull the side jobs
 
@@ -42,8 +46,11 @@ easiest thing to get wrong:
 
 ```bash
 abgeordnetenwatch count sidejobs mandates=<MANDATE_ID>
-abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 100 --data-only --compact > /tmp/sj.json
+abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 1000 --data-only --compact > /tmp/sj.json
 ```
+
+> `--range-end` is the page size, honoured up to 1000 (default 100). If `count` is larger than
+> the page, fetch the rest with `--range-start`.
 
 > Across mandates the filter key is always the *field name as it appears in the JSON*. For
 > side jobs that array field is `mandates`. (Filtering by the paying organisation uses
@@ -56,7 +63,7 @@ abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 100 --data-onl
 | `label` / `job_title_extra` | What the activity is |
 | `sidejob_organization.label` | **Who pays** — the organisation |
 | `income` | Exact amount, when disclosed (number) |
-| `income_level` | Income **band code** (e.g. "1".."10") used when no exact figure is given |
+| `income_level` | Income **band code** (e.g. "1".."10"); on recent disclosures it usually sits next to the exact `income`, on older ones it is the only figure |
 | `interval` | Payment interval code (one-off vs recurring); often null |
 | `field_city.label` / `field_country.label` | Where the payer is |
 | `field_topics[].label` | Topic tags |
@@ -66,10 +73,14 @@ abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 100 --data-onl
 jq -c '.[] | {job: .label, payer: .sidejob_organization.label, income, income_level}' /tmp/sj.json
 ```
 
-> **Income is mostly a band, not a number.** Many entries give `income_level` (a coded band)
-> rather than an exact `income`. Present what is disclosed and label it "declared"; never
-> infer a precise figure from a band, and never sum bands into a fake total. `income: null`
-> + `income_level: null` = "disclosed, amount not quantified" (e.g. reimbursed travel).
+> **Band or amount depends on the period.** Bundestag disclosures up to the 2017 - 2021
+> period carry only `income_level` (a coded band), no `income`. From 2021 - 2025 on,
+> quantified entries carry an exact `income`, usually together with its band. Check which
+> fields are filled rather than assuming either. Present what is disclosed and label it
+> "declared"; when `income` is present, use it and don't show the band as a second amount;
+> never infer a precise figure from a band, and never sum bands into a fake total.
+> `income: null` + `income_level: null` = "disclosed, amount not quantified" (e.g. reimbursed
+> travel) — a common case, not an error.
 
 ## Step 4 — Brief the user
 
