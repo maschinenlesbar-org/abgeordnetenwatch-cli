@@ -8,7 +8,8 @@ import { Command } from "commander";
 import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { AbgeordnetenwatchClient } from "../client/client.js";
-import { parseIntArg, parseUserAgentArg } from "./shared.js";
+import { MAX_TIMEOUT_MS } from "../client/http.js";
+import { parseBoundedInt, parseIntArg, parseUserAgentArg } from "./shared.js";
 import { registerEntityCommands } from "./commands/entities.js";
 
 /**
@@ -49,7 +50,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option(
       "--timeout <ms>",
       "time limit per request in milliseconds, whole response included (0 disables)",
-      parseIntArg,
+      parseBoundedInt(0, MAX_TIMEOUT_MS),
       30_000,
     )
     .option("--user-agent <ua>", "User-Agent header value", parseUserAgentArg)

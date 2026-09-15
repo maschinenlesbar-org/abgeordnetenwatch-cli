@@ -28,6 +28,20 @@ export function parseIntArg(value: string): number {
 }
 
 /**
+ * Build a commander value-parser for a non-negative decimal integer constrained
+ * to [min, max] (same strict syntax as {@link parseIntArg}).
+ */
+export function parseBoundedInt(min: number, max: number): (value: string) => number {
+  return (value: string) => {
+    const n = parseIntArg(value);
+    if (n < min || n > max) {
+      throw new InvalidArgumentError(`Value out of range; must be between ${min} and ${max}.`);
+    }
+    return n;
+  };
+}
+
+/**
  * commander value-parser for `--user-agent`. Control characters (notably CR/LF)
  * are illegal in an HTTP header value: node's http layer throws a low-level
  * TypeError when the request is built, which previously surfaced to the user as

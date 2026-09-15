@@ -241,6 +241,18 @@ test("DEL and C1 control characters in server data are escaped in the JSON outpu
   }
 });
 
+test("--timeout accepts up to the largest timer Node supports", async () => {
+  const served = { meta: { status: "ok" }, data: { id: 42 } };
+  const ok = makeTransportDeps(() => jsonResponse(served));
+  assert.equal(await run(["--timeout", "2147483647", "get", "parties", "42"], ok.deps), 0);
+  assert.equal(ok.mt.last().timeoutMs, 2_147_483_647);
+
+  const over = makeTransportDeps(() => jsonResponse(served));
+  assert.equal(await run(["--timeout", "2147483648", "get", "parties", "42"], over.deps), 2);
+  assert.equal(over.mt.calls.length, 0);
+  assert.match(over.cap.err.join("\n"), /between 0 and 2147483647/);
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);
