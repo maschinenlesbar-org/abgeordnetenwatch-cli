@@ -29,7 +29,7 @@ polls, optionally narrowing by topic; read `field_intro` and `field_accepted` fo
 
 ```bash
 # recent polls in a parliament period (find the period id via `list parliament-periods`):
-abgeordnetenwatch list polls field_legislature=<PERIOD_ID> --sort-by id --sort-direction desc \
+abgeordnetenwatch list polls field_legislature=<PERIOD_ID> --sort-by field_poll_date --sort-direction desc \
   --range-end 20 --data-only --compact \
   | jq -c '.[] | {id, label, date: .field_poll_date, accepted: .field_accepted}'
 ```
@@ -37,26 +37,32 @@ abgeordnetenwatch list polls field_legislature=<PERIOD_ID> --sort-by id --sort-d
 > Poll text is German. To narrow by subject, filter on a topic id
 > (`field_topics=<TOPIC_ID>`, ids from `abgeordnetenwatch list topics`). Confirm the right
 > poll with the user by `label` + `field_poll_date` before breaking it down.
+>
+> **Polls can't be sorted by `id`** — `--sort-by id` fails with HTTP 500 (`id is not a valid
+> value for sort_by`); sort by `field_poll_date`. Polls on the same date come back in no fixed
+> order.
 
 ## Step 2 — Pull every vote on the poll
 
-Filter votes by `poll=<id>`. **The page size is capped at 100**, and a Bundestag roll-call
-has ~700 votes, so you must page through all of them:
+Filter votes by `poll=<id>`. The page size (`--range-end`) is honoured **up to 1000**; a
+larger value silently falls back to 100. A Bundestag roll-call has one vote per seat (630 in
+the 2025 - 2029 Bundestag), so one 1000-item page covers it; the loop below still pages
+through anything larger:
 
 ```bash
 POLL=<POLL_ID>
 total=$(abgeordnetenwatch count votes poll=$POLL | jq .total)
 : > /tmp/pv.json
-for start in $(seq 0 100 $((total - 1))); do
-  abgeordnetenwatch list votes poll=$POLL --range-start $start --range-end 100 \
+for start in $(seq 0 1000 $((total - 1))); do
+  abgeordnetenwatch list votes poll=$POLL --range-start $start --range-end 1000 \
     --data-only --compact | jq -c '.[]' >> /tmp/pv.json
 done
 echo "collected $(wc -l < /tmp/pv.json) of $total"
 ```
 
-> **Do not skip the paging loop.** Reading only the first 100 votes of a ~700-vote Bundestag
-> poll gives a wrong breakdown that *looks* complete. Verify the collected line count equals
-> `total` before tallying.
+> **Don't drop `--range-end`.** Without it the API returns only 100 votes, and a breakdown of
+> the first 100 of a 630-vote Bundestag poll *looks* complete. Verify the collected line
+> count equals `total` before tallying.
 
 ## Step 3 — Tally by fraction
 

@@ -11,8 +11,8 @@ real-world question — "how did this MP vote?", "what side income did they disc
 did the fractions split on this bill?" — and to report it with evidence and the right
 caveats. The bare CLI returns raw register entries; the skills do the multi-step joins
 (politician → mandate → votes/side jobs), the aggregation, and the parts that are easy to
-get wrong (the 100-item page cap, the `mandates` filter name, the German-only / German-MEPs
-scope notes).
+get wrong (the default 100-item page, earlier mandates hidden without `current_on=all`, the
+`mandates` filter name, the German-only / German-MEPs scope notes).
 
 ## Skills
 
@@ -84,11 +84,15 @@ API, for example:
 - **votes and side jobs hang off a *mandate*, not the politician** — resolve
   `politicians` → `candidacies-mandates` (`politician=<id>`) → the mandate id, then filter
   `votes` (`mandate=<id>`) or `sidejobs` (`mandates=<id>`);
+- **`candidacies-mandates` returns only today's records** unless you add `current_on=all`,
+  so a member's earlier mandates are otherwise invisible;
 - **the side-jobs filter is `mandates` (plural)** — the field name on the record;
   `mandate=`/`politician=` are rejected with HTTP 500;
-- **the page size is capped at 100** — `count` gives the true total, but the records must be
-  paged with `--range-start` 0, 100, 200, … before tallying, or a ~700-vote Bundestag poll
-  silently reports only its first 100 votes;
+- **the page size defaults to 100** — `--range-end` raises it to at most 1000 (a larger value
+  falls back to 100); `count` gives the true total, and anything bigger than one page must be
+  paged with `--range-start` before tallying, or a 630-vote Bundestag poll silently reports
+  only its first 100 votes;
+- **polls can't be sorted by `id`** (HTTP 500) — sort them by `field_poll_date`;
 - **`no_show` is non-participation**, reported separately from `no`;
 - **EU-Parliament polls record only the German MEPs' votes** — a scope note to surface so the
   per-fraction totals aren't misread as the whole 720-seat house.

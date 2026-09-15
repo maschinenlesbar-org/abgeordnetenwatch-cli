@@ -45,14 +45,15 @@ Votes are attached to a **mandate** (a seat in a specific parliament period), no
 to the politician. Resolve the politician id to their mandate id(s):
 
 ```bash
-abgeordnetenwatch list candidacies-mandates politician=<POLITICIAN_ID> --data-only --compact \
+abgeordnetenwatch list candidacies-mandates politician=<POLITICIAN_ID> current_on=all --data-only --compact \
   | jq -c '.[] | select(.type=="mandate") | {mandate_id: .id, label, period: .parliament_period.label}'
 ```
 
 > A politician can have **several mandates** (e.g. successive legislative periods, or both a
-> Bundestag and an EU seat). Pick the period the user means; default to the most recent. The
-> `type` field is `mandate` for a held seat vs `candidacy` for a candidacy — vote records
-> exist for **mandates**.
+> Bundestag and an EU seat). **Keep `current_on=all`:** without it the API returns only the
+> records current today, so earlier mandates never show up. Pick the period the user means;
+> default to the most recent (listed first). The `type` field is `mandate` for a held seat vs
+> `candidacy` for a candidacy — vote records exist for **mandates**.
 
 ## Step 3 — Pull and tally the votes
 
@@ -61,15 +62,16 @@ Filter votes by the mandate id. The vote values are `yes`, `no`, `abstain`, `no_
 ```bash
 # total (cheap):
 abgeordnetenwatch count votes mandate=<MANDATE_ID>
-# the records (page at 100; loop --range-start for members with >100 votes):
-abgeordnetenwatch list votes mandate=<MANDATE_ID> --range-end 100 --data-only --compact > /tmp/v.json
+# the records (page size up to 1000; loop --range-start for members with >1000 votes):
+abgeordnetenwatch list votes mandate=<MANDATE_ID> --range-end 1000 --data-only --compact > /tmp/v.json
 jq -c 'group_by(.vote) | map({ (.[0].vote): length }) | add' /tmp/v.json
 ```
 
-> **Page size is capped at 100.** If `count` reports more than 100 votes, fetch successive
-> pages with `--range-start 100`, `200`, … and concatenate before tallying — otherwise the
-> breakdown silently covers only the first 100. `no_show` means the member did not
-> participate (absent or did not vote); report it separately from `no`, not as a "no".
+> **Page size is honoured up to 1000** (without `--range-end` the API returns 100; a value
+> above 1000 falls back to 100). If `count` reports more votes than one page holds, fetch
+> successive pages with `--range-start 1000`, `2000`, … and concatenate before tallying —
+> otherwise the breakdown silently covers only the first page. `no_show` means the member did
+> not participate (absent or did not vote); report it separately from `no`, not as a "no".
 
 ## Step 4 — Add context for notable votes
 
