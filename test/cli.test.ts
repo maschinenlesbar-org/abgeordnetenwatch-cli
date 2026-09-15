@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
-import type { AbgeordnetenwatchClient } from "../src/client/client.js";
+import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwApiError } from "../src/client/errors.js";
+import type { HttpRequest, HttpResponse } from "../src/client/http.js";
+import { jsonResponse, makeMockTransport } from "./helpers.js";
 
 interface Captured {
   out: string[];
@@ -21,6 +23,20 @@ function makeDeps(client: Partial<AbgeordnetenwatchClient>): { deps: CliDeps; ca
     createClient: () => client as AbgeordnetenwatchClient,
   };
   return { deps, cap };
+}
+
+/** Build CliDeps with a real client over a mock transport and capturing IO. */
+function makeTransportDeps(responder: (req: HttpRequest) => HttpResponse) {
+  const cap: Captured = { out: [], err: [] };
+  const mt = makeMockTransport(responder);
+  const deps: CliDeps = {
+    io: {
+      out: (t) => cap.out.push(t),
+      err: (t) => cap.err.push(t),
+    },
+    createClient: (options) => new AbgeordnetenwatchClient({ ...options, transport: mt.transport }),
+  };
+  return { deps, cap, mt };
 }
 
 test("`entities` lists all collections without touching the network", async () => {
@@ -204,6 +220,25 @@ test("a 429 prints rate-limit guidance and exits 1", async () => {
   assert.equal(code, 1);
   assert.match(cap.err.join("\n"), /rate-limiting or temporarily unavailable/);
   assert.match(cap.err.join("\n"), /--max-retries/);
+});
+
+test("DEL and C1 control characters in server data are escaped in the JSON output", async () => {
+  const controls = String.fromCharCode(0x7f, 0x85, 0x9b) + "2J";
+  const served = {
+    meta: { status: "ok" },
+    data: { id: 42, label: `CDU${controls}`, full_name: String.fromCharCode(0x1b) + "[31m" },
+  };
+  for (const format of [[], ["--compact"]]) {
+    const { deps, cap } = makeTransportDeps(() => jsonResponse(served));
+    assert.equal(await run(["get", "parties", "42", ...format], deps), 0);
+    const text = cap.out.join("\n");
+    const raw = [...text].filter((c) =>
+      c.charCodeAt(0) < 0x20 ? c !== "\n" : c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f,
+    );
+    assert.deepEqual(raw, [], format.join(" "));
+    assert.match(text, /CDU\\u007f\\u0085\\u009b2J/);
+    assert.deepEqual(JSON.parse(text), served);
+  }
 });
 
 test("--help exits 0", async () => {

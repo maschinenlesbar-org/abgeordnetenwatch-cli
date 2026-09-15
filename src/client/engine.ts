@@ -65,8 +65,9 @@ function stripSensitiveHeaders(headers: Record<string, string>): void {
  * and the echoed Content-Type. `JSON.parse` decodes a `\u001b` escape in an
  * error body into a real ESC byte, so without this a hostile/MITM'd endpoint could drive ANSI/OSC
  * escape sequences into the user's terminal when the message is printed to stderr.
- * The success path is already safe (`JSON.stringify` escapes these), so this only
- * needs to cover text that flows into an error message.
+ * The CLI's JSON output is escaped separately (`escapeControlChars` in
+ * `cli/shared.ts`: `JSON.stringify` alone leaves DEL and the C1 range raw), so
+ * this only needs to cover text that flows into an error message.
  */
 function sanitizeServerText(text: string): string {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
