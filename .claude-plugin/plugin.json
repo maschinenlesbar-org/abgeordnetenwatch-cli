@@ -1,6 +1,6 @@
 {
   "name": "abgeordnetenwatch",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "German parliamentary-data skills powered by the abgeordnetenwatch-cli (abgeordnetenwatch.de API v2).",
   "author": {
     "name": "Sebastian Schürmann",
