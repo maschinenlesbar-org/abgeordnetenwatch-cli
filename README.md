@@ -113,6 +113,20 @@ entity, bad option/filter) · `4` HTTP 404 (unknown collection path).
 > Note: the API returns HTTP **500** (not 404) for a missing id; the CLI surfaces
 > the reason from `meta.status_message` and exits `1`.
 
+## Claude Code skills
+
+Three [Agent Skills](SKILLS.md) teach Claude Code to use this CLI for real questions:
+summarise a politician's roll-call voting record (**abgeordnetenwatch-voting-record**), surface
+disclosed side income (**abgeordnetenwatch-sidejobs**), and show how each fraction voted on a
+named roll call (**abgeordnetenwatch-poll-breakdown**). Install them from the maschinenlesbar.org marketplace:
+
+```
+/plugin marketplace add maschinenlesbar-org/plugins
+/plugin install abgeordnetenwatch@maschinenlesbar
+```
+
+See **[SKILLS.md](SKILLS.md)** for details.
+
 ## License
 
 Code: [AGPL-3.0-or-later](LICENSE) or a [commercial license](LICENSING.md).
