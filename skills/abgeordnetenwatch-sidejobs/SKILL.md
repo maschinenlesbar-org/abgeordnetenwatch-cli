@@ -7,8 +7,11 @@ description: >
   Politiker", "who pays a politician?", "which MPs have the most side income?",
   or wants a
   transparency check on a member's outside earnings and who funds them.
-version: 1.0.0
-userInvocable: true
+compatibility: >
+  Requires the `abgeordnetenwatch` CLI (npm package
+  @maschinenlesbar.org/abgeordnetenwatch-cli) on PATH, installed by the user;
+  the skill never installs it. Uses jq for JSON filtering. Network access to
+  www.abgeordnetenwatch.de.
 ---
 
 # Abgeordnetenwatch Side Jobs
@@ -19,6 +22,8 @@ organisation, and the declared income — from abgeordnetenwatch's Nebentätigke
 ## Tooling
 
 This skill drives the `abgeordnetenwatch` command. **Before anything else, validate it is available** — run `command -v abgeordnetenwatch` (or `abgeordnetenwatch --help`). If it is not on your PATH, STOP and inform the user that the `abgeordnetenwatch` CLI (`@maschinenlesbar.org/abgeordnetenwatch-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
+
+This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
 Data comes from the open abgeordnetenwatch.de API v2 — read-only, **no API key**, **CC0 1.0**. Always pass `--compact` and `--data-only`. An empty array is a valid, informative answer: the member disclosed no side jobs.
 

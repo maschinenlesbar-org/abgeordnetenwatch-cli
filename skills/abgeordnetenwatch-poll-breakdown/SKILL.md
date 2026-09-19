@@ -7,8 +7,11 @@ description: >
   vote on a bill?", "which parties backed a motion?", "show the roll-call result
   for a vote", "how did the fractions split on a topic?", or wants the per-party
   yes/no breakdown of a named vote.
-version: 1.0.0
-userInvocable: true
+compatibility: >
+  Requires the `abgeordnetenwatch` CLI (npm package
+  @maschinenlesbar.org/abgeordnetenwatch-cli) on PATH, installed by the user;
+  the skill never installs it. Uses jq for JSON filtering. Network access to
+  www.abgeordnetenwatch.de.
 ---
 
 # Abgeordnetenwatch Poll Breakdown
@@ -19,6 +22,8 @@ no-show split per party group, and the overall result.
 ## Tooling
 
 This skill drives the `abgeordnetenwatch` command. **Before anything else, validate it is available** — run `command -v abgeordnetenwatch` (or `abgeordnetenwatch --help`). If it is not on your PATH, STOP and inform the user that the `abgeordnetenwatch` CLI (`@maschinenlesbar.org/abgeordnetenwatch-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
+
+This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
 Data comes from the open abgeordnetenwatch.de API v2 — read-only, **no API key**, **CC0 1.0**. Always pass `--compact` and `--data-only`.
 
