@@ -73,6 +73,26 @@ export function parseUserAgentArg(value: string): string {
 }
 
 /**
+ * commander value-parser for `--base-url`: an absolute `http:`/`https:` URL.
+ * A `file:`, `ftp:` or malformed value is a usage error at parse time rather
+ * than a runtime error from the engine (which still re-validates the scheme).
+ */
+export function parseBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new InvalidArgumentError("Expected an absolute http(s) URL.");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new InvalidArgumentError(
+      `Unsupported scheme "${url.protocol}". Expected an http(s) URL.`,
+    );
+  }
+  return value;
+}
+
+/**
  * Parse positional `key=value` filter arguments into a filters object.
  *
  * The key may carry a bracket operator (`year_of_birth[gt]=1990`) or be a plain

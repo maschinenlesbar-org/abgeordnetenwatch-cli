@@ -83,8 +83,9 @@ npm start -- --help # run the CLI from source build
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2). The retry
   delay honours a `Retry-After` header (delta-seconds or HTTP-date), clamped to 30s;
   absent or unparseable, it falls back to linear backoff (`retryDelayMs * attempt`).
-- **Only `http:`/`https:` base URLs are accepted** — the scheme is validated in the
-  engine constructor, and again per-request in the transport.
+- **Only `http:`/`https:` base URLs are accepted** — `--base-url` is checked at parse
+  time (a usage error), then the scheme is validated again in the engine constructor
+  and per-request in the transport.
 
 ## Website
 

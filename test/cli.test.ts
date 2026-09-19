@@ -253,6 +253,16 @@ test("--timeout accepts up to the largest timer Node supports", async () => {
   assert.match(over.cap.err.join("\n"), /between 0 and 2147483647/);
 });
 
+test("a non-http(s) or malformed --base-url is a usage error, before any request", async () => {
+  for (const url of ["file:///etc/passwd", "ftp://example.org", "notaurl"]) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: {} }));
+    const code = await run(["--base-url", url, "get", "parties", "42"], deps);
+    assert.notEqual(code, 0, url);
+    assert.equal(mt.calls.length, 0, url);
+    assert.match(cap.err.join("\n"), /--base-url/, url);
+  }
+});
+
 test("blank filter, sort key and filter tokens are usage errors, before any request", async () => {
   const cases: string[][] = [
     ["list", "politicians", "--sort-by", ""],
