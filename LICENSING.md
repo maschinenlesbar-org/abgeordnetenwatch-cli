@@ -1,7 +1,7 @@
 # Licensing
 
-`abgeordnetenwatch-cli` is **dual-licensed**. You may use it under **either** of
-the following, at your choice:
+`abgeordnetenwatch-cli` is **dual-licensed**. You may use it under **either** of the
+following, at your choice:
 
 ## 1. Open source — AGPL-3.0-or-later (default)
 
