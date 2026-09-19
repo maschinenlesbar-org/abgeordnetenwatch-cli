@@ -42,6 +42,17 @@ export function parseBoundedInt(min: number, max: number): (value: string) => nu
 }
 
 /**
+ * commander value-parser: a value that is not blank. A blank filter would
+ * otherwise be dropped and the command would silently run unfiltered.
+ */
+export function parseNonEmpty(value: string): string {
+  if (value.trim() === "") {
+    throw new InvalidArgumentError("Expected a non-empty value.");
+  }
+  return value;
+}
+
+/**
  * commander value-parser for `--user-agent`. Control characters (notably CR/LF)
  * are illegal in an HTTP header value: node's http layer throws a low-level
  * TypeError when the request is built, which previously surfaced to the user as

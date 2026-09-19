@@ -253,6 +253,27 @@ test("--timeout accepts up to the largest timer Node supports", async () => {
   assert.match(over.cap.err.join("\n"), /between 0 and 2147483647/);
 });
 
+test("blank filter, sort key and filter tokens are usage errors, before any request", async () => {
+  const cases: string[][] = [
+    ["list", "politicians", "--sort-by", ""],
+    ["list", "politicians", "--sort-by", "   "],
+    ["list", "politicians", ""],
+    ["list", "politicians", "sex="],
+    ["list", "politicians", "sex=  "],
+    ["list", "politicians", " =f"],
+    ["count", "politicians", ""],
+    ["count", "politicians", "sex="],
+    ["count", "politicians", "sex=  "],
+    ["count", "politicians", " =f"],
+  ];
+  for (const argv of cases) {
+    const { deps, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+    const code = await run(argv, deps);
+    assert.notEqual(code, 0, JSON.stringify(argv));
+    assert.equal(mt.calls.length, 0, JSON.stringify(argv));
+  }
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

@@ -1,6 +1,6 @@
 import { InvalidArgumentError, type Command } from "commander";
 import type { CliDeps } from "../io.js";
-import { action, parseFilters, parseIntArg, renderJson } from "../shared.js";
+import { action, parseFilters, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 import {
   ENTITY_COLLECTIONS,
   isEntityCollection,
@@ -83,6 +83,14 @@ function filterArg(value: string, previous: string[] = []): string[] {
   // warning. Distinct operators on the same field are different keys
   // (`year_of_birth[gt]` vs `year_of_birth[lt]`) and remain allowed.
   const key = value.slice(0, eq);
+  // A blank key or value (`sex=`, `sex= `, ` =f`, often an unset shell
+  // variable) would be sent as an empty parameter, so the command ran
+  // effectively unfiltered and exited 0. A blank filter is never meaningful.
+  if (key.trim() === "" || value.slice(eq + 1).trim() === "") {
+    throw new InvalidArgumentError(
+      `Invalid filter "${value}". Both key and value must be non-empty, e.g. sex=f.`,
+    );
+  }
   // If the key carries a bracket operator (`field[op]`), validate the operator
   // against the known set so a typo (`last_name[zz]`) is caught here rather than
   // surfacing as an opaque API HTTP 500. A plain field or related-entity id has
@@ -130,7 +138,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
       "page size (number of items; API honours up to 1000, else falls back to 100)",
       parseIntArg,
     )
-    .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)")
+    .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)", parseNonEmpty)
     .option("--sort-direction <dir>", "asc or desc", sortDirectionArg)
     .option("--data-only", "print just the data array (not the meta envelope)")
     .addHelpText(
