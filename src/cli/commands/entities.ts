@@ -104,12 +104,32 @@ function filterArg(value: string, previous: string[] = []): string[] {
       );
     }
   }
-  if (previous.some((token) => token.slice(0, token.indexOf("=")) === key)) {
+  const previousKeys = previous.map((token) => token.slice(0, token.indexOf("=")));
+  if (previousKeys.includes(key)) {
     throw new InvalidArgumentError(
       `Duplicate filter key "${key}". Specify each field (and operator) at most once.`,
     );
   }
+  // A plain key and a bracket key on the same field (`year_of_birth=1990` plus
+  // `year_of_birth[gt]=2000`) are different keys, but the API parses them into one
+  // parameter and keeps only the last, so one filter would be dropped silently.
+  const field = filterField(key);
+  const clash = previousKeys.find(
+    (prev) => filterField(prev) === field && (prev === field || key === field),
+  );
+  if (clash !== undefined) {
+    throw new InvalidArgumentError(
+      `Conflicting filters "${clash}" and "${key}": the API keeps only one of a plain and a ` +
+        `bracket filter on the same field. Use operators only, e.g. '${field}[eq]=…'.`,
+    );
+  }
   return [...previous, value];
+}
+
+/** The field name of a filter key: `year_of_birth[gt]` -> `year_of_birth`. */
+function filterField(key: string): string {
+  const bracket = key.indexOf("[");
+  return bracket === -1 ? key : key.slice(0, bracket);
 }
 
 /** Build ListParams from this command's parsed options + positional filters. */

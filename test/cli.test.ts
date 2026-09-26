@@ -136,6 +136,21 @@ test("distinct operators on the same field are allowed (not a duplicate)", async
   assert.deepEqual(received, { "year_of_birth[gt]": "1980", "year_of_birth[lt]": "1990" });
 });
 
+test("a plain and a bracket filter on the same field conflict (the API keeps only one)", async () => {
+  for (const filters of [
+    ["year_of_birth=1990", "year_of_birth[gt]=2000"],
+    ["year_of_birth[gt]=2000", "year_of_birth=1990"],
+    ["sex=f", "sex[ne]=f"],
+    ["sex[eq]=f", "year_of_birth[gt]=1990", "sex=m"],
+  ]) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+    const code = await run(["count", "politicians", ...filters], deps);
+    assert.equal(code, 2, filters.join(" "));
+    assert.equal(mt.calls.length, 0);
+    assert.match(cap.err.join("\n"), /Conflicting filters "[a-z_]+(\[[a-z]+\])?" and "[a-z_]+(\[[a-z]+\])?"/);
+  }
+});
+
 test("an unknown bracket filter operator is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "last_name[zz]=A"], deps);

@@ -166,8 +166,9 @@ record with `get` and the reference's `id`.
 `gt`, `gte`, `lt`, `lte` (greater or less than, or equal), `cn` (contains, ignoring case:
 `'last_name[cn]=reichinnek'`) and `sw` (starts with: `'last_name[sw]=Mü'`). Quote these
 filters so the shell leaves the brackets alone. The CLI rejects a missing `=`, any other
-operator (`[in]`, the `[entity.id]` form) and a repeated key as usage errors; one field with
-two different operators is fine.
+operator (`[in]`, the `[entity.id]` form), a repeated key and a plain key next to an operator
+key on the same field (`sex=f 'sex[ne]=m'`: the API would keep only one) as usage errors; one
+field with two different operators is fine.
 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
 or `desc`). With `--sort-by` alone the API sorts **descending**. Not every field is sortable:
