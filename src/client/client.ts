@@ -11,8 +11,10 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwParseError } from "./errors.js";
+import { AwError, AwParseError } from "./errors.js";
 import {
+  ENTITY_COLLECTIONS,
+  isEntityCollection,
   type ListParams,
   type ListResponse,
   type DetailResponse,
@@ -54,7 +56,7 @@ export class AbgeordnetenwatchClient {
     collection: EntityCollection,
     params: ListParams = {},
   ): Promise<ListResponse<T>> {
-    const path = `${API_PREFIX}/${collection}`;
+    const path = `${API_PREFIX}/${checkCollection(collection)}`;
     const body = await this.engine.getJson<unknown>(path, this.toQuery(params));
     assertEnvelope(body, path);
     if (!Array.isArray(body["data"])) throw shapeError(path, "a data array");
@@ -69,7 +71,7 @@ export class AbgeordnetenwatchClient {
     collection: EntityCollection,
     id: number | string,
   ): Promise<DetailResponse<T>> {
-    const path = `${API_PREFIX}/${collection}/${encodeURIComponent(String(id))}`;
+    const path = `${API_PREFIX}/${checkCollection(collection)}/${encodeURIComponent(String(id))}`;
     const body = await this.engine.getJson<unknown>(path);
     assertEnvelope(body, path);
     if (!isObject(body["data"])) throw shapeError(path, "a data object");
@@ -90,6 +92,20 @@ export class AbgeordnetenwatchClient {
     }
     return total;
   }
+}
+
+/**
+ * The collection is interpolated into the path, so check it at run time as well:
+ * a JavaScript caller (or a cast) could otherwise pass `../../x` or `parties?x=1`
+ * and walk out of `/api/v2` or inject a query.
+ */
+function checkCollection(collection: string): string {
+  if (!isEntityCollection(collection)) {
+    throw new AwError(
+      `Unknown collection "${collection}". Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
+    );
+  }
+  return collection;
 }
 
 /** True for a JSON object (not null, not an array). */

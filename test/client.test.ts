@@ -75,6 +75,18 @@ test("list() and count() options win over a filter with the same wire name", asy
   assert.deepEqual(new URL(mt.last().url).searchParams.getAll("range_end"), ["1"]);
 });
 
+test("an unknown collection is rejected before any request (no path escape)", async () => {
+  const mt = makeMockTransport(() => jsonResponse(listEnvelope([])));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  for (const name of ["../../esc", "parties?x=1", "parties/../politicians", ""]) {
+    const collection = name as unknown as "parties";
+    for (const call of [() => client.list(collection), () => client.get(collection, 1), () => client.count(collection)]) {
+      await assert.rejects(call, (e: unknown) => e instanceof AwError && /Unknown collection/.test(e.message), name);
+    }
+  }
+  assert.equal(mt.calls.length, 0);
+});
+
 test("get() requests the id sub-path and returns the object", async () => {
   const mt = makeMockTransport(() => jsonResponse(detailEnvelope({ id: 42, label: "X" })));
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });
