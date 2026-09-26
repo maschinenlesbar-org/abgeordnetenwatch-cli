@@ -23,10 +23,11 @@ export interface EngineOptions {
   /** Value of the User-Agent header. */
   userAgent?: string;
   /**
-   * Extra headers sent on every request. Credential-bearing headers
-   * (Authorization, Cookie, X-API-Key) are automatically stripped when a
-   * redirect crosses to a different origin, so they never leak to an arbitrary
-   * host named in Location.
+   * Extra headers sent on every request to the configured origin. When a redirect
+   * crosses to a different origin, all of them are dropped (only the engine's own
+   * Accept and User-Agent go along), so no credential — Authorization,
+   * Proxy-Authorization, Cookie, X-API-Key, X-Auth-Token or any other — leaks to an
+   * arbitrary host named in Location.
    */
   headers?: Record<string, string>;
   /**
@@ -78,15 +79,18 @@ const FOLLOWED_REDIRECTS = new Set([301, 302, 303, 307, 308]);
  */
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 
-// Headers that carry credentials and must never follow a cross-origin redirect.
-// Matched case-insensitively against the live header keys.
-const SENSITIVE_HEADERS = ["authorization", "cookie", "x-api-key"];
+// The headers the engine sets itself, under the exact keys it uses. They are the
+// only ones that follow a cross-origin redirect.
+const ENGINE_HEADERS = new Set(["Accept", "User-Agent"]);
 
-/** Remove credential-bearing headers in place (used on cross-origin redirects). */
-function stripSensitiveHeaders(headers: Record<string, string>): void {
-  for (const key of Object.keys(headers)) {
-    if (SENSITIVE_HEADERS.includes(key.toLowerCase())) delete headers[key];
-  }
+/**
+ * A copy of `headers` without any caller-supplied header (used on cross-origin
+ * redirects). A list of known credential headers is never complete
+ * (Proxy-Authorization, X-Auth-Token, ...), so only the engine's own
+ * non-credential headers are kept.
+ */
+function engineHeadersOnly(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([key]) => ENGINE_HEADERS.has(key)));
 }
 
 /**
@@ -207,7 +211,7 @@ export class RequestEngine {
     options: { query?: QueryParams; accept: string } = { accept: "application/json" },
   ): Promise<RawResponse> {
     let url = this.buildUrl(path, options.query);
-    const headers: Record<string, string> = {
+    let headers: Record<string, string> = {
       ...this.extraHeaders,
       Accept: options.accept,
       "User-Agent": this.userAgent,
@@ -248,13 +252,12 @@ export class RequestEngine {
           : undefined;
       if (nextUrl !== undefined) {
         // Credential-strip guard: if the redirect target is a different origin,
-        // drop any sensitive headers so Authorization/cookie-style credentials
-        // are never sent to an arbitrary host named in Location. Compare full
-        // origin (scheme + host + port), not just host, so a same-host
-        // https->http *downgrade* also strips — otherwise credentials would
-        // cross the wire in cleartext.
+        // drop every caller-supplied header so no credential is ever sent to an
+        // arbitrary host named in Location. Compare full origin (scheme + host +
+        // port), not just host, so a same-host https->http *downgrade* also
+        // strips — otherwise credentials would cross the wire in cleartext.
         if (nextUrl.origin !== new URL(url).origin) {
-          stripSensitiveHeaders(headers);
+          headers = engineHeadersOnly(headers);
         }
         url = nextUrl.toString();
         redirects += 1;

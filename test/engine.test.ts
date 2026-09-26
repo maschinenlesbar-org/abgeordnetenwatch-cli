@@ -91,6 +91,20 @@ test("cross-host redirect strips credential headers before the next hop", async 
   assert.equal(header(hop, "x-api-key"), undefined);
 });
 
+test("a cross-origin redirect drops every caller header, Proxy-Authorization and X-Auth-Token included", async () => {
+  let calls = 0;
+  const mt = makeMockTransport(() => (++calls === 1 ? redirectResponse("https://b.example/next") : jsonResponse({})));
+  const engine = new RequestEngine({
+    baseUrl: "https://a.example",
+    transport: mt.transport,
+    userAgent: "ua-test",
+    headers: { ...CREDS, "Proxy-Authorization": "Basic SECRET", "X-Auth-Token": "SECRET", "user-agent": "x" },
+  });
+  await engine.getJson("/start");
+  assert.equal(header(mt.calls[0]!, "proxy-authorization"), "Basic SECRET");
+  assert.deepEqual(mt.calls[1]!.headers, { Accept: "application/json", "User-Agent": "ua-test" });
+});
+
 test("same-origin redirect keeps credential headers", async () => {
   const mt = makeMockTransport((req) =>
     req.url.endsWith("/start")

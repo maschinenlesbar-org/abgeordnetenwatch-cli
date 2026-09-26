@@ -84,12 +84,14 @@ npm start -- --help # run the CLI from source build
   message and `location` field name the target:
   `HTTP 302 for GET <url>: redirect to <target> not followed` (or
   `redirect not followed (no Location header)`).
-- **Credential headers are stripped on a cross-origin redirect.** If a redirect
+- **Caller headers are stripped on a cross-origin redirect.** If a redirect
   target's origin (scheme + host + port) differs from the current one —
-  including a same-host `https:` -> `http:` downgrade — `Authorization`, `Cookie`
-  and `X-API-Key` are dropped before the next hop, so they never leak to an
-  arbitrary host named in `Location`, nor cross the wire in cleartext. (This API
-  needs no auth, but the guard is unconditional.)
+  including a same-host `https:` -> `http:` downgrade — every header passed in
+  `headers` is dropped before the next hop; only the engine's own `Accept` and
+  `User-Agent` go along. So no credential (`Authorization`, `Proxy-Authorization`,
+  `Cookie`, `X-API-Key`, `X-Auth-Token`, ...) leaks to an arbitrary host named in
+  `Location`, nor crosses the wire in cleartext. (This API needs no auth, but the
+  guard is unconditional.)
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2; the CLI's
   `--max-retries` accepts 0..10). The retry delay honours a `Retry-After` header
   (delta-seconds or an IMF-fixdate HTTP-date, parsed strictly by the exported
