@@ -40,6 +40,12 @@ near-identical method pairs. The authoritative collection list is
 `ENTITY_COLLECTIONS` in `client/types.ts`; the CLI validates the `<entity>`
 argument against it.
 
+The client checks the envelope of every 2xx response: an object with a `meta`
+object, `data` an array (`list`) or an object (`get`), and for `count` a
+non-negative integer `meta.result.total`. Anything else raises `AwParseError`
+(`Unexpected response shape from <path>: expected ...`). The records themselves
+are passed through unchecked.
+
 ## Scripts
 
 ```bash

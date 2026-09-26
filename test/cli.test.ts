@@ -356,6 +356,15 @@ test("blank filter, sort key and filter tokens are usage errors, before any requ
   }
 });
 
+test("a malformed 2xx envelope exits 1 with a parse error, not an unexpected TypeError", async () => {
+  for (const argv of [["count", "parties"], ["list", "parties", "--data-only"], ["get", "parties", "5"]]) {
+    const { deps, cap } = makeTransportDeps(() => jsonResponse(null));
+    assert.equal(await run(argv, deps), 1, argv.join(" "));
+    assert.deepEqual(cap.out, []);
+    assert.match(cap.err.join("\n"), /^Error: Unexpected response shape from \/api\/v2\/parties/);
+  }
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

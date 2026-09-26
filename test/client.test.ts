@@ -140,6 +140,41 @@ test("a non-JSON 2xx body raises AwParseError", async () => {
   await assert.rejects(() => client.list("politicians"), AwParseError);
 });
 
+test("a 2xx body that is not a { meta, data } envelope raises AwParseError", async () => {
+  const cases: [string, unknown, (c: AbgeordnetenwatchClient) => Promise<unknown>, RegExp][] = [
+    ["null body", null, (c) => c.list("parties"), /expected a JSON object with meta and data/],
+    ["array body", [1, 2], (c) => c.list("parties"), /expected a JSON object with meta and data/],
+    ["no meta", { data: [] }, (c) => c.list("parties"), /expected a JSON object with meta and data/],
+    ["list without data", { meta: {} }, (c) => c.list("parties"), /expected a data array/],
+    ["list with an object", detailEnvelope({ id: 1 }), (c) => c.list("parties"), /expected a data array/],
+    ["get with a list", listEnvelope([]), (c) => c.get("parties", 5), /expected a data object/],
+    ["get with null data", detailEnvelope(null), (c) => c.get("parties", 5), /expected a data object/],
+    ["count without result", { meta: {}, data: [] }, (c) => c.count("parties"), /numeric meta\.result\.total/],
+  ];
+  for (const [name, body, call, message] of cases) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+    await assert.rejects(
+      () => call(client),
+      (err: unknown) =>
+        err instanceof AwParseError && /^Unexpected response shape from \/api\/v2\/parties/.test(err.message) &&
+        message.test(err.message),
+      name,
+    );
+  }
+});
+
+test("count() rejects a total that is not a non-negative integer", async () => {
+  for (const total of ["9", -1, 1.5, null]) {
+    const env = listEnvelope([]);
+    const mt = makeMockTransport(() =>
+      jsonResponse({ ...env, meta: { ...env.meta, result: { ...env.meta.result, total } } }),
+    );
+    const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+    await assert.rejects(() => client.count("parties"), AwParseError, String(total));
+  }
+});
+
 test("retries a 429 then succeeds", async () => {
   let calls = 0;
   const mt = makeMockTransport(() => {

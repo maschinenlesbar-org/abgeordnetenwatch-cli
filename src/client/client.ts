@@ -11,6 +11,7 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
+import { AwParseError } from "./errors.js";
 import {
   type ListParams,
   type ListResponse,
@@ -45,20 +46,34 @@ export class AbgeordnetenwatchClient {
     return query;
   }
 
-  /** List a collection; returns the full envelope (meta + data array). */
-  list<T = Entity>(
+  /**
+   * List a collection; returns the full envelope (meta + data array). A 2xx body
+   * that is not such an envelope raises AwParseError.
+   */
+  async list<T = Entity>(
     collection: EntityCollection,
     params: ListParams = {},
   ): Promise<ListResponse<T>> {
-    return this.engine.getJson(`${API_PREFIX}/${collection}`, this.toQuery(params));
+    const path = `${API_PREFIX}/${collection}`;
+    const body = await this.engine.getJson<unknown>(path, this.toQuery(params));
+    assertEnvelope(body, path);
+    if (!Array.isArray(body["data"])) throw shapeError(path, "a data array");
+    return body as unknown as ListResponse<T>;
   }
 
-  /** Fetch a single entity by id; returns the full envelope (meta + data object). */
-  get<T = Entity>(
+  /**
+   * Fetch a single entity by id; returns the full envelope (meta + data object). A
+   * 2xx body that is not such an envelope raises AwParseError.
+   */
+  async get<T = Entity>(
     collection: EntityCollection,
     id: number | string,
   ): Promise<DetailResponse<T>> {
-    return this.engine.getJson(`${API_PREFIX}/${collection}/${encodeURIComponent(String(id))}`);
+    const path = `${API_PREFIX}/${collection}/${encodeURIComponent(String(id))}`;
+    const body = await this.engine.getJson<unknown>(path);
+    assertEnvelope(body, path);
+    if (!isObject(body["data"])) throw shapeError(path, "a data object");
+    return body as unknown as DetailResponse<T>;
   }
 
   /**
@@ -69,6 +84,30 @@ export class AbgeordnetenwatchClient {
    */
   async count(collection: EntityCollection, params: ListParams = {}): Promise<number> {
     const res = await this.list(collection, { ...params, rangeEnd: 1 });
-    return res.meta.result.total;
+    const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
+    if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
+      throw shapeError(`${API_PREFIX}/${collection}`, "a numeric meta.result.total");
+    }
+    return total;
+  }
+}
+
+/** True for a JSON object (not null, not an array). */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shapeError(path: string, expected: string): AwParseError {
+  return new AwParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+}
+
+/**
+ * Check the `{ meta, data }` envelope every 2xx response carries. A body of `null`,
+ * an array or an object without `meta` would otherwise surface as a raw TypeError
+ * ("Cannot read properties of null") or print as if it were data.
+ */
+function assertEnvelope(body: unknown, path: string): asserts body is Record<string, unknown> {
+  if (!isObject(body) || !isObject(body["meta"])) {
+    throw shapeError(path, "a JSON object with meta and data");
   }
 }
