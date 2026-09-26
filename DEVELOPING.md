@@ -82,7 +82,9 @@ npm start -- --help # run the CLI from source build
   needs no auth, but the guard is unconditional.)
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2). The retry
   delay honours a `Retry-After` header (delta-seconds or HTTP-date), clamped to 30s;
-  absent or unparseable, it falls back to linear backoff (`retryDelayMs * attempt`).
+  absent or unparseable, it falls back to linear backoff (`retryDelayMs * attempt`,
+  default 1 s then 2 s). The live API answers a burst with `429` and no `Retry-After`
+  for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs.
 - **Only `http:`/`https:` base URLs are accepted** — `--base-url` is checked at parse
   time (a usage error), then the scheme is validated again in the engine constructor
   and per-request in the transport.

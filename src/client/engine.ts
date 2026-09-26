@@ -36,7 +36,11 @@ export interface EngineOptions {
   timeoutMs?: number;
   /** Number of automatic retries for transient (429/503) responses. */
   maxRetries?: number;
-  /** Base backoff between retries in milliseconds (grows linearly). */
+  /**
+   * Base backoff between retries in milliseconds (grows linearly: 1 s, 2 s, ... by
+   * default). The upstream rate limiter answers a burst with 429s and no
+   * Retry-After for about 1–2 s, so the default outlasts that window.
+   */
   retryDelayMs?: number;
   /** Number of HTTP redirects (301/302/303/307/308) to follow. Defaults to 5. */
   maxRedirects?: number;
@@ -50,6 +54,14 @@ export interface EngineOptions {
 }
 
 const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
+
+/**
+ * Default base backoff for a 429/503 without Retry-After. abgeordnetenwatch.de
+ * rate-limits bursts with a bare 429 and recovers after about 1–2 s, so retries at
+ * 1 s and 2 s (3 s in all with the default two retries) outlast the window;
+ * 200 ms and 400 ms did not.
+ */
+const DEFAULT_RETRY_DELAY_MS = 1_000;
 
 // Headers that carry credentials and must never follow a cross-origin redirect.
 // Matched case-insensitively against the live header keys.
@@ -145,7 +157,7 @@ export class RequestEngine {
     this.extraHeaders = options.headers ?? {};
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.maxRetries = options.maxRetries ?? 2;
-    this.retryDelayMs = options.retryDelayMs ?? 200;
+    this.retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
     this.maxRedirects = options.maxRedirects ?? 5;
     this.maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
     this.sleep = options.sleep ?? realSleep;

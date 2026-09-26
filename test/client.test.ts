@@ -160,7 +160,7 @@ test("honours a numeric Retry-After header (seconds) on 429", async () => {
     },
   });
   await client.list("votes");
-  assert.deepEqual(delays, [2000]); // 2s from the header, not the 200ms linear backoff
+  assert.deepEqual(delays, [2000]); // 2s from the header, not the linear backoff
 });
 
 test("clamps a far-future HTTP-date Retry-After to the maximum", async () => {
@@ -180,6 +180,20 @@ test("clamps a far-future HTTP-date Retry-After to the maximum", async () => {
   });
   await client.list("votes");
   assert.deepEqual(delays, [30_000]);
+});
+
+test("the default backoff without Retry-After (1 s, 2 s) outlasts the API's rate-limit window", async () => {
+  const delays: number[] = [];
+  const mt = makeMockTransport(() => jsonResponse({}, 429));
+  const client = new AbgeordnetenwatchClient({
+    transport: mt.transport,
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+  });
+  await assert.rejects(() => client.list("votes"), AwApiError);
+  assert.equal(mt.calls.length, 3);
+  assert.deepEqual(delays, [1000, 2000]);
 });
 
 test("falls back to linear backoff when no Retry-After is present", async () => {
