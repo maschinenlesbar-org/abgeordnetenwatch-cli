@@ -173,7 +173,9 @@ API mit HTTP 500, z. B. `The following parameter(s) are not valid: mandate` bei 
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`
 (enthält, ohne Beachtung der Groß- und Kleinschreibung: `'last_name[cn]=reichinnek'`) und `sw`
 (beginnt mit: `'last_name[sw]=Mü'`). Setzen Sie solche Filter in Anführungszeichen, damit die
-Shell die Klammern nicht auswertet. Die CLI weist ein fehlendes `=`, jeden anderen Operator
+Shell die Klammern nicht auswertet. Die CLI weist ein fehlendes `=`, einen Schlüssel, der kein
+Feldname mit höchstens einem Operator ist (`'[gt]=1990'`, `'year_of_birth[gt]x=1990'`), jeden
+anderen Operator
 (`[in]`, die Form `[entity.id]`), einen wiederholten Schlüssel und einen einfachen Schlüssel
 neben einem Operator-Schlüssel für dasselbe Feld (`sex=f 'sex[ne]=m'`: die API würde nur einen
 behalten) als Aufruffehler ab; ein Feld mit zwei verschiedenen Operatoren ist erlaubt.

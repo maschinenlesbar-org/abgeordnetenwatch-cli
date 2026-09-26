@@ -59,6 +59,9 @@ function sortDirectionArg(value: string): "asc" | "desc" {
  */
 const FILTER_OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "cn", "sw"] as const;
 
+/** A filter key: a field name, optionally followed by one `[op]` suffix. */
+const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
+
 /**
  * commander value-parser for one `key=value` token of the variadic `[filters...]`
  * argument. Validating here — at parse time — means a malformed filter surfaces as
@@ -91,13 +94,22 @@ function filterArg(value: string, previous: string[] = []): string[] {
       `Invalid filter "${value}". Both key and value must be non-empty, e.g. sex=f.`,
     );
   }
+  // The key is a field name, optionally followed by one bracket operator. The API
+  // silently ignores anything else: a bare `[gt]=1990` drops the filter entirely
+  // (the unfiltered total, exit 0) and `field[gt]x` loses the trailing text.
+  const parts = FILTER_KEY.exec(key);
+  if (!parts) {
+    throw new InvalidArgumentError(
+      `Invalid filter key "${key}". Use a field name, optionally with one operator: ` +
+        `sex=f or 'year_of_birth[gt]=1990'.`,
+    );
+  }
   // If the key carries a bracket operator (`field[op]`), validate the operator
   // against the known set so a typo (`last_name[zz]`) is caught here rather than
   // surfacing as an opaque API HTTP 500. A plain field or related-entity id has
   // no bracket and is passed through untouched.
-  const bracket = /\[([^\]]*)\]$/.exec(key);
-  if (bracket) {
-    const op = bracket[1] ?? "";
+  const op = parts[2];
+  if (op !== undefined) {
     if (!(FILTER_OPERATORS as readonly string[]).includes(op)) {
       throw new InvalidArgumentError(
         `Unknown filter operator "[${op}]" in "${key}". Valid operators: ${FILTER_OPERATORS.join(", ")}.`,

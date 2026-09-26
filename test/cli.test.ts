@@ -151,6 +151,23 @@ test("a plain and a bracket filter on the same field conflict (the API keeps onl
   }
 });
 
+test("a filter key that is not a field name with at most one operator is a usage error", async () => {
+  for (const filter of [
+    "[gt]=1990",
+    "year_of_birth[gt]x=1990",
+    "year_of_birth[gt][lt]=1990",
+    "year of birth=1990",
+    "1field=2",
+    "field]=2",
+  ]) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+    const code = await run(["count", "politicians", filter], deps);
+    assert.equal(code, 2, filter);
+    assert.equal(mt.calls.length, 0, filter);
+    assert.match(cap.err.join("\n"), /Invalid filter key/, filter);
+  }
+});
+
 test("an unknown bracket filter operator is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "last_name[zz]=A"], deps);
