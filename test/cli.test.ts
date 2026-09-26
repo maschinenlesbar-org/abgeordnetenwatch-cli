@@ -428,6 +428,15 @@ test("a message-less HTTP 500 hints at the filters only when the request had fil
   }
 });
 
+test("credentials in --base-url are redacted from error messages", async () => {
+  const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({}, 418));
+  const code = await run(["--base-url", "http://user:secret@127.0.0.1:18101/e418", "list", "parties"], deps);
+  assert.equal(code, 1);
+  // ...but still sent: the request URL keeps the userinfo (Node turns it into Basic auth).
+  assert.equal(mt.last().url, "http://user:secret@127.0.0.1:18101/e418/api/v2/parties");
+  assert.equal(cap.err.join("\n"), "Error: HTTP 418 for GET http://***@127.0.0.1:18101/e418/api/v2/parties");
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

@@ -7,6 +7,6 @@ export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
 export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";
 export type { QueryParams, QueryValue } from "./query.js";
-export { AwError, AwApiError, AwNetworkError, AwParseError } from "./errors.js";
+export { AwError, AwApiError, AwNetworkError, AwParseError, redactUrl } from "./errors.js";
 
 export * from "./types.js";

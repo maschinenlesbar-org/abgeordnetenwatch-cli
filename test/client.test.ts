@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { MAX_RETRY_AFTER_MS, parseRetryAfter } from "../src/client/engine.js";
-import { AwApiError, AwError, AwNetworkError, AwParseError } from "../src/client/errors.js";
+import { AwApiError, AwError, AwNetworkError, AwParseError, redactUrl } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
 const listEnvelope = (data: unknown[], total = data.length) => ({
@@ -133,6 +133,20 @@ test("a base URL with a query or fragment is rejected at construction", () => {
       baseUrl,
     );
   }
+});
+
+test("redactUrl hides userinfo and leaves other URLs alone", () => {
+  assert.equal(redactUrl("https://u:p@example.test/a?b=1"), "https://***@example.test/a?b=1");
+  assert.equal(redactUrl("https://token@example.test/"), "https://***@example.test/");
+  assert.equal(redactUrl("https://example.test/a b"), "https://example.test/a b");
+  assert.equal(redactUrl("not a url"), "not a url");
+  const err = new AwApiError({ status: 500, url: "https://u:p@example.test/x", method: "GET", body: "" });
+  assert.equal(err.url, "https://***@example.test/x");
+  assert.ok(!err.message.includes("u:p"));
+  assert.throws(
+    () => new AbgeordnetenwatchClient({ baseUrl: "https://u:p@example.test/?x" }),
+    (e: unknown) => e instanceof AwNetworkError && !e.message.includes("u:p") && e.message.includes("***@"),
+  );
 });
 
 test("a non-JSON 2xx body raises AwParseError", async () => {

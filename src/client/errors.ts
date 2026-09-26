@@ -1,6 +1,24 @@
 // Error types raised by the client. Kept free of any I/O so they are trivial to
 // construct in tests and to `instanceof`-check by consumers.
 
+/**
+ * Replace the userinfo of a URL (`https://user:secret@host/...`) with `***`, so a
+ * credential in a base URL never reaches an error message, a log or CI output.
+ * A URL without userinfo, or one that does not parse, is returned unchanged.
+ */
+export function redactUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (parsed.username === "" && parsed.password === "") return url;
+  parsed.username = "***";
+  parsed.password = "";
+  return parsed.href;
+}
+
 /** Base class for every error originating from this client. */
 export class AwError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -39,13 +57,15 @@ export class AwApiError extends AwError {
     body: string;
     detail?: string;
   }) {
+    // The URL is shown without userinfo: a credential in --base-url must not leak.
+    const url = redactUrl(args.url);
     const detailPart = args.detail ? `: ${args.detail}` : "";
     // Cap the URL in the human-readable message so a pathologically long URL
     // (e.g. a huge filter that triggers an HTTP 414) doesn't dump multiple KB to
     // stderr. The full URL remains available on `this.url` for programmatic use.
-    super(`HTTP ${args.status} for ${args.method} ${truncateUrl(args.url)}${detailPart}`);
+    super(`HTTP ${args.status} for ${args.method} ${truncateUrl(url)}${detailPart}`);
     this.status = args.status;
-    this.url = args.url;
+    this.url = url;
     this.method = args.method;
     this.body = args.body;
     this.detail = args.detail;
