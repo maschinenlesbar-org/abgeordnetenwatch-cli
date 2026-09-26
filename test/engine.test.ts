@@ -134,7 +134,13 @@ test("exceeding maxRedirects surfaces an AwApiError instead of looping", async (
     maxRetries: 0,
   });
 
-  await assert.rejects(() => engine.getJson("/start"), AwApiError);
+  await assert.rejects(
+    () => engine.getJson("/start"),
+    (err: unknown) =>
+      err instanceof AwApiError &&
+      err.location === "https://a.example/loop" &&
+      err.message === "HTTP 302 for GET https://a.example/loop: redirect to https://a.example/loop not followed",
+  );
   // initial request + 2 followed redirects = 3 transport calls, then it stops.
   assert.equal(mt.calls.length, 3);
 });
@@ -147,6 +153,55 @@ test("a 3xx without a Location header is surfaced, not followed forever", async 
     maxRetries: 0,
   });
 
-  await assert.rejects(() => engine.getJson("/start"), AwApiError);
+  await assert.rejects(
+    () => engine.getJson("/start"),
+    (err: unknown) =>
+      err instanceof AwApiError && /: redirect not followed \(no Location header\)$/.test(err.message),
+  );
   assert.equal(mt.calls.length, 1);
+});
+
+test("only 301/302/303/307/308 are followed; 300, 304, 305 surface naming the target", async () => {
+  for (const status of [300, 304, 305, 306]) {
+    const mt = makeMockTransport(() => redirectResponse("/elsewhere", status));
+    const engine = new RequestEngine({ baseUrl: "https://a.example", transport: mt.transport, maxRetries: 0 });
+    await assert.rejects(
+      () => engine.getJson("/start"),
+      (err: unknown) =>
+        err instanceof AwApiError &&
+        err.message === `HTTP ${status} for GET https://a.example/start: redirect to https://a.example/elsewhere not followed`,
+      String(status),
+    );
+    assert.equal(mt.calls.length, 1, String(status));
+  }
+  for (const status of [301, 302, 303, 307, 308]) {
+    let calls = 0;
+    const mt = makeMockTransport(() => (++calls === 1 ? redirectResponse("/next", status) : jsonResponse({ ok: 1 })));
+    const engine = new RequestEngine({ baseUrl: "https://a.example", transport: mt.transport, maxRetries: 0 });
+    assert.deepEqual(await engine.getJson("/start"), { ok: 1 }, String(status));
+    assert.equal(mt.last().url, "https://a.example/next");
+  }
+});
+
+test("a malformed Location surfaces as an AwApiError, not an unexpected TypeError", async () => {
+  const mt = makeMockTransport(() => redirectResponse("http://[bad"));
+  const engine = new RequestEngine({ baseUrl: "https://a.example", transport: mt.transport, maxRetries: 0 });
+  await assert.rejects(
+    () => engine.getJson("/start"),
+    (err: unknown) => err instanceof AwApiError && /: redirect to http:\/\/\[bad not followed$/.test(err.message),
+  );
+  assert.equal(mt.calls.length, 1);
+});
+
+test("the redirect target in the message is redacted and stripped of control characters", async () => {
+  const mt = makeMockTransport(() => redirectResponse(`https://u:pw@b.example/x${ESC}[31m`, 300));
+  const engine = new RequestEngine({ baseUrl: "https://a.example", transport: mt.transport, maxRetries: 0 });
+  await assert.rejects(
+    () => engine.getJson("/start"),
+    (err: unknown) =>
+      err instanceof AwApiError &&
+      !hasControlChars(err.message) &&
+      !err.message.includes("pw") &&
+      err.message.includes("redirect to https://***@b.example/x"),
+  );
 });

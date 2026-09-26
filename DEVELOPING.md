@@ -78,8 +78,12 @@ npm start -- --help # run the CLI from source build
 
 - **Redirects are followed** (up to `maxRedirects`, default **5**). abgeordnetenwatch
   301-redirects a collection path without its trailing slash (`/api/v2` ->
-  `/api/v2/`), so following them is required for the client to work. A 3xx with no
-  usable `Location`, or one past the limit, surfaces as an `AwApiError`.
+  `/api/v2/`), so following them is required for the client to work. Only 301, 302,
+  303, 307 and 308 are followed. Any other 3xx (300, 304, 305), one with a missing or
+  malformed `Location`, and one past the limit surface as an `AwApiError` whose
+  message and `location` field name the target:
+  `HTTP 302 for GET <url>: redirect to <target> not followed` (or
+  `redirect not followed (no Location header)`).
 - **Credential headers are stripped on a cross-origin redirect.** If a redirect
   target's origin (scheme + host + port) differs from the current one —
   including a same-host `https:` -> `http:` downgrade — `Authorization`, `Cookie`
