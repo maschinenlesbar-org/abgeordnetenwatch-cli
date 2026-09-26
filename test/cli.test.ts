@@ -313,6 +313,28 @@ test("a non-http(s) or malformed --base-url is a usage error, before any request
   }
 });
 
+test("a --base-url with a query, a fragment or surrounding whitespace is a usage error", async () => {
+  for (const [baseUrl, message] of [
+    ["http://127.0.0.1:18101/ok?x=1", /cannot have a query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18101/ok#frag", /cannot have a query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18101?", /cannot have a query \(\?\) or fragment \(#\)/],
+    [" https://www.abgeordnetenwatch.de", /cannot have surrounding whitespace/],
+    ["https://www.abgeordnetenwatch.de\t", /cannot have surrounding whitespace/],
+  ] as const) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: {} }));
+    const code = await run(["--base-url", baseUrl, "get", "parties", "5"], deps);
+    assert.equal(code, 2, baseUrl);
+    assert.equal(mt.calls.length, 0, baseUrl);
+    assert.match(cap.err.join("\n"), message, baseUrl);
+  }
+});
+
+test("a --base-url with a path prefix still works", async () => {
+  const { deps, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5 } }));
+  assert.equal(await run(["--base-url", "https://mirror.example/aw/", "get", "parties", "5"], deps), 0);
+  assert.equal(mt.last().url, "https://mirror.example/aw/api/v2/parties/5");
+});
+
 test("blank filter, sort key and filter tokens are usage errors, before any request", async () => {
   const cases: string[][] = [
     ["list", "politicians", "--sort-by", ""],

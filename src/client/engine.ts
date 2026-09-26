@@ -4,7 +4,7 @@
 
 import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { AwApiError, AwError, AwParseError } from "./errors.js";
+import { AwApiError, AwError, AwNetworkError, AwParseError } from "./errors.js";
 
 export const DEFAULT_BASE_URL = "https://www.abgeordnetenwatch.de";
 const DEFAULT_USER_AGENT = "abgeordnetenwatch-cli";
@@ -109,6 +109,12 @@ function assertValidBaseUrl(baseUrl: string): void {
     throw new AwError(
       `Unsupported base URL scheme "${parsed.protocol}" in "${baseUrl}"; only http and https are supported.`,
     );
+  }
+  // Request paths are appended to the base URL as a string, so a `?` or `#` would
+  // swallow every path: `http://h/?x=1` requests `/?x=1/api/v2/...` and
+  // `http://h/#f` requests `/`.
+  if (/[?#]/.test(baseUrl)) {
+    throw new AwNetworkError(`Base URL must not contain a query or fragment: ${baseUrl}`);
   }
 }
 

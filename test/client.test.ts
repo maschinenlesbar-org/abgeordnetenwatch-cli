@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
-import { AwApiError, AwError, AwParseError } from "../src/client/errors.js";
+import { AwApiError, AwError, AwNetworkError, AwParseError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
 const listEnvelope = (data: unknown[], total = data.length) => ({
@@ -121,6 +121,17 @@ test("rejects a non-http base URL with a message naming it", () => {
       return true;
     },
   );
+});
+
+test("a base URL with a query or fragment is rejected at construction", () => {
+  for (const baseUrl of ["https://example.test/?x=1", "https://example.test/#frag", "https://example.test?"]) {
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ baseUrl }),
+      (err: unknown) =>
+        err instanceof AwNetworkError && /Base URL must not contain a query or fragment/.test(err.message),
+      baseUrl,
+    );
+  }
 });
 
 test("a non-JSON 2xx body raises AwParseError", async () => {

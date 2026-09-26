@@ -87,7 +87,9 @@ npm start -- --help # run the CLI from source build
   for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs.
 - **Only `http:`/`https:` base URLs are accepted** — `--base-url` is checked at parse
   time (a usage error), then the scheme is validated again in the engine constructor
-  and per-request in the transport.
+  and per-request in the transport. A base URL with a query (`?`) or fragment (`#`) is
+  rejected too (at parse time, and by the engine for library users): paths are appended
+  to it as a string, so either would swallow every request path.
 
 ## Website
 
