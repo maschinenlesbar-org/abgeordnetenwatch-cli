@@ -212,7 +212,7 @@ third-party material, and the website, logo and branding are not covered. See
 
 ## Exit codes
 
-**Exit codes.** `0` success (also `--help` and `--version`) · `1` API error, network or parse
+**Exit codes.** `0` success (also `--help`, `help` and `--version`) · `1` API error, network or parse
 failure · `2` usage error (unknown entity, bad option, filter or id) · `4` HTTP 404 (unknown
 collection path).
 

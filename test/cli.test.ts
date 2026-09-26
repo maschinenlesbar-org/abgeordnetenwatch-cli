@@ -381,3 +381,18 @@ test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);
 });
+
+test("the help subcommand exits 0; a bare invocation is a usage error", async () => {
+  for (const [argv, code] of [
+    [["help"], 0],
+    [["help", "list"], 0],
+    [["list", "--help"], 0],
+    [["--version"], 0],
+    [[], 2],
+    [["help", "nope"], 2],
+  ] as const) {
+    const { deps, cap } = makeDeps({});
+    assert.equal(await run([...argv], deps), code, argv.join(" ") || "(bare)");
+    assert.ok(cap.out.length + cap.err.length > 0, argv.join(" ") || "(bare)");
+  }
+});

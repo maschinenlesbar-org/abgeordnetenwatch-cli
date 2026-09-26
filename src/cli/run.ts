@@ -33,11 +33,12 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     return 0;
   } catch (err) {
     if (err instanceof CommanderError) {
-      // An explicitly requested --help / --version is a successful, intentional
-      // output: exit 0.
-      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") {
-        return 0;
-      }
+      // Explicitly requested help or version output is a success: --help
+      // (commander.helpDisplayed), --version (commander.version) and the `help`
+      // subcommand (`help`, `help list`: commander.help with exit code 0) exit 0.
+      // Help printed because no command was given (bare invocation, `help nope`)
+      // carries exit code 1 and stays a usage error below.
+      if (err.exitCode === 0) return 0;
       // Everything else from commander is a usage error: an unknown option, an
       // unknown/missing command, a bad argument value, or a rejected filter.
       // Map these to the conventional CLI usage-error code (2) so scripts can

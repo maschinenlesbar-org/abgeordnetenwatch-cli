@@ -222,7 +222,7 @@ Marke sind nicht erfasst. Siehe [DATA_LICENSE.md](DATA_LICENSE.md).
 
 ## Exit-Codes
 
-**Exit-Codes.** `0` Erfolg (auch `--help` und `--version`) · `1` API-Fehler, Netzwerk- oder
+**Exit-Codes.** `0` Erfolg (auch `--help`, `help` und `--version`) · `1` API-Fehler, Netzwerk- oder
 Parse-Fehler · `2` Aufruffehler (unbekannte Entität, falsche Option, falscher Filter oder
 falsche ID) · `4` HTTP 404 (unbekannter Sammlungspfad).
 
