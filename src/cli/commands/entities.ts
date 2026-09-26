@@ -29,6 +29,8 @@ function entityArg(value: string): EntityCollection {
  * dumped the whole list instead of one entity; a non-numeric id round-tripped to
  * a generic HTTP 500. Validating here rejects both as a usage error (exit 2) with
  * a clear message. Ids are positive integers (the API numbers entities from 1).
+ * Leading zeros are dropped: the API looks the id up as a string, so `0002` was
+ * "no such entity" although party 2 exists.
  */
 function idArg(value: string): string {
   if (!/^[0-9]+$/.test(value)) {
@@ -37,7 +39,7 @@ function idArg(value: string): string {
   if (/^0+$/.test(value)) {
     throw new InvalidArgumentError(`Invalid id "${value}". Entity ids start at 1.`);
   }
-  return value;
+  return value.replace(/^0+/, "");
 }
 
 /**

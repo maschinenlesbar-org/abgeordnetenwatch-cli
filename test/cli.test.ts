@@ -238,6 +238,12 @@ test("get forwards a valid numeric id to the client", async () => {
   assert.deepEqual(received, { entity: "parties", id: "42" });
 });
 
+test("get drops leading zeros from the id (the API does not find 0002)", async () => {
+  const { deps, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 2 } }));
+  assert.equal(await run(["get", "parties", "0002"], deps), 0);
+  assert.match(mt.last().url, /\/api\/v2\/parties\/2$/);
+});
+
 test("an invalid --sort-direction is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "--sort-direction", "sideways"], deps);
