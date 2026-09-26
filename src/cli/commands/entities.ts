@@ -191,7 +191,11 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
       parseIntArg,
     )
     .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)", parseNonEmpty)
-    .option("--sort-direction <dir>", "asc or desc", sortDirectionArg)
+    .option(
+      "--sort-direction <dir>",
+      "asc or desc; needs --sort-by, which alone sorts desc",
+      sortDirectionArg,
+    )
     .option("--data-only", "print just the data array (not the meta envelope)")
     .hook("preAction", (command) => {
       // The API answers sort_direction without sort_by with an HTTP 500; catch the

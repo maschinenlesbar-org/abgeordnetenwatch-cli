@@ -42,9 +42,9 @@ abgeordnetenwatch entities          # the 18 collections you can query
 # How many female politicians are in the database?
 abgeordnetenwatch count politicians sex=f
 
-# Five politicians born after 1990, sorted by surname
+# Five politicians born after 1990, sorted by surname (A to Z; --sort-by alone sorts Z to A)
 abgeordnetenwatch list politicians 'year_of_birth[gt]=1990' \
-  --sort-by last_name --range-end 5 --data-only
+  --sort-by last_name --sort-direction asc --range-end 5 --data-only
 
 # Fetch one party
 abgeordnetenwatch get parties 2 --data-only
