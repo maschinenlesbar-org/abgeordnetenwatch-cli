@@ -266,9 +266,27 @@ test("a --user-agent with CR/LF is rejected, not an unexpected crash", async () 
   const { deps, cap } = makeDeps({});
   const code = await run(["--user-agent", "bad\r\nInjected: x", "entities", "--compact"], deps);
   assert.equal(code, 2);
-  assert.match(cap.err.join("\n"), /Control characters/);
+  assert.match(cap.err.join("\n"), /Value contains control characters\./);
   // Must not leak the old catch-all message.
   assert.doesNotMatch(cap.err.join("\n"), /Unexpected error/);
+});
+
+test("--user-agent that is blank or outside Latin-1 is a usage error, not an 'Unexpected error'", async () => {
+  for (const [ua, message] of [
+    [`a${String.fromCharCode(0x7f)}`, /Value contains control characters\./],
+    ["\u20acuro", /Value contains characters outside Latin-1/],
+    ["", /Expected a non-empty value/],
+    [" ", /Expected a non-empty value/],
+  ] as const) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5 } }));
+    const code = await run(["--user-agent", ua, "get", "parties", "5"], deps);
+    assert.equal(code, 2, JSON.stringify(ua));
+    assert.equal(mt.calls.length, 0);
+    assert.match(cap.err.join("\n"), message);
+  }
+  const { deps, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5 } }));
+  assert.equal(await run(["--user-agent", "müller-bot/1.0\t(test)", "get", "parties", "5"], deps), 0);
+  assert.equal(mt.last().headers?.["User-Agent"], "müller-bot/1.0\t(test)");
 });
 
 test("a 429 prints rate-limit guidance and exits 1", async () => {

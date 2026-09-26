@@ -9,7 +9,7 @@ import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { AbgeordnetenwatchClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
-import { parseBaseUrl, parseBoundedInt, parseIntArg, parseUserAgentArg } from "./shared.js";
+import { parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg } from "./shared.js";
 import { registerEntityCommands } from "./commands/entities.js";
 
 /**
@@ -53,7 +53,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       parseBoundedInt(0, MAX_TIMEOUT_MS),
       30_000,
     )
-    .option("--user-agent <ua>", "User-Agent header value", parseUserAgentArg)
+    .option("--user-agent <ua>", "User-Agent header value", parseHeaderValue)
     .option(
       "--max-retries <n>",
       "retries for transient 429/503 responses (0..10; each waits the server's Retry-After, up to 30 s)",
