@@ -198,6 +198,27 @@ test("numeric engine options must be integers in range; a bad one throws instead
   }
 });
 
+test("the body is decoded by its charset, and a UTF-8 byte-order mark is ignored", async () => {
+  const env = detailEnvelope({ id: 1, label: "Müller" });
+  const json = JSON.stringify(env);
+  for (const [name, body, type] of [
+    ["latin1", Buffer.from(json, "latin1"), "application/json; charset=iso-8859-1"],
+    ["quoted", Buffer.from(json, "latin1"), 'application/json; charset="ISO-8859-1"'],
+    ["bom", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json)]), "application/json"],
+    ["utf8", Buffer.from(json), "application/json; charset=utf-8"],
+  ] as const) {
+    const mt = makeMockTransport(() => rawResponse(body, type));
+    const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+    assert.deepEqual(await client.get("parties", 1), env, name);
+  }
+  const mt = makeMockTransport(() => rawResponse(json, "application/json; charset=x-nonsense"));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  await assert.rejects(
+    () => client.get("parties", 1),
+    (e: unknown) => e instanceof AwParseError && /Unsupported response charset "x-nonsense"/.test(e.message),
+  );
+});
+
 test("a non-JSON 2xx body raises AwParseError", async () => {
   const mt = makeMockTransport(() => rawResponse("<html>not json</html>", "text/html"));
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });
