@@ -161,6 +161,43 @@ test("redactUrl hides userinfo and leaves other URLs alone", () => {
   );
 });
 
+test("numeric engine options must be integers in range; a bad one throws instead of disabling a limit", () => {
+  const bad: [string, number][] = [
+    ["timeoutMs", -5],
+    ["timeoutMs", Number.NaN],
+    ["timeoutMs", 1.5],
+    ["timeoutMs", 2_147_483_648],
+    ["maxRetries", -1],
+    ["maxRetries", Number.POSITIVE_INFINITY],
+    ["maxRetries", 11],
+    ["retryDelayMs", -1],
+    ["retryDelayMs", 30_001],
+    ["maxRedirects", -1],
+    ["maxRedirects", Number.NaN],
+    ["maxRedirects", 21],
+    ["maxResponseBytes", -1],
+    ["maxResponseBytes", 0.5],
+  ];
+  for (const [name, value] of bad) {
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ [name]: value }),
+      (e: unknown) =>
+        e instanceof AwError && new RegExp(`^Invalid option ${name}: expected an integer from 0 to \\d+, got `).test(e.message),
+      `${name}=${value}`,
+    );
+  }
+  for (const [name, value] of [
+    ["timeoutMs", 0],
+    ["timeoutMs", 2_147_483_647],
+    ["maxRetries", 10],
+    ["retryDelayMs", 0],
+    ["maxRedirects", 0],
+    ["maxResponseBytes", 0],
+  ] as const) {
+    assert.doesNotThrow(() => new AbgeordnetenwatchClient({ [name]: value }), `${name}=${value}`);
+  }
+});
+
 test("a non-JSON 2xx body raises AwParseError", async () => {
   const mt = makeMockTransport(() => rawResponse("<html>not json</html>", "text/html"));
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });

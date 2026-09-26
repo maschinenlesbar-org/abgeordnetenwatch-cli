@@ -100,6 +100,11 @@ npm start -- --help # run the CLI from source build
   falls back to linear backoff (`retryDelayMs * attempt`,
   default 1 s then 2 s). The live API answers a burst with `429` and no `Retry-After`
   for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs.
+- **Numeric engine options are validated.** `timeoutMs` (0..2^31-1), `maxRetries`
+  (0..`MAX_RETRIES`, 10), `retryDelayMs` (0..30 000), `maxRedirects` (0..20) and
+  `maxResponseBytes` (0..`Number.MAX_SAFE_INTEGER`) must be integers in range; anything
+  else throws `AwError` (`Invalid option timeoutMs: expected an integer from 0 to ...`)
+  at construction, instead of a negative or NaN value silently disabling a limit.
 - **Only `http:`/`https:` base URLs are accepted** — `--base-url` is checked at parse
   time (a usage error), then the scheme is validated again in the engine constructor
   and per-request in the transport. A base URL with a query (`?`) or fragment (`#`) is
