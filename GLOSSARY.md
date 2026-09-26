@@ -160,7 +160,9 @@ record with `get` and the reference's `id`.
 
 **Filter (`key=value`).** Positional arguments after the entity, sent as query parameters
 (`sex=f`). A parameter the collection doesn't accept returns HTTP 500, e.g.
-`The following parameter(s) are not valid: mandate` on `sidejobs`.
+`The following parameter(s) are not valid: mandate` on `sidejobs`. The paging and sorting
+names (`range_start`, `range_end`, `sort_by`, `sort_direction`) are not filters: the CLI
+rejects them and points to the matching option.
 
 **Operator (`field[op]=value`).** A bracket suffix on the key: `eq` (equal), `ne` (not equal),
 `gt`, `gte`, `lt`, `lte` (greater or less than, or equal), `cn` (contains, ignoring case:

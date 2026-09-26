@@ -56,6 +56,24 @@ test("list() maps params and filters into the query string", async () => {
   assert.match(url, /year_of_birth%5Bgt%5D=1990/);
 });
 
+test("list() and count() options win over a filter with the same wire name", async () => {
+  const mt = makeMockTransport(() => jsonResponse(listEnvelope([], 7)));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+
+  await client.list("parties", {
+    rangeEnd: 3,
+    sortDirection: "asc",
+    filters: { range_end: 5000, sort_direction: "sideways", sex: "f" },
+  });
+  const url = new URL(mt.last().url);
+  assert.deepEqual(url.searchParams.getAll("range_end"), ["3"]);
+  assert.deepEqual(url.searchParams.getAll("sort_direction"), ["asc"]);
+  assert.equal(url.searchParams.get("sex"), "f");
+
+  assert.equal(await client.count("parties", { filters: { range_end: 50 } }), 7);
+  assert.deepEqual(new URL(mt.last().url).searchParams.getAll("range_end"), ["1"]);
+});
+
 test("get() requests the id sub-path and returns the object", async () => {
   const mt = makeMockTransport(() => jsonResponse(detailEnvelope({ id: 42, label: "X" })));
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });

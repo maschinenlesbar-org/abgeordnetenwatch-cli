@@ -168,6 +168,8 @@ Feldnamen, den das JSON verwendet:
 **Filter (`key=value`).** Positionsargumente nach der Entität, die als Query-Parameter
 gesendet werden (`sex=f`). Einen Parameter, den die Sammlung nicht akzeptiert, beantwortet die
 API mit HTTP 500, z. B. `The following parameter(s) are not valid: mandate` bei `sidejobs`.
+Die Namen für Seiten und Sortierung (`range_start`, `range_end`, `sort_by`, `sort_direction`)
+sind keine Filter: Die CLI weist sie ab und nennt die passende Option.
 
 **Operator (`field[op]=value`).** Ein Suffix in eckigen Klammern am Schlüssel: `eq` (gleich),
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`

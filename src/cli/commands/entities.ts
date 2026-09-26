@@ -59,6 +59,18 @@ function sortDirectionArg(value: string): "asc" | "desc" {
  */
 const FILTER_OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "cn", "sw"] as const;
 
+/**
+ * Query parameters the `list` options own. As filters they would override the
+ * validated `--range-end`/`--sort-direction` (and `count`'s `range_end=1`) and skip
+ * their checks, so they are rejected with a pointer to the option.
+ */
+const RESERVED_FILTER_FIELDS = new Map([
+  ["range_start", "--range-start"],
+  ["range_end", "--range-end"],
+  ["sort_by", "--sort-by"],
+  ["sort_direction", "--sort-direction"],
+]);
+
 /** A filter key: a field name, optionally followed by one `[op]` suffix. */
 const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
 
@@ -102,6 +114,12 @@ function filterArg(value: string, previous: string[] = []): string[] {
     throw new InvalidArgumentError(
       `Invalid filter key "${key}". Use a field name, optionally with one operator: ` +
         `sex=f or 'year_of_birth[gt]=1990'.`,
+    );
+  }
+  const reserved = RESERVED_FILTER_FIELDS.get(parts[1] ?? "");
+  if (reserved !== undefined) {
+    throw new InvalidArgumentError(
+      `"${parts[1]}" is a paging or sorting parameter, not a filter. Use ${reserved} on list instead.`,
     );
   }
   // If the key carries a bracket operator (`field[op]`), validate the operator

@@ -86,6 +86,8 @@ export interface ListParams {
    * Arbitrary field filters, merged verbatim into the query string. Keys may use
    * the bracket-operator form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`.
    * Pass a related entity's id directly, e.g. `{ politician: 184945 }`.
+   * `rangeStart`, `rangeEnd`, `sortBy` and `sortDirection` win over a filter of the
+   * same wire name (`range_end`, ...), and `count()` always sends `range_end=1`.
    */
   filters?: Record<string, string | number | boolean>;
 }

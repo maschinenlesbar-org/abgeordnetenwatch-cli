@@ -28,16 +28,20 @@ export class AbgeordnetenwatchClient {
     this.engine = new RequestEngine(options);
   }
 
-  /** Translate ListParams into the wire query parameters. */
+  /**
+   * Translate ListParams into the wire query parameters. Filters go in first, so a
+   * filter named like a paging or sort parameter (`range_end`) cannot override the
+   * typed option, nor the `range_end=1` that `count()` relies on.
+   */
   private toQuery(params: ListParams): QueryParams {
     const query: QueryParams = {};
+    if (params.filters) {
+      for (const [key, value] of Object.entries(params.filters)) query[key] = value;
+    }
     if (params.rangeStart !== undefined) query["range_start"] = params.rangeStart;
     if (params.rangeEnd !== undefined) query["range_end"] = params.rangeEnd;
     if (params.sortBy !== undefined) query["sort_by"] = params.sortBy;
     if (params.sortDirection !== undefined) query["sort_direction"] = params.sortDirection;
-    if (params.filters) {
-      for (const [key, value] of Object.entries(params.filters)) query[key] = value;
-    }
     return query;
   }
 

@@ -168,6 +168,24 @@ test("a filter key that is not a field name with at most one operator is a usage
   }
 });
 
+test("paging and sort parameter names are rejected as filters, pointing to the option", async () => {
+  for (const [filter, option] of [
+    ["range_end=5000", "--range-end"],
+    ["range_start=-5", "--range-start"],
+    ["sort_by=id", "--sort-by"],
+    ["sort_direction=sideways", "--sort-direction"],
+    ["range_end[gt]=1", "--range-end"],
+  ] as const) {
+    for (const command of ["list", "count"]) {
+      const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+      const code = await run([command, "parties", filter], deps);
+      assert.equal(code, 2, `${command} ${filter}`);
+      assert.equal(mt.calls.length, 0);
+      assert.match(cap.err.join("\n"), new RegExp(`not a filter\\. Use ${option} on list`));
+    }
+  }
+});
+
 test("an unknown bracket filter operator is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "last_name[zz]=A"], deps);
