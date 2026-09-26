@@ -5,7 +5,7 @@ import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwApiError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { jsonResponse, makeMockTransport } from "./helpers.js";
+import { jsonResponse, makeMockTransport, rawResponse } from "./helpers.js";
 
 interface Captured {
   out: string[];
@@ -435,6 +435,22 @@ test("credentials in --base-url are redacted from error messages", async () => {
   // ...but still sent: the request URL keeps the userinfo (Node turns it into Basic auth).
   assert.equal(mt.last().url, "http://user:secret@127.0.0.1:18101/e418/api/v2/parties");
   assert.equal(cap.err.join("\n"), "Error: HTTP 418 for GET http://***@127.0.0.1:18101/e418/api/v2/parties");
+});
+
+test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
+  const depth = 200_000;
+  const deep = () => rawResponse(`{"meta":{},"data":{"x":${"[".repeat(depth)}${"]".repeat(depth)}}}`, "application/json");
+  const pretty = makeTransportDeps(deep);
+  assert.equal(await run(["get", "parties", "5"], pretty.deps), 1);
+  assert.deepEqual(pretty.cap.out, []);
+  assert.equal(pretty.cap.err.join("\n"), "Error: The response is nested too deeply to pretty-print; try --compact.");
+
+  // Compact serialisation goes much deeper (it prints this one on current Node);
+  // should a runtime's stack still be too small, it must fail just as cleanly.
+  const compact = makeTransportDeps(deep);
+  const code = await run(["--compact", "get", "parties", "5"], compact.deps);
+  if (code === 0) assert.ok(compact.cap.out.join("").length > 2 * depth);
+  else assert.equal(compact.cap.err.join("\n"), "Error: The response is nested too deeply to print.");
 });
 
 test("--help exits 0", async () => {
