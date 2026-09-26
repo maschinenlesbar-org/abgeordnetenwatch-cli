@@ -244,6 +244,17 @@ test("get drops leading zeros from the id (the API does not find 0002)", async (
   assert.match(mt.last().url, /\/api\/v2\/parties\/2$/);
 });
 
+test("--sort-direction without --sort-by is a usage error, before any request", async () => {
+  const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+  assert.equal(await run(["list", "politicians", "--sort-direction", "asc"], deps), 2);
+  assert.equal(mt.calls.length, 0);
+  assert.match(cap.err.join("\n"), /--sort-direction needs --sort-by/);
+
+  const ok = makeTransportDeps(() => jsonResponse({ meta: {}, data: [] }));
+  assert.equal(await run(["list", "politicians", "--sort-by", "last_name", "--sort-direction", "asc"], ok.deps), 0);
+  assert.match(ok.mt.last().url, /sort_by=last_name&sort_direction=asc/);
+});
+
 test("an invalid --sort-direction is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "--sort-direction", "sideways"], deps);

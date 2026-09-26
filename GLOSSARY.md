@@ -174,7 +174,8 @@ key on the same field (`sex=f 'sex[ne]=m'`: the API would keep only one) as usag
 field with two different operators is fine.
 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
-or `desc`). With `--sort-by` alone the API sorts **descending**. Not every field is sortable:
+or `desc`). With `--sort-by` alone the API sorts **descending**; `--sort-direction` without
+`--sort-by` is a usage error (the API rejects it). Not every field is sortable:
 polls reject `id` but accept `field_poll_date`. Without `--sort-by` the order depends on the
 collection (`parliaments` highest id first, `topics` by label).
 

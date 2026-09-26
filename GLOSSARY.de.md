@@ -183,7 +183,8 @@ neben einem Operator-Schlüssel für dasselbe Feld (`sex=f 'sex[ne]=m'`: die API
 behalten) als Aufruffehler ab; ein Feld mit zwei verschiedenen Operatoren ist erlaubt.
 
 **Sortieren (`--sort-by`, `--sort-direction`).** Gesendet als `sort_by` und `sort_direction`
-(`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**. Nicht jedes Feld
+(`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**; `--sort-direction`
+ohne `--sort-by` ist ein Aufruffehler (die API lehnt es ab). Nicht jedes Feld
 ist sortierbar: Abstimmungen lehnen `id` ab, akzeptieren aber `field_poll_date`. Ohne
 `--sort-by` hängt die Reihenfolge von der Sammlung ab (`parliaments` höchste ID zuerst,
 `topics` nach Label).

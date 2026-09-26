@@ -193,6 +193,14 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)", parseNonEmpty)
     .option("--sort-direction <dir>", "asc or desc", sortDirectionArg)
     .option("--data-only", "print just the data array (not the meta envelope)")
+    .hook("preAction", (command) => {
+      // The API answers sort_direction without sort_by with an HTTP 500; catch the
+      // missing dependency here as a usage error instead.
+      const opts = command.opts();
+      if (opts["sortDirection"] !== undefined && opts["sortBy"] === undefined) {
+        command.error("error: --sort-direction needs --sort-by (the API rejects it on its own).");
+      }
+    })
     .addHelpText(
       "after",
       "\nFilter operators use a bracket suffix: field[op]=value with op one of " +
