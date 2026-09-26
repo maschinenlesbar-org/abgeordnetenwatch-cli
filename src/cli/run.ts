@@ -24,6 +24,18 @@ function configureTree(command: Command, deps: CliDeps): void {
   for (const child of command.commands) configureTree(child, deps);
 }
 
+/** Query parameters the CLI sets itself; any other parameter is a filter. */
+const NON_FILTER_PARAMS = new Set(["range_start", "range_end", "sort_by", "sort_direction"]);
+
+/** True when the request URL carried at least one filter parameter. */
+function hasFilters(url: string): boolean {
+  try {
+    return [...new URL(url).searchParams.keys()].some((key) => !NON_FILTER_PARAMS.has(key));
+  } catch {
+    return false;
+  }
+}
+
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   const program = buildProgram(deps);
   configureTree(program, deps);
@@ -49,14 +61,15 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // err.message already includes any human-readable `detail` the API
       // returned (its meta.status_message); surface it as-is.
       deps.io.err(`Error: ${err.message}`);
-      // The API uses a generic HTTP 500 both for an unknown id and for an
-      // invalid filter operator. When it gave no message of its own, the most
-      // likely cause is a bad filter, so add a hint; when a message is present
-      // (e.g. "There is no party entity with id X") it is self-explanatory.
-      if (err.status === 500 && !err.detail) {
+      // The API answers many request problems with a generic HTTP 500. With a
+      // message of its own (e.g. "There is no party entity with id X") it is
+      // self-explanatory. Without one, and only when the request carried filters,
+      // point at them: operators are already checked locally, so the field names
+      // and values are what is left. A plain server fault gets no hint.
+      if (err.status === 500 && !err.detail && hasFilters(err.url)) {
         deps.io.err(
-          "Hint: the API rejected the request. Check the filter operator " +
-            "(valid: eq, ne, gt, gte, lt, lte, cn, sw) and field names.",
+          "Hint: the API rejected the request without a reason. Check the filter " +
+            "field names and values.",
         );
       }
       // 429/503 are transient: the automatic retries (honouring Retry-After) were

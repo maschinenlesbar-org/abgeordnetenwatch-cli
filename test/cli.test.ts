@@ -377,6 +377,22 @@ test("--max-retries is bounded to 0..10", async () => {
   }
 });
 
+test("a message-less HTTP 500 hints at the filters only when the request had filters", async () => {
+  for (const [argv, hint] of [
+    [["get", "parties", "1"], false],
+    [["list", "parties", "--range-end", "5"], false],
+    [["count", "parties"], false],
+    [["list", "politicians", "year_of_birth[gt]=1990"], true],
+    [["count", "politicians", "sex=f"], true],
+  ] as const) {
+    const { deps, cap } = makeTransportDeps(() => jsonResponse({}, 500));
+    assert.equal(await run([...argv], deps), 1, argv.join(" "));
+    assert.match(cap.err.join("\n"), /^Error: HTTP 500 for GET /);
+    assert.equal(/Hint: .*filter field names/.test(cap.err.join("\n")), hint, argv.join(" "));
+    assert.doesNotMatch(cap.err.join("\n"), /filter operator/);
+  }
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);
