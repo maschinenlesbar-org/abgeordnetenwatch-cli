@@ -365,6 +365,18 @@ test("a malformed 2xx envelope exits 1 with a parse error, not an unexpected Typ
   }
 });
 
+test("--max-retries is bounded to 0..10", async () => {
+  for (const [value, ok] of [["0", true], ["10", true], ["11", false], ["99999999999", false]] as const) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5 } }));
+    const code = await run(["--max-retries", value, "get", "parties", "5"], deps);
+    assert.equal(code, ok ? 0 : 2, value);
+    if (!ok) {
+      assert.equal(mt.calls.length, 0);
+      assert.match(cap.err.join("\n"), /must be between 0 and 10/);
+    }
+  }
+});
+
 test("--help exits 0", async () => {
   const { deps } = makeDeps({});
   assert.equal(await run(["--help"], deps), 0);

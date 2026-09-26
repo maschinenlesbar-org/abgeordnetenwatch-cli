@@ -54,7 +54,12 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       30_000,
     )
     .option("--user-agent <ua>", "User-Agent header value", parseUserAgentArg)
-    .option("--max-retries <n>", "retries for transient 429/503 responses", parseIntArg, 2)
+    .option(
+      "--max-retries <n>",
+      "retries for transient 429/503 responses (0..10; each waits the server's Retry-After, up to 30 s)",
+      parseBoundedInt(0, 10),
+      2,
+    )
     .option(
       "--max-response-bytes <n>",
       "cap response body size in bytes (0 = unlimited)",

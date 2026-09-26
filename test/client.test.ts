@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
+import { MAX_RETRY_AFTER_MS, parseRetryAfter } from "../src/client/engine.js";
 import { AwApiError, AwError, AwNetworkError, AwParseError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
@@ -209,23 +210,48 @@ test("honours a numeric Retry-After header (seconds) on 429", async () => {
   assert.deepEqual(delays, [2000]); // 2s from the header, not the linear backoff
 });
 
-test("clamps a far-future HTTP-date Retry-After to the maximum", async () => {
-  const delays: number[] = [];
-  let calls = 0;
-  const mt = makeMockTransport(() => {
-    calls += 1;
-    return calls === 1
-      ? { status: 503, headers: { "retry-after": "Wed, 21 Oct 2099 07:28:00 GMT" }, body: Buffer.alloc(0) }
-      : jsonResponse(listEnvelope([{ id: 1 }]));
-  });
-  const client = new AbgeordnetenwatchClient({
-    transport: mt.transport,
-    sleep: async (ms) => {
-      delays.push(ms);
-    },
-  });
-  await client.list("votes");
-  assert.deepEqual(delays, [30_000]);
+test("a Retry-After beyond 30 s is not retried: the error surfaces at once", async () => {
+  for (const header of ["31", "99999999999999999999", "Wed, 21 Oct 2099 07:28:00 GMT"]) {
+    const delays: number[] = [];
+    const mt = makeMockTransport(() => ({ status: 503, headers: { "retry-after": header }, body: Buffer.alloc(0) }));
+    const client = new AbgeordnetenwatchClient({
+      transport: mt.transport,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    await assert.rejects(() => client.list("votes"), (e: unknown) => e instanceof AwApiError && e.status === 503);
+    assert.equal(mt.calls.length, 1, header);
+    assert.deepEqual(delays, [], header);
+  }
+});
+
+test("a malformed Retry-After (-1, 1.5, ...) falls back to the linear backoff", async () => {
+  for (const header of ["", "-1", "1.5", "+5", "soon", "1e3", "0x10", "2026-09-26T10:00:00Z"]) {
+    const delays: number[] = [];
+    const mt = makeMockTransport(() => ({ status: 429, headers: { "retry-after": header }, body: Buffer.alloc(0) }));
+    const client = new AbgeordnetenwatchClient({
+      transport: mt.transport,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    await assert.rejects(() => client.list("votes"), AwApiError);
+    assert.deepEqual(delays, [1000, 2000], header);
+  }
+});
+
+test("parseRetryAfter reads delay-seconds and IMF-fixdate HTTP-dates", () => {
+  const now = Date.parse("Sat, 26 Sep 2026 10:00:00 GMT");
+  assert.equal(parseRetryAfter("0", now), 0);
+  assert.equal(parseRetryAfter(" 30 ", now), 30_000);
+  assert.equal(parseRetryAfter(["2", "9"], now), 2000);
+  assert.equal(parseRetryAfter("Sat, 26 Sep 2026 10:00:05 GMT", now), 5000);
+  assert.equal(parseRetryAfter("Sat, 26 Sep 2026 09:00:00 GMT", now), 0); // past date: retry now
+  for (const bad of [undefined, "", "-1", "+5", "1.5", "1e3", "0x10", "Saturday, 26-Sep-26 10:00:05 GMT"]) {
+    assert.equal(parseRetryAfter(bad, now), undefined, String(bad));
+  }
+  assert.equal(MAX_RETRY_AFTER_MS, 30_000);
 });
 
 test("the default backoff without Retry-After (1 s, 2 s) outlasts the API's rate-limit window", async () => {

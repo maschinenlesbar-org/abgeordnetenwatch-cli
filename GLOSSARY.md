@@ -218,7 +218,7 @@ collection path).
 
 **HTTP 500.** The API answers a missing id, a parameter it doesn't accept and an unsortable
 field with HTTP 500, not 404 or 400; the CLI prints the reason and exits `1`. HTTP 429 and
-503 are retried automatically (`--max-retries`, default 2).
+503 are retried automatically (`--max-retries`, default 2, at most 10).
 
 > **Library & internals.** The TypeScript client, request engine, retries, redirects and
 > error types are described in **[DEVELOPING.md](DEVELOPING.md)**.

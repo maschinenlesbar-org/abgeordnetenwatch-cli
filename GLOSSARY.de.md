@@ -228,7 +228,8 @@ falsche ID) · `4` HTTP 404 (unbekannter Sammlungspfad).
 
 **HTTP 500.** Eine fehlende ID, einen nicht akzeptierten Parameter und ein nicht sortierbares
 Feld beantwortet die API mit HTTP 500, nicht mit 404 oder 400; die CLI gibt den Grund aus und
-endet mit `1`. HTTP 429 und 503 werden automatisch wiederholt (`--max-retries`, Standard 2).
+endet mit `1`. HTTP 429 und 503 werden automatisch wiederholt (`--max-retries`, Standard 2,
+höchstens 10).
 
 > **Bibliothek & Interna.** Den TypeScript-Client, die Request-Engine, Retries,
 > Weiterleitungen und Fehlertypen beschreibt **[DEVELOPING.md](DEVELOPING.md)**.

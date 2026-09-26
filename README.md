@@ -99,7 +99,7 @@ See [openapi.yaml](openapi.yaml) for every field of every entity.
 ## Global options
 
 `--base-url <url>`, `--timeout <ms>`, `--user-agent <ua>`,
-`--max-retries <n>` (transient 429/503), `--max-response-bytes <n>`, `--compact`.
+`--max-retries <n>` (transient 429/503, 0..10), `--max-response-bytes <n>`, `--compact`.
 
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically. Sending a descriptive `--user-agent` is appreciated by the
