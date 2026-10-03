@@ -13,6 +13,7 @@ import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import { AwError, AwParseError } from "./errors.js";
 import { normalizeEntityId } from "./validate.js";
+import { validateFilters } from "./filters.js";
 import {
   ENTITY_COLLECTIONS,
   isEntityCollection,
@@ -33,13 +34,15 @@ export class AbgeordnetenwatchClient {
   }
 
   /**
-   * Translate ListParams into the wire query parameters. Filters go in first, so a
-   * filter named like a paging or sort parameter (`range_end`) cannot override the
-   * typed option, nor the `range_end=1` that `count()` relies on.
+   * Translate ListParams into the wire query parameters, after checking the
+   * filters (validateFilters). Filters go in first, so even a filter named like a
+   * paging or sort parameter could not override the typed option, nor the
+   * `range_end=1` that `count()` relies on.
    */
   private toQuery(params: ListParams): QueryParams {
     const query: QueryParams = {};
     if (params.filters) {
+      validateFilters(params.filters);
       for (const [key, value] of Object.entries(params.filters)) query[key] = value;
     }
     if (params.rangeStart !== undefined) query["range_start"] = params.rangeStart;

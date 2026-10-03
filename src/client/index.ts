@@ -23,5 +23,16 @@ export {
 } from "./errors.js";
 export { assertValid, entityIdProblem, normalizeEntityId } from "./validate.js";
 export type { Problem } from "./validate.js";
+export {
+  FILTER_KEY,
+  RESERVED_FILTER_FIELDS,
+  filterBlankProblem,
+  filterKeyProblem,
+  reservedFilterProblem,
+  filterOperatorProblem,
+  filterClashProblem,
+  filterField,
+  validateFilters,
+} from "./filters.js";
 
 export * from "./types.js";

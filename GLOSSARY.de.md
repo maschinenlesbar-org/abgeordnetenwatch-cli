@@ -169,18 +169,21 @@ Feldnamen, den das JSON verwendet:
 gesendet werden (`sex=f`). Einen Parameter, den die Sammlung nicht akzeptiert, beantwortet die
 API mit HTTP 500, z. B. `The following parameter(s) are not valid: mandate` bei `sidejobs`.
 Die Namen für Seiten und Sortierung (`range_start`, `range_end`, `sort_by`, `sort_direction`)
-sind keine Filter: Die CLI weist sie ab und nennt die passende Option.
+sind keine Filter: Die CLI weist sie ab und nennt die passende Option, und die Bibliothek
+weist sie ebenfalls ab.
 
 **Operator (`field[op]=value`).** Ein Suffix in eckigen Klammern am Schlüssel: `eq` (gleich),
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`
 (enthält, ohne Beachtung der Groß- und Kleinschreibung: `'last_name[cn]=reichinnek'`) und `sw`
 (beginnt mit: `'last_name[sw]=Mü'`). Setzen Sie solche Filter in Anführungszeichen, damit die
-Shell die Klammern nicht auswertet. Die CLI weist ein fehlendes `=`, einen Schlüssel, der kein
-Feldname mit höchstens einem Operator ist (`'[gt]=1990'`, `'year_of_birth[gt]x=1990'`), jeden
-anderen Operator
-(`[in]`, die Form `[entity.id]`), einen wiederholten Schlüssel und einen einfachen Schlüssel
-neben einem Operator-Schlüssel für dasselbe Feld (`sex=f 'sex[ne]=m'`: die API würde nur einen
-behalten) als Aufruffehler ab; ein Feld mit zwei verschiedenen Operatoren ist erlaubt.
+Shell die Klammern nicht auswertet. Die CLI weist ein fehlendes `=`, einen leeren Schlüssel oder
+Wert, einen Schlüssel, der kein Feldname mit höchstens einem Operator ist (`'[gt]=1990'`,
+`'year_of_birth[gt]x=1990'`), jeden anderen Operator (`[in]`, die Form `[entity.id]`), einen
+wiederholten Schlüssel und einen einfachen Schlüssel neben einem Operator-Schlüssel für dasselbe
+Feld (`sex=f 'sex[ne]=m'`: die API würde nur einen behalten) als Aufruffehler ab; ein Feld mit
+zwei verschiedenen Operatoren ist erlaubt. `list()` und `count()` der Bibliothek weisen dieselben
+Filter mit `AwValidationError` ab, bevor sie etwas senden, denn die API würde sie stillschweigend
+verwerfen und die ungefilterte Menge liefern.
 
 **Sortieren (`--sort-by`, `--sort-direction`).** Gesendet als `sort_by` und `sort_direction`
 (`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**; `--sort-direction`

@@ -67,6 +67,14 @@ What the library rejects with `AwValidationError`:
   ASCII digits (`entityIdProblem`). `0` and `""` would fetch the whole collection, and
   `" 2 "`, `"abc"`, `-1` or `1.5` a generic HTTP 500. `normalizeEntityId` drops leading
   zeros, because the API looks the id up as a string (`0002` was "no such entity").
+- **Filters** (`list`, `count`; `client/filters.ts`, `validateFilters`): a blank key or
+  value, a key that is not a field name with at most one bracket operator (`FILTER_KEY`),
+  an operator outside `FILTER_OPERATORS`, a paging or sorting name
+  (`RESERVED_FILTER_FIELDS`: `range_start`, `range_end`, `sort_by`, `sort_direction`)
+  and a plain key next to a bracket key on the same field. The API drops such a filter
+  silently and returns the unfiltered (or partly filtered) set as a success. The CLI
+  keeps only what argv needs on top: the split at the first `=` and the check for an
+  exact repeated key.
 
 ## Scripts
 

@@ -6,6 +6,7 @@ import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import type { CliDeps } from "./io.js";
 import { AwApiError, AwError, AwValidationError } from "../client/errors.js";
+import { RESERVED_FILTER_FIELDS } from "../client/filters.js";
 
 /** Conventional CLI exit code for a usage error (bad/unknown option, no command). */
 const USAGE_ERROR_EXIT_CODE = 2;
@@ -25,7 +26,7 @@ function configureTree(command: Command, deps: CliDeps): void {
 }
 
 /** Query parameters the CLI sets itself; any other parameter is a filter. */
-const NON_FILTER_PARAMS = new Set(["range_start", "range_end", "sort_by", "sort_direction"]);
+const NON_FILTER_PARAMS: ReadonlySet<string> = new Set(RESERVED_FILTER_FIELDS);
 
 /** True when the request URL carried at least one filter parameter. */
 function hasFilters(url: string): boolean {

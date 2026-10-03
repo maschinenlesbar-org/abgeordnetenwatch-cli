@@ -67,7 +67,13 @@ export interface DetailResponse<T = Entity> {
 }
 
 /** Comparison operators usable in a bracket filter `field[op]=value`. */
-export type FilterOperator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "cn" | "sw";
+export const FILTER_OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "cn", "sw"] as const;
+
+/** One of {@link FILTER_OPERATORS}. */
+export type FilterOperator = (typeof FILTER_OPERATORS)[number];
+
+/** The value of one filter. */
+export type FilterValue = string | number | boolean;
 
 /** Parameters for a collection request. */
 export interface ListParams {
@@ -83,13 +89,15 @@ export interface ListParams {
   /** Sort order. */
   sortDirection?: "asc" | "desc";
   /**
-   * Arbitrary field filters, merged verbatim into the query string. Keys may use
-   * the bracket-operator form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`.
-   * Pass a related entity's id directly, e.g. `{ politician: 184945 }`.
-   * `rangeStart`, `rangeEnd`, `sortBy` and `sortDirection` win over a filter of the
-   * same wire name (`range_end`, ...), and `count()` always sends `range_end=1`.
+   * Field filters, sent as query parameters. Keys may use the bracket-operator
+   * form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`. Pass a related entity's
+   * id directly, e.g. `{ politician: 184945 }`. Checked before any request (see
+   * `validateFilters`): a blank key or value, a key that is not a field name with at
+   * most one operator, an operator outside `FILTER_OPERATORS`, a paging or sorting
+   * name (`range_end`, ...) and a plain key next to a bracket key on the same field
+   * reject with AwValidationError, because the API would silently drop the filter.
    */
-  filters?: Record<string, string | number | boolean>;
+  filters?: Record<string, FilterValue>;
 }
 
 /**

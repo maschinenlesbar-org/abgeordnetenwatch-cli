@@ -162,16 +162,18 @@ record with `get` and the reference's `id`.
 (`sex=f`). A parameter the collection doesn't accept returns HTTP 500, e.g.
 `The following parameter(s) are not valid: mandate` on `sidejobs`. The paging and sorting
 names (`range_start`, `range_end`, `sort_by`, `sort_direction`) are not filters: the CLI
-rejects them and points to the matching option.
+rejects them and points to the matching option, and the library rejects them too.
 
 **Operator (`field[op]=value`).** A bracket suffix on the key: `eq` (equal), `ne` (not equal),
 `gt`, `gte`, `lt`, `lte` (greater or less than, or equal), `cn` (contains, ignoring case:
 `'last_name[cn]=reichinnek'`) and `sw` (starts with: `'last_name[sw]=Mü'`). Quote these
-filters so the shell leaves the brackets alone. The CLI rejects a missing `=`, a key that is
-not a field name with at most one operator (`'[gt]=1990'`, `'year_of_birth[gt]x=1990'`), any other
-operator (`[in]`, the `[entity.id]` form), a repeated key and a plain key next to an operator
-key on the same field (`sex=f 'sex[ne]=m'`: the API would keep only one) as usage errors; one
-field with two different operators is fine.
+filters so the shell leaves the brackets alone. The CLI rejects a missing `=`, a blank key or
+value, a key that is not a field name with at most one operator (`'[gt]=1990'`,
+`'year_of_birth[gt]x=1990'`), any other operator (`[in]`, the `[entity.id]` form), a repeated
+key and a plain key next to an operator key on the same field (`sex=f 'sex[ne]=m'`: the API
+would keep only one) as usage errors; one field with two different operators is fine. The
+library's `list()` and `count()` reject the same filters with `AwValidationError` before
+sending anything, because the API would drop them silently and return the unfiltered set.
 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
 or `desc`). With `--sort-by` alone the API sorts **descending**; `--sort-direction` without

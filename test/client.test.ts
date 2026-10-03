@@ -2,7 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { MAX_RETRY_AFTER_MS, parseRetryAfter } from "../src/client/engine.js";
-import { AwApiError, AwError, AwNetworkError, AwParseError, redactUrl } from "../src/client/errors.js";
+import {
+  AwApiError,
+  AwError,
+  AwNetworkError,
+  AwParseError,
+  AwValidationError,
+  redactUrl,
+} from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
 const listEnvelope = (data: unknown[], total = data.length) => ({
@@ -57,22 +64,18 @@ test("list() maps params and filters into the query string", async () => {
   assert.match(url, /year_of_birth%5Bgt%5D=1990/);
 });
 
-test("list() and count() options win over a filter with the same wire name", async () => {
+test("list() and count() reject a filter named like a paging or sort option, before any request", async () => {
   const mt = makeMockTransport(() => jsonResponse(listEnvelope([], 7)));
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });
 
-  await client.list("parties", {
-    rangeEnd: 3,
-    sortDirection: "asc",
-    filters: { range_end: 5000, sort_direction: "sideways", sex: "f" },
-  });
-  const url = new URL(mt.last().url);
-  assert.deepEqual(url.searchParams.getAll("range_end"), ["3"]);
-  assert.deepEqual(url.searchParams.getAll("sort_direction"), ["asc"]);
-  assert.equal(url.searchParams.get("sex"), "f");
-
-  assert.equal(await client.count("parties", { filters: { range_end: 50 } }), 7);
-  assert.deepEqual(new URL(mt.last().url).searchParams.getAll("range_end"), ["1"]);
+  await assert.rejects(
+    client.list("parties", { rangeEnd: 3, filters: { range_end: 5000, sex: "f" } }),
+    (err: unknown) =>
+      err instanceof AwValidationError &&
+      err.message === 'Invalid filter "range_end": "range_end" is a paging or sorting parameter, not a filter.',
+  );
+  await assert.rejects(client.count("parties", { filters: { range_end: 50 } }), AwValidationError);
+  assert.equal(mt.calls.length, 0);
 });
 
 test("an unknown collection is rejected before any request (no path escape)", async () => {

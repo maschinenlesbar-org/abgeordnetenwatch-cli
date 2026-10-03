@@ -59,3 +59,65 @@ test("parity: get with a valid or zero-padded entity id", async () => {
     assertSameRequests(p, JSON.stringify(id));
   }
 });
+
+/** The filters object the CLI builds from `key=value` tokens (split at the first `=`). */
+function filtersOf(tokens: string[]): Record<string, string> {
+  return Object.fromEntries(tokens.map((t) => [t.slice(0, t.indexOf("=")), t.slice(t.indexOf("=") + 1)]));
+}
+
+const listBody = () => ({
+  status: 200,
+  headers: { "content-type": "application/json" },
+  body: Buffer.from(JSON.stringify({ meta: { result: { total: 1234 } }, data: [] })),
+});
+
+test("parity: list and count with a blank, malformed, reserved or clashing filter", async () => {
+  const cases: string[][] = [
+    ["sex="],
+    ["sex= "],
+    [" =f"],
+    ["[gt]=1990"],
+    ["year_of_birth[gt]x=1990"],
+    ["a.b=1"],
+    ["last_name[zz]=x"],
+    ["last_name[]=x"],
+    ["year_of_birth=1990", "year_of_birth[gt]=2000"],
+    ["year_of_birth[gt]=2000", "year_of_birth=1990"],
+    ["range_start=5"],
+    ["range_end=5"],
+    ["range_end=5000"],
+    ["sort_by=id"],
+    ["sort_direction=up"],
+    ["range_end[gt]=5"],
+  ];
+  for (const command of ["list", "count"] as const) {
+    for (const tokens of cases) {
+      const p = await parity(
+        [command, "politicians", ...tokens],
+        (transport) =>
+          new AbgeordnetenwatchClient({ transport })[command]("politicians", { filters: filtersOf(tokens) }),
+        listBody,
+      );
+      assertBothReject(p, `${command} ${tokens.join(" ")}`);
+    }
+  }
+});
+
+test("parity: list and count with valid filters send the same request", async () => {
+  for (const command of ["list", "count"] as const) {
+    for (const tokens of [
+      ["sex=f", "year_of_birth[gt]=1990"],
+      ["year_of_birth[gt]=1990", "year_of_birth[lt]=2000"],
+      ["politician=184945"],
+      ["last_name[cn]=a=b"],
+    ]) {
+      const p = await parity(
+        [command, "politicians", ...tokens],
+        (transport) =>
+          new AbgeordnetenwatchClient({ transport })[command]("politicians", { filters: filtersOf(tokens) }),
+        listBody,
+      );
+      assertSameRequests(p, `${command} ${tokens.join(" ")}`);
+    }
+  }
+});

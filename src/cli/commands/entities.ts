@@ -8,6 +8,15 @@ import {
   type ListParams,
 } from "../../client/types.js";
 import { entityIdProblem, normalizeEntityId } from "../../client/validate.js";
+import {
+  RESERVED_FILTER_FIELDS,
+  filterBlankProblem,
+  filterClashProblem,
+  filterField,
+  filterKeyProblem,
+  filterOperatorProblem,
+  reservedFilterProblem,
+} from "../../client/filters.js";
 
 /**
  * commander argument-parser for the `<entity>` positional. Validating here (as
@@ -47,27 +56,13 @@ function sortDirectionArg(value: string): "asc" | "desc" {
   return value;
 }
 
-/**
- * Valid bracket-filter operators, mirroring the FilterOperator union in
- * client/types.ts. Kept as a runtime list so the CLI can reject an unknown
- * operator locally instead of forwarding it to a generic API HTTP 500.
- */
-const FILTER_OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "cn", "sw"] as const;
-
-/**
- * Query parameters the `list` options own. As filters they would override the
- * validated `--range-end`/`--sort-direction` (and `count`'s `range_end=1`) and skip
- * their checks, so they are rejected with a pointer to the option.
- */
-const RESERVED_FILTER_FIELDS = new Map([
-  ["range_start", "--range-start"],
-  ["range_end", "--range-end"],
-  ["sort_by", "--sort-by"],
-  ["sort_direction", "--sort-direction"],
-]);
-
-/** A filter key: a field name, optionally followed by one `[op]` suffix. */
-const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
+/** The `list` option that owns each reserved filter name, for the usage hint. */
+const RESERVED_FILTER_OPTIONS: Record<(typeof RESERVED_FILTER_FIELDS)[number], string> = {
+  range_start: "--range-start",
+  range_end: "--range-end",
+  sort_by: "--sort-by",
+  sort_direction: "--sort-direction",
+};
 
 /**
  * commander value-parser for one `key=value` token of the variadic `[filters...]`
@@ -77,6 +72,10 @@ const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
  * inside the action (as parseFilters alone did), leaves the message unprinted:
  * commander has already finished parsing, so run.ts maps it to exit 2 but never
  * writes it.
+ *
+ * The filter rules are the library's (client/filters.ts); this parser only adds
+ * what argv needs: the split at the first `=`, the check for an exact repeated key
+ * (a filters object cannot hold one), and the CLI's wording.
  *
  * Tokens are accumulated and returned verbatim; the action's parseFilters builds
  * the filters object from these already-validated tokens.
@@ -88,73 +87,31 @@ function filterArg(value: string, previous: string[] = []): string[] {
       `Invalid filter "${value}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
     );
   }
+  const key = value.slice(0, eq);
+  const blank = filterBlankProblem([key, value.slice(eq + 1)]);
+  if (blank !== undefined) throw new InvalidArgumentError(`Invalid filter "${value}". ${blank}`);
+  const shape = filterKeyProblem(key);
+  if (shape !== undefined) throw new InvalidArgumentError(`Invalid filter key "${key}". ${shape}`);
+  const reserved = reservedFilterProblem(key);
+  if (reserved !== undefined) {
+    const option = RESERVED_FILTER_OPTIONS[filterField(key) as keyof typeof RESERVED_FILTER_OPTIONS];
+    throw new InvalidArgumentError(`${reserved} Use ${option} on list instead.`);
+  }
+  const operator = filterOperatorProblem(key);
+  if (operator !== undefined) throw new InvalidArgumentError(operator);
   // Reject an exact repeated key. parseFilters builds a plain object, so a
   // duplicate would otherwise silently win last (`sex=f sex=m` -> sex=m) with no
   // warning. Distinct operators on the same field are different keys
   // (`year_of_birth[gt]` vs `year_of_birth[lt]`) and remain allowed.
-  const key = value.slice(0, eq);
-  // A blank key or value (`sex=`, `sex= `, ` =f`, often an unset shell
-  // variable) would be sent as an empty parameter, so the command ran
-  // effectively unfiltered and exited 0. A blank filter is never meaningful.
-  if (key.trim() === "" || value.slice(eq + 1).trim() === "") {
-    throw new InvalidArgumentError(
-      `Invalid filter "${value}". Both key and value must be non-empty, e.g. sex=f.`,
-    );
-  }
-  // The key is a field name, optionally followed by one bracket operator. The API
-  // silently ignores anything else: a bare `[gt]=1990` drops the filter entirely
-  // (the unfiltered total, exit 0) and `field[gt]x` loses the trailing text.
-  const parts = FILTER_KEY.exec(key);
-  if (!parts) {
-    throw new InvalidArgumentError(
-      `Invalid filter key "${key}". Use a field name, optionally with one operator: ` +
-        `sex=f or 'year_of_birth[gt]=1990'.`,
-    );
-  }
-  const reserved = RESERVED_FILTER_FIELDS.get(parts[1] ?? "");
-  if (reserved !== undefined) {
-    throw new InvalidArgumentError(
-      `"${parts[1]}" is a paging or sorting parameter, not a filter. Use ${reserved} on list instead.`,
-    );
-  }
-  // If the key carries a bracket operator (`field[op]`), validate the operator
-  // against the known set so a typo (`last_name[zz]`) is caught here rather than
-  // surfacing as an opaque API HTTP 500. A plain field or related-entity id has
-  // no bracket and is passed through untouched.
-  const op = parts[2];
-  if (op !== undefined) {
-    if (!(FILTER_OPERATORS as readonly string[]).includes(op)) {
-      throw new InvalidArgumentError(
-        `Unknown filter operator "[${op}]" in "${key}". Valid operators: ${FILTER_OPERATORS.join(", ")}.`,
-      );
-    }
-  }
   const previousKeys = previous.map((token) => token.slice(0, token.indexOf("=")));
   if (previousKeys.includes(key)) {
     throw new InvalidArgumentError(
       `Duplicate filter key "${key}". Specify each field (and operator) at most once.`,
     );
   }
-  // A plain key and a bracket key on the same field (`year_of_birth=1990` plus
-  // `year_of_birth[gt]=2000`) are different keys, but the API parses them into one
-  // parameter and keeps only the last, so one filter would be dropped silently.
-  const field = filterField(key);
-  const clash = previousKeys.find(
-    (prev) => filterField(prev) === field && (prev === field || key === field),
-  );
-  if (clash !== undefined) {
-    throw new InvalidArgumentError(
-      `Conflicting filters "${clash}" and "${key}": the API keeps only one of a plain and a ` +
-        `bracket filter on the same field. Use operators only, e.g. '${field}[eq]=…'.`,
-    );
-  }
+  const clash = filterClashProblem([...previousKeys, key]);
+  if (clash !== undefined) throw new InvalidArgumentError(clash);
   return [...previous, value];
-}
-
-/** The field name of a filter key: `year_of_birth[gt]` -> `year_of_birth`. */
-function filterField(key: string): string {
-  const bracket = key.indexOf("[");
-  return bracket === -1 ? key : key.slice(0, bracket);
 }
 
 /** Build ListParams from this command's parsed options + positional filters. */
