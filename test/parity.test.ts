@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwValidationError } from "../src/client/errors.js";
+import type { ListParams } from "../src/client/types.js";
 import { parity, type CliOutcome, type LibOutcome } from "./helpers.js";
 
 type Outcome = { cli: CliOutcome; lib: LibOutcome };
@@ -119,5 +120,48 @@ test("parity: list and count with valid filters send the same request", async ()
       );
       assertSameRequests(p, `${command} ${tokens.join(" ")}`);
     }
+  }
+});
+
+test("parity: list with invalid paging or sort options", async () => {
+  const cases: [string[], ListParams][] = [
+    [["--sort-direction", "asc"], { sortDirection: "asc" }],
+    [["--sort-by", ""], { sortBy: "" }],
+    [["--sort-by", "   "], { sortBy: "   " }],
+    [["--sort-by", "id", "--sort-direction", "ASC"], { sortBy: "id", sortDirection: "ASC" as "asc" }],
+    [["--sort-by", "id", "--sort-direction", ""], { sortBy: "id", sortDirection: "" as "asc" }],
+    [["--range-start", "-1"], { rangeStart: -1 }],
+    [["--range-start", "1.5"], { rangeStart: 1.5 }],
+    [["--range-start", "99999999999999999999"], { rangeStart: 1e20 }],
+    [["--range-end", "1.5"], { rangeEnd: 1.5 }],
+    [["--range-end", "NaN"], { rangeEnd: NaN }],
+    [["--range-end", "Infinity"], { rangeEnd: Infinity }],
+  ];
+  for (const [options, params] of cases) {
+    const p = await parity(
+      ["list", "politicians", ...options],
+      (transport) => new AbgeordnetenwatchClient({ transport }).list("politicians", params),
+      listBody,
+    );
+    assertBothReject(p, options.join(" "));
+  }
+});
+
+test("parity: list with valid paging and sort options sends the same request", async () => {
+  const cases: [string[], ListParams][] = [
+    [
+      ["--sort-by", "last_name", "--sort-direction", "desc", "--range-start", "10", "--range-end", "5"],
+      { sortBy: "last_name", sortDirection: "desc", rangeStart: 10, rangeEnd: 5 },
+    ],
+    [["--sort-by", "id"], { sortBy: "id" }],
+    [["--range-start", "0", "--range-end", "0"], { rangeStart: 0, rangeEnd: 0 }],
+  ];
+  for (const [options, params] of cases) {
+    const p = await parity(
+      ["list", "politicians", ...options],
+      (transport) => new AbgeordnetenwatchClient({ transport }).list("politicians", params),
+      listBody,
+    );
+    assertSameRequests(p, options.join(" "));
   }
 });

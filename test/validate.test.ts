@@ -4,13 +4,19 @@ import {
   assertValid,
   entityIdProblem,
   normalizeEntityId,
+  nonBlankProblem,
+  rangeProblem,
+  sortDirectionProblem,
+  sortPairProblem,
+  validateListParams,
   type Problem,
 } from "../src/client/validate.js";
+import { AbgeordnetenwatchClient } from "../src/client/client.js";
+import { makeMockTransport, jsonResponse } from "./helpers.js";
 import { AwError, AwValidationError } from "../src/client/errors.js";
 import * as library from "../src/index.js";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
-import type { AbgeordnetenwatchClient } from "../src/client/client.js";
 
 const notBlank: Problem<string> = (value) =>
   value.trim() === "" ? "Expected a non-empty value." : undefined;
@@ -82,4 +88,52 @@ test("normalizeEntityId drops leading zeros, is idempotent and throws AwValidati
       err instanceof AwValidationError &&
       err.message === 'Invalid id "abc": Expected a numeric entity id.',
   );
+});
+
+test("nonBlankProblem rejects blank and non-string values", () => {
+  for (const value of ["", " ", "\t\n", undefined, 5]) {
+    assert.equal(nonBlankProblem(value), "Expected a non-empty value.", JSON.stringify(value));
+  }
+  assert.equal(nonBlankProblem("last_name"), undefined);
+});
+
+test("rangeProblem accepts non-negative safe integers only", () => {
+  for (const value of [0, 1, 1000, Number.MAX_SAFE_INTEGER]) assert.equal(rangeProblem(value), undefined);
+  for (const value of [-1, 1.5, NaN, Infinity, 1e20, "5", undefined]) {
+    assert.match(rangeProblem(value) ?? "", /^Expected a non-negative integer/, String(value));
+  }
+});
+
+test("sortDirectionProblem and sortPairProblem", () => {
+  assert.equal(sortDirectionProblem("asc"), undefined);
+  assert.equal(sortDirectionProblem("desc"), undefined);
+  for (const value of ["ASC", "", "up", undefined]) {
+    assert.equal(sortDirectionProblem(value), 'Use "asc" or "desc".', String(value));
+  }
+  assert.equal(sortPairProblem({ sortDirection: "asc" }), "sortDirection needs sortBy (the API rejects it on its own).");
+  assert.equal(sortPairProblem({ sortBy: "id", sortDirection: "asc" }), undefined);
+  assert.equal(sortPairProblem({ sortBy: "id" }), undefined);
+});
+
+test("validateListParams names the parameter in its AwValidationError", () => {
+  assert.throws(
+    () => validateListParams({ rangeStart: -1 }),
+    (err: unknown) =>
+      err instanceof AwValidationError && /^Invalid rangeStart: Expected a non-negative integer/.test(err.message),
+  );
+  assert.throws(() => validateListParams({ sortBy: " " }), /Invalid sortBy: Expected a non-empty value\./);
+  assert.throws(
+    () => validateListParams({ sortDirection: "asc" }),
+    /Invalid sortDirection: sortDirection needs sortBy/,
+  );
+  validateListParams({ rangeStart: 0, rangeEnd: 5, sortBy: "id", sortDirection: "desc" });
+});
+
+test("count() checks the caller's paging and sort parameters before any request", async () => {
+  const mt = makeMockTransport(() => jsonResponse({ meta: { result: { total: 1 } }, data: [] }));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  for (const params of [{ sortDirection: "asc" as const }, { rangeStart: -1 }, { rangeEnd: 1.5 }]) {
+    await assert.rejects(client.count("politicians", params), AwValidationError, JSON.stringify(params));
+  }
+  assert.equal(mt.calls.length, 0);
 });

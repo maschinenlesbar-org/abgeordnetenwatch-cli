@@ -5,6 +5,7 @@
 // rule is written once and both layers reject exactly the same inputs.
 
 import { AwValidationError } from "./errors.js";
+import { SORT_DIRECTIONS, type ListParams } from "./types.js";
 
 /**
  * A validation rule: returns the reason `value` is invalid (one sentence, e.g.
@@ -48,4 +49,42 @@ export const entityIdProblem: Problem<number | string> = (id) => {
 export function normalizeEntityId(id: number | string): string {
   assertValid(`id "${String(id)}"`, id, entityIdProblem);
   return String(id).replace(/^0+/, "");
+}
+
+/**
+ * Rule: a value that is not blank. The API treats an empty parameter as no
+ * parameter at all, so a blank value would silently be ignored.
+ */
+export const nonBlankProblem: Problem<unknown> = (value) =>
+  typeof value !== "string" || value.trim() === "" ? "Expected a non-empty value." : undefined;
+
+/** Rule for `rangeStart` and `rangeEnd`: a non-negative safe integer. */
+export const rangeProblem: Problem<unknown> = (value) =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? undefined
+    : `Expected a non-negative integer up to ${Number.MAX_SAFE_INTEGER}, got ${String(value)}.`;
+
+/** Rule for `sortDirection`: one of {@link SORT_DIRECTIONS}; the API answers anything else with HTTP 500. */
+export const sortDirectionProblem: Problem<unknown> = (value) =>
+  (SORT_DIRECTIONS as readonly unknown[]).includes(value) ? undefined : `Use "asc" or "desc".`;
+
+/** Rule across two parameters: a `sortDirection` needs a `sortBy`; the API rejects it alone. */
+export const sortPairProblem: Problem<ListParams> = (params) =>
+  params.sortDirection !== undefined && params.sortBy === undefined
+    ? "sortDirection needs sortBy (the API rejects it on its own)."
+    : undefined;
+
+/**
+ * Check the paging and sorting parameters of list() and count(); throws
+ * AwValidationError (`Invalid <param>: <reason>`) at the first problem. The filters
+ * are checked separately (validateFilters).
+ */
+export function validateListParams(params: ListParams): void {
+  if (params.rangeStart !== undefined) assertValid("rangeStart", params.rangeStart, rangeProblem);
+  if (params.rangeEnd !== undefined) assertValid("rangeEnd", params.rangeEnd, rangeProblem);
+  if (params.sortBy !== undefined) assertValid("sortBy", params.sortBy, nonBlankProblem);
+  if (params.sortDirection !== undefined) {
+    assertValid("sortDirection", params.sortDirection, sortDirectionProblem);
+  }
+  assertValid("sortDirection", params, sortPairProblem);
 }

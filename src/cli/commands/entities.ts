@@ -6,8 +6,14 @@ import {
   isEntityCollection,
   type EntityCollection,
   type ListParams,
+  type SortDirection,
 } from "../../client/types.js";
-import { entityIdProblem, normalizeEntityId } from "../../client/validate.js";
+import {
+  entityIdProblem,
+  normalizeEntityId,
+  sortDirectionProblem,
+  sortPairProblem,
+} from "../../client/validate.js";
 import {
   RESERVED_FILTER_FIELDS,
   filterBlankProblem,
@@ -45,15 +51,14 @@ function idArg(value: string): string {
 }
 
 /**
- * commander value-parser for `--sort-direction`. The API only accepts asc/desc
- * and answers anything else with an HTTP 500; validate locally so a typo is a
- * usage error (exit 2) with a clear message.
+ * commander value-parser for `--sort-direction`: the library's rule
+ * (sortDirectionProblem: asc or desc, else the API answers HTTP 500) as a usage
+ * error (exit 2).
  */
-function sortDirectionArg(value: string): "asc" | "desc" {
-  if (value !== "asc" && value !== "desc") {
-    throw new InvalidArgumentError(`Invalid sort direction "${value}". Use "asc" or "desc".`);
-  }
-  return value;
+function sortDirectionArg(value: string): SortDirection {
+  const reason = sortDirectionProblem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort direction "${value}". ${reason}`);
+  return value as SortDirection;
 }
 
 /** The `list` option that owns each reserved filter name, for the usage hint. */
@@ -121,7 +126,7 @@ function listParamsFrom(opts: Record<string, unknown>, filterArgs: string[]): Li
   if (opts["rangeEnd"] !== undefined) params.rangeEnd = opts["rangeEnd"] as number;
   if (opts["sortBy"] !== undefined) params.sortBy = opts["sortBy"] as string;
   if (opts["sortDirection"] !== undefined) {
-    params.sortDirection = opts["sortDirection"] as "asc" | "desc";
+    params.sortDirection = opts["sortDirection"] as SortDirection;
   }
   const filters = parseFilters(filterArgs);
   if (Object.keys(filters).length > 0) params.filters = filters;
@@ -148,10 +153,8 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
     )
     .option("--data-only", "print just the data array (not the meta envelope)")
     .hook("preAction", (command) => {
-      // The API answers sort_direction without sort_by with an HTTP 500; catch the
-      // missing dependency here as a usage error instead.
-      const opts = command.opts();
-      if (opts["sortDirection"] !== undefined && opts["sortBy"] === undefined) {
+      // The library's cross-option rule (sortPairProblem), in flag wording.
+      if (sortPairProblem(listParamsFrom(command.opts(), [])) !== undefined) {
         command.error("error: --sort-direction needs --sort-by (the API rejects it on its own).");
       }
     })

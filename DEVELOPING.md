@@ -75,6 +75,12 @@ What the library rejects with `AwValidationError`:
   silently and returns the unfiltered (or partly filtered) set as a success. The CLI
   keeps only what argv needs on top: the split at the first `=` and the check for an
   exact repeated key.
+- **Paging and sorting** (`list`, `count`; `validateListParams`): `rangeStart` and
+  `rangeEnd` that are not non-negative safe integers (`rangeProblem`), a blank `sortBy`
+  (`nonBlankProblem`), a `sortDirection` other than `asc`/`desc` (`SORT_DIRECTIONS`,
+  `sortDirectionProblem`) and a `sortDirection` without `sortBy` (`sortPairProblem`; the
+  API answers it with HTTP 500). The CLI keeps the argv-to-number parsing
+  (`parseIntArg`) and words the pair rule with its flag names.
 
 ## Scripts
 

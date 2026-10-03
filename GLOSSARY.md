@@ -177,13 +177,16 @@ sending anything, because the API would drop them silently and return the unfilt
 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
 or `desc`). With `--sort-by` alone the API sorts **descending**; `--sort-direction` without
-`--sort-by` is a usage error (the API rejects it). Not every field is sortable:
+`--sort-by` is a usage error (the API rejects it), and the library rejects `sortDirection`
+without `sortBy`, a blank `sortBy` and any other direction with `AwValidationError`. Not every
+field is sortable:
 polls reject `id` but accept `field_poll_date`. Without `--sort-by` the order depends on the
 collection (`parliaments` highest id first, `topics` by label).
 
 **Paging (`--range-start`, `--range-end`).** Sent as `range_start` (0-based offset) and
-`range_end`, which is the **page size**, not an end index. The API honours up to 1000; a
-larger value falls back to 100. Raise `--range-start` by the page size until you have
+`range_end`, which is the **page size**, not an end index. Both are non-negative integers (the
+CLI and the library reject anything else). The API honours up to 1000; a larger value falls
+back to 100. Raise `--range-start` by the page size until you have
 `meta.result.total` records.
 
 ## Output

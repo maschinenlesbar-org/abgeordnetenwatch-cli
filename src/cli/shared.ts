@@ -6,6 +6,7 @@ import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import type { EngineOptions } from "../client/engine.js";
 import { AwError } from "../client/errors.js";
+import { nonBlankProblem } from "../client/validate.js";
 
 /**
  * commander value-parser: a non-negative decimal integer.
@@ -47,9 +48,8 @@ export function parseBoundedInt(min: number, max: number): (value: string) => nu
  * otherwise be dropped and the command would silently run unfiltered.
  */
 export function parseNonEmpty(value: string): string {
-  if (value.trim() === "") {
-    throw new InvalidArgumentError("Expected a non-empty value.");
-  }
+  const reason = nonBlankProblem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(reason);
   return value;
 }
 

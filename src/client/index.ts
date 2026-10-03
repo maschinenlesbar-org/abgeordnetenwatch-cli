@@ -21,7 +21,16 @@ export {
   AwValidationError,
   redactUrl,
 } from "./errors.js";
-export { assertValid, entityIdProblem, normalizeEntityId } from "./validate.js";
+export {
+  assertValid,
+  entityIdProblem,
+  normalizeEntityId,
+  nonBlankProblem,
+  rangeProblem,
+  sortDirectionProblem,
+  sortPairProblem,
+  validateListParams,
+} from "./validate.js";
 export type { Problem } from "./validate.js";
 export {
   FILTER_KEY,

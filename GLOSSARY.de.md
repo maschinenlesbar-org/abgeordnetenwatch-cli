@@ -187,13 +187,15 @@ verwerfen und die ungefilterte Menge liefern.
 
 **Sortieren (`--sort-by`, `--sort-direction`).** Gesendet als `sort_by` und `sort_direction`
 (`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**; `--sort-direction`
-ohne `--sort-by` ist ein Aufruffehler (die API lehnt es ab). Nicht jedes Feld
-ist sortierbar: Abstimmungen lehnen `id` ab, akzeptieren aber `field_poll_date`. Ohne
+ohne `--sort-by` ist ein Aufruffehler (die API lehnt es ab), und die Bibliothek weist
+`sortDirection` ohne `sortBy`, ein leeres `sortBy` und jede andere Richtung mit
+`AwValidationError` ab. Nicht jedes Feld ist sortierbar: Abstimmungen lehnen `id` ab, akzeptieren aber `field_poll_date`. Ohne
 `--sort-by` hängt die Reihenfolge von der Sammlung ab (`parliaments` höchste ID zuerst,
 `topics` nach Label).
 
 **Paginierung (`--range-start`, `--range-end`).** Gesendet als `range_start` (Versatz ab 0)
-und `range_end` – die **Seitengröße**, kein End-Index. Die API berücksichtigt bis zu 1.000;
+und `range_end` – die **Seitengröße**, kein End-Index. Beide sind nicht-negative ganze Zahlen
+(CLI und Bibliothek weisen alles andere ab). Die API berücksichtigt bis zu 1.000;
 bei einem größeren Wert fällt sie auf 100 zurück. Erhöhen Sie `--range-start` jeweils um die
 Seitengröße, bis Sie `meta.result.total` Datensätze haben.
 

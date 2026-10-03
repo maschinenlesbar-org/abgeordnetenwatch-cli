@@ -75,19 +75,29 @@ export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 /** The value of one filter. */
 export type FilterValue = string | number | boolean;
 
-/** Parameters for a collection request. */
+/** The sort orders the API accepts; it answers any other with HTTP 500. */
+export const SORT_DIRECTIONS = ["asc", "desc"] as const;
+
+/** One of {@link SORT_DIRECTIONS}. */
+export type SortDirection = (typeof SORT_DIRECTIONS)[number];
+
+/**
+ * Parameters for a collection request. Checked before any request (see
+ * `validateListParams`); an invalid value rejects with AwValidationError.
+ */
 export interface ListParams {
-  /** 0-based offset of the first item to return. */
+  /** 0-based offset of the first item to return; a non-negative safe integer. */
   rangeStart?: number;
   /**
    * Page size — number of items to return. The API honours this up to 1000; a
    * value above 1000 is ignored and it falls back to its default page size (100).
+   * A non-negative safe integer.
    */
   rangeEnd?: number;
-  /** Field name to sort by (e.g. `last_name`, `id`). */
+  /** Field name to sort by (e.g. `last_name`, `id`); not blank. Alone, the API sorts descending. */
   sortBy?: string;
-  /** Sort order. */
-  sortDirection?: "asc" | "desc";
+  /** Sort order, `asc` or `desc`; only together with `sortBy` (the API rejects it alone). */
+  sortDirection?: SortDirection;
   /**
    * Field filters, sent as query parameters. Keys may use the bracket-operator
    * form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`. Pass a related entity's

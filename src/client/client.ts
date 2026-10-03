@@ -12,7 +12,7 @@
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import { AwError, AwParseError } from "./errors.js";
-import { normalizeEntityId } from "./validate.js";
+import { normalizeEntityId, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
   ENTITY_COLLECTIONS,
@@ -34,12 +34,13 @@ export class AbgeordnetenwatchClient {
   }
 
   /**
-   * Translate ListParams into the wire query parameters, after checking the
-   * filters (validateFilters). Filters go in first, so even a filter named like a
+   * Translate ListParams into the wire query parameters, after checking them
+   * (validateListParams, validateFilters). Filters go in first, so even a filter named like a
    * paging or sort parameter could not override the typed option, nor the
    * `range_end=1` that `count()` relies on.
    */
   private toQuery(params: ListParams): QueryParams {
+    validateListParams(params);
     const query: QueryParams = {};
     if (params.filters) {
       validateFilters(params.filters);
@@ -93,6 +94,8 @@ export class AbgeordnetenwatchClient {
    * the API reports as the true match count independent of the page size.
    */
   async count(collection: EntityCollection, params: ListParams = {}): Promise<number> {
+    // Check the caller's own parameters, including a rangeEnd that is then replaced.
+    validateListParams(params);
     const res = await this.list(collection, { ...params, rangeEnd: 1 });
     const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
     if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
