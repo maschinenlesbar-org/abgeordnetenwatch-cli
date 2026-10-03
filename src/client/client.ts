@@ -12,6 +12,7 @@
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import { AwError, AwParseError } from "./errors.js";
+import { normalizeEntityId } from "./validate.js";
 import {
   ENTITY_COLLECTIONS,
   isEntityCollection,
@@ -66,12 +67,16 @@ export class AbgeordnetenwatchClient {
   /**
    * Fetch a single entity by id; returns the full envelope (meta + data object). A
    * 2xx body that is not such an envelope raises AwParseError.
+   *
+   * The id must be a positive integer, as a number or a string of digits; leading
+   * zeros are dropped (`"0002"` fetches entity 2). Anything else (`0`, `""`, `" 2 "`,
+   * `"abc"`, `-1`, `1.5`) rejects with AwValidationError before any request.
    */
   async get<T = Entity>(
     collection: EntityCollection,
     id: number | string,
   ): Promise<DetailResponse<T>> {
-    const path = `${API_PREFIX}/${checkCollection(collection)}/${encodeURIComponent(String(id))}`;
+    const path = `${API_PREFIX}/${checkCollection(collection)}/${normalizeEntityId(id)}`;
     const body = await this.engine.getJson<unknown>(path);
     assertEnvelope(body, path);
     if (!isObject(body["data"])) throw shapeError(path, "a data object");

@@ -21,7 +21,7 @@ export {
   AwValidationError,
   redactUrl,
 } from "./errors.js";
-export { assertValid } from "./validate.js";
+export { assertValid, entityIdProblem, normalizeEntityId } from "./validate.js";
 export type { Problem } from "./validate.js";
 
 export * from "./types.js";

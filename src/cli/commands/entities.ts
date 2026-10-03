@@ -7,6 +7,7 @@ import {
   type EntityCollection,
   type ListParams,
 } from "../../client/types.js";
+import { entityIdProblem, normalizeEntityId } from "../../client/validate.js";
 
 /**
  * commander argument-parser for the `<entity>` positional. Validating here (as
@@ -24,22 +25,14 @@ function entityArg(value: string): EntityCollection {
 }
 
 /**
- * commander value-parser for the `<id>` positional of `get`. The API treats
- * `/<collection>/0` as the collection itself, so `get politicians 0` silently
- * dumped the whole list instead of one entity; a non-numeric id round-tripped to
- * a generic HTTP 500. Validating here rejects both as a usage error (exit 2) with
- * a clear message. Ids are positive integers (the API numbers entities from 1).
- * Leading zeros are dropped: the API looks the id up as a string, so `0002` was
- * "no such entity" although party 2 exists.
+ * commander value-parser for the `<id>` positional of `get`: the library's id rule
+ * (entityIdProblem) as a usage error (exit 2), and its canonical form
+ * (normalizeEntityId, leading zeros dropped) as the value.
  */
 function idArg(value: string): string {
-  if (!/^[0-9]+$/.test(value)) {
-    throw new InvalidArgumentError(`Invalid id "${value}". Expected a numeric entity id.`);
-  }
-  if (/^0+$/.test(value)) {
-    throw new InvalidArgumentError(`Invalid id "${value}". Entity ids start at 1.`);
-  }
-  return value.replace(/^0+/, "");
+  const reason = entityIdProblem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid id "${value}". ${reason}`);
+  return normalizeEntityId(value);
 }
 
 /**

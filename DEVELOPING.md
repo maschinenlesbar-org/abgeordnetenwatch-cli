@@ -61,6 +61,13 @@ commander parsers call the same functions and turn the reason into a usage error
 `test/helpers.ts`'s `parity()` checks that: it runs one input through `run()` and through
 the library on one recording mock transport and returns both outcomes.
 
+What the library rejects with `AwValidationError`:
+
+- **Entity ids** (`get`): anything but a positive integer, as a number or a string of
+  ASCII digits (`entityIdProblem`). `0` and `""` would fetch the whole collection, and
+  `" 2 "`, `"abc"`, `-1` or `1.5` a generic HTTP 500. `normalizeEntityId` drops leading
+  zeros, because the API looks the id up as a string (`0002` was "no such entity").
+
 ## Scripts
 
 ```bash
