@@ -13,7 +13,8 @@ src/
     http.ts      Node http/https transport (swappable for tests)
     engine.ts    request engine: URL building, retries (429/503), redirects, JSON decode
     query.ts     dependency-free query-string builder
-    errors.ts    AwError / AwApiError / AwNetworkError / AwParseError
+    errors.ts    AwError / AwApiError / AwNetworkError / AwParseError / AwValidationError
+    validate.ts  Problem rules + assertValid (input checks shared with the CLI)
     types.ts     envelope + entity types, the ENTITY_COLLECTIONS list
     client.ts    AbgeordnetenwatchClient — generic list/get/count over a collection
     index.ts     public library surface
@@ -45,6 +46,20 @@ object, `data` an array (`list`) or an object (`get`), and for `count` a
 non-negative integer `meta.result.total`. Anything else raises `AwParseError`
 (`Unexpected response shape from <path>: expected ...`). The records themselves
 are passed through unchecked.
+
+## Input validation
+
+The library owns every rule about what a request may contain, and checks it before
+sending anything. A rule is a pure `Problem` function in `client/validate.ts` (or next
+to the parameter it checks): it returns the reason a value is invalid, or `undefined`.
+Client methods enforce it with `assertValid(name, value, problem)`, which throws
+`AwValidationError` (a subclass of `AwError`) with the message `Invalid <name>: <reason>`;
+methods that return a promise reject with it, and no request is sent. The CLI's
+commander parsers call the same functions and turn the reason into a usage error, and
+`run.ts` maps an `AwValidationError` raised inside an action to exit 2 as well, printed as
+`Error: <message>`. So the CLI and the library reject the same inputs, and
+`test/helpers.ts`'s `parity()` checks that: it runs one input through `run()` and through
+the library on one recording mock transport and returns both outcomes.
 
 ## Scripts
 

@@ -92,6 +92,13 @@ export class AwApiError extends AwError {
   }
 }
 
+/**
+ * An input the library rejects before sending any request: a bad option, id,
+ * filter or parameter value. The message reads `Invalid <name>: <reason>`. The CLI
+ * maps it to its usage-error exit code (2).
+ */
+export class AwValidationError extends AwError {}
+
 /** A transport-level failure (DNS, connection reset, timeout, ...). */
 export class AwNetworkError extends AwError {}
 

@@ -4,6 +4,9 @@
 
 import { mock } from "node:test";
 import type { Transport, HttpRequest, HttpResponse } from "../src/client/http.js";
+import { AbgeordnetenwatchClient } from "../src/client/client.js";
+import type { CliDeps } from "../src/cli/io.js";
+import { run } from "../src/cli/run.js";
 
 export function jsonResponse(body: unknown, status = 200): HttpResponse {
   return {
@@ -77,4 +80,51 @@ export function makeMockTransport(
 /** A transport that always returns the same JSON body. */
 export function constantJson(body: unknown, status = 200): MockTransport {
   return makeMockTransport(() => jsonResponse(body, status));
+}
+
+/** What one input did through the CLI: exit code, output and the requests sent. */
+export interface CliOutcome {
+  code: number;
+  out: string;
+  err: string;
+  requests: HttpRequest[];
+}
+
+/** What one input did through the library: the value or the error, and the requests sent. */
+export type LibOutcome =
+  | { ok: true; value: unknown; requests: HttpRequest[] }
+  | { ok: false; error: unknown; requests: HttpRequest[] };
+
+/**
+ * CLI <-> library parity check. Runs `argv` through `run()` (the real program, its
+ * client built on the recording mock transport) and `call(transport)` through the
+ * library on the same transport, and returns both outcomes with the requests each
+ * one sent. A parity test asserts that both reject with no request, or that both
+ * send the identical request.
+ */
+export async function parity(
+  argv: string[],
+  call: (transport: Transport) => unknown,
+  responder: (req: HttpRequest) => HttpResponse | Promise<HttpResponse> = () =>
+    jsonResponse({ meta: {}, data: [] }),
+): Promise<{ cli: CliOutcome; lib: LibOutcome }> {
+  const mt = makeMockTransport(responder);
+  const out: string[] = [];
+  const err: string[] = [];
+  const deps: CliDeps = {
+    io: { out: (t) => out.push(t), err: (t) => err.push(t) },
+    createClient: (options) => new AbgeordnetenwatchClient({ ...options, transport: mt.transport }),
+  };
+  const code = await run(argv, deps);
+  const cli: CliOutcome = { code, out: out.join("\n"), err: err.join("\n"), requests: [...mt.calls] };
+
+  const before = mt.calls.length;
+  let lib: LibOutcome;
+  try {
+    const value = await call(mt.transport);
+    lib = { ok: true, value, requests: mt.calls.slice(before) };
+  } catch (error) {
+    lib = { ok: false, error, requests: mt.calls.slice(before) };
+  }
+  return { cli, lib };
 }

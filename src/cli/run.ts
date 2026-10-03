@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import type { CliDeps } from "./io.js";
-import { AwApiError, AwError } from "../client/errors.js";
+import { AwApiError, AwError, AwValidationError } from "../client/errors.js";
 
 /** Conventional CLI exit code for a usage error (bad/unknown option, no command). */
 const USAGE_ERROR_EXIT_CODE = 2;
@@ -55,6 +55,13 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // unknown/missing command, a bad argument value, or a rejected filter.
       // Map these to the conventional CLI usage-error code (2) so scripts can
       // tell a usage mistake from a runtime/network error (1) or a 404 (4).
+      return USAGE_ERROR_EXIT_CODE;
+    }
+    if (err instanceof AwValidationError) {
+      // The library rejected an input before sending anything (a rule the
+      // commander parsers do not cover on their own, such as one that spans two
+      // options): a usage error, like a rejected option value.
+      deps.io.err(`Error: ${err.message}`);
       return USAGE_ERROR_EXIT_CODE;
     }
     if (err instanceof AwApiError) {
