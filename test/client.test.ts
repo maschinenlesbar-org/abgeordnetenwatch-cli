@@ -144,7 +144,8 @@ test("a base URL with a query or fragment is rejected at construction", () => {
     assert.throws(
       () => new AbgeordnetenwatchClient({ baseUrl }),
       (err: unknown) =>
-        err instanceof AwNetworkError &&
+        err instanceof AwValidationError &&
+        !(err instanceof AwNetworkError) &&
         err.message === `Invalid base URL "${baseUrl}": A base URL cannot have a query (?) or fragment (#).`,
       baseUrl,
     );
@@ -173,7 +174,7 @@ test("redactUrl hides userinfo and leaves other URLs alone", () => {
   assert.ok(!err.message.includes("u:p"));
   assert.throws(
     () => new AbgeordnetenwatchClient({ baseUrl: "https://u:p@example.test/?x" }),
-    (e: unknown) => e instanceof AwNetworkError && !e.message.includes("u:p") && e.message.includes("***@"),
+    (e: unknown) => e instanceof AwValidationError && !e.message.includes("u:p") && e.message.includes("***@"),
   );
 });
 

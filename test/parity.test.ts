@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
-import { AwValidationError } from "../src/client/errors.js";
+import { AwNetworkError, AwValidationError } from "../src/client/errors.js";
 import type { ListParams } from "../src/client/types.js";
 import { parity, type CliOutcome, type LibOutcome } from "./helpers.js";
 
@@ -216,5 +216,17 @@ test("parity: a valid base URL with a path prefix sends the same request", async
       listBody,
     );
     assertSameRequests(p, baseUrl);
+  }
+});
+
+test("parity: a base URL with a query or fragment is a validation error, not a network error", async () => {
+  for (const baseUrl of ["https://example.org/?x=1", "https://example.org/#frag", "https://example.org?"]) {
+    const p = await parity(
+      ["--base-url", baseUrl, "list", "parties"],
+      (transport) => new AbgeordnetenwatchClient({ baseUrl, transport }).list("parties"),
+      listBody,
+    );
+    assertBothReject(p, baseUrl);
+    assert.ok(!p.lib.ok && !(p.lib.error instanceof AwNetworkError), baseUrl);
   }
 });

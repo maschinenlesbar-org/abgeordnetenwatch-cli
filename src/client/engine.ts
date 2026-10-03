@@ -7,13 +7,11 @@ import { buildQueryString, type QueryParams } from "./query.js";
 import {
   AwApiError,
   AwError,
-  AwNetworkError,
   AwParseError,
   AwValidationError,
   redactUrl,
 } from "./errors.js";
 import {
-  BASE_URL_QUERY_REASON,
   assertValid,
   baseUrlProblem,
   headerNameProblem,
@@ -141,17 +139,17 @@ const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Validate a base URL (baseUrlProblem) and throw when it is not usable, with the
- * userinfo redacted from the message. The engine runs it on the raw configured
- * value, before it strips trailing slashes, so a bad `--base-url ftp://x` names the
- * value the user passed rather than `ftp://x/api/v2/...` from the transport.
+ * Validate a base URL (baseUrlProblem) and throw AwValidationError when it is not
+ * usable: a configuration error, never an AwNetworkError, which a caller may retry
+ * as transient. The userinfo is redacted from the message. The engine runs it on the
+ * raw configured value, before it strips trailing slashes, so a bad
+ * `--base-url ftp://x` names the value the user passed rather than
+ * `ftp://x/api/v2/...` from the transport.
  */
 export function assertValidBaseUrl(baseUrl: string): void {
   const reason = baseUrlProblem(baseUrl);
   if (reason === undefined) return;
-  const message = `Invalid base URL "${redactUrl(String(baseUrl))}": ${reason}`;
-  if (reason === BASE_URL_QUERY_REASON) throw new AwNetworkError(message);
-  throw new AwValidationError(message);
+  throw new AwValidationError(`Invalid base URL "${redactUrl(String(baseUrl))}": ${reason}`);
 }
 
 /**

@@ -88,7 +88,9 @@ What the library rejects with `AwValidationError`:
   `abgeordnetenwatch-cli`. The default transport also turns any header Node refuses into
   an `AwNetworkError` instead of a raw `TypeError`.
 - **Base URL** (constructor; `baseUrlProblem`): anything but an absolute `http:`/`https:`
-  URL, and one with surrounding whitespace. See the networking policy below.
+  URL, one with a query or fragment and one with surrounding whitespace. All of them are
+  configuration errors, so the class is `AwValidationError`, never `AwNetworkError`
+  (which a caller may retry as transient). See the networking policy below.
 
 ## Scripts
 

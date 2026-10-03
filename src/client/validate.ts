@@ -114,9 +114,6 @@ export const headerNameProblem: Problem<unknown> = (value) =>
     ? undefined
     : "Expected an HTTP header name (letters, digits and !#$%&'*+.^_`|~-).";
 
-/** The {@link baseUrlProblem} reason for a query or fragment. */
-export const BASE_URL_QUERY_REASON = "A base URL cannot have a query (?) or fragment (#).";
-
 /**
  * Rule for the base URL: an absolute `http:`/`https:` URL with no query or
  * fragment and no surrounding whitespace. Request paths are appended to it as a
@@ -135,7 +132,7 @@ export const baseUrlProblem: Problem<unknown> = (value) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return `Unsupported scheme "${url.protocol}". Expected an http(s) URL.`;
   }
-  if (/[?#]/.test(value)) return BASE_URL_QUERY_REASON;
+  if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
   if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
   return undefined;
 };
