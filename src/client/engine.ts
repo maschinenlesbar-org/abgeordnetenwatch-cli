@@ -4,8 +4,21 @@
 
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { AwApiError, AwError, AwNetworkError, AwParseError, redactUrl } from "./errors.js";
-import { assertValid, headerNameProblem, headerValueProblem } from "./validate.js";
+import {
+  AwApiError,
+  AwError,
+  AwNetworkError,
+  AwParseError,
+  AwValidationError,
+  redactUrl,
+} from "./errors.js";
+import {
+  BASE_URL_QUERY_REASON,
+  assertValid,
+  baseUrlProblem,
+  headerNameProblem,
+  headerValueProblem,
+} from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.abgeordnetenwatch.de";
 const DEFAULT_USER_AGENT = "abgeordnetenwatch-cli";
@@ -22,7 +35,11 @@ export interface RawResponse {
  * NaN, Infinity, too large) makes the constructor throw an AwError.
  */
 export interface EngineOptions {
-  /** Base URL of the API. Defaults to https://www.abgeordnetenwatch.de */
+  /**
+   * Base URL of the API. Defaults to https://www.abgeordnetenwatch.de. Must be an
+   * absolute http(s) URL without a query, fragment or surrounding whitespace
+   * (baseUrlProblem); anything else throws at construction.
+   */
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
@@ -124,30 +141,17 @@ const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Validate the configured base URL up front. Without this the only scheme check
- * lived in the transport, which rejects the *fully built* request URL — so a bad
- * `--base-url ftp://x` produced a message echoing `ftp://x/api/v2/...` rather than
- * the value the user actually passed. Throwing here keeps the message about the
- * base URL itself.
+ * Validate a base URL (baseUrlProblem) and throw when it is not usable, with the
+ * userinfo redacted from the message. The engine runs it on the raw configured
+ * value, before it strips trailing slashes, so a bad `--base-url ftp://x` names the
+ * value the user passed rather than `ftp://x/api/v2/...` from the transport.
  */
-function assertValidBaseUrl(baseUrl: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrl);
-  } catch {
-    throw new AwError(`Invalid base URL "${redactUrl(baseUrl)}".`);
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new AwError(
-      `Unsupported base URL scheme "${parsed.protocol}" in "${redactUrl(baseUrl)}"; only http and https are supported.`,
-    );
-  }
-  // Request paths are appended to the base URL as a string, so a `?` or `#` would
-  // swallow every path: `http://h/?x=1` requests `/?x=1/api/v2/...` and
-  // `http://h/#f` requests `/`.
-  if (/[?#]/.test(baseUrl)) {
-    throw new AwNetworkError(`Base URL must not contain a query or fragment: ${redactUrl(baseUrl)}`);
-  }
+export function assertValidBaseUrl(baseUrl: string): void {
+  const reason = baseUrlProblem(baseUrl);
+  if (reason === undefined) return;
+  const message = `Invalid base URL "${redactUrl(String(baseUrl))}": ${reason}`;
+  if (reason === BASE_URL_QUERY_REASON) throw new AwNetworkError(message);
+  throw new AwValidationError(message);
 }
 
 /**
@@ -218,8 +222,9 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: EngineOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    assertValidBaseUrl(this.baseUrl);
+    const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+    assertValidBaseUrl(baseUrl);
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.transport = options.transport ?? nodeHttpTransport;
     // Header names and values are checked here, so a bad one is an AwValidationError
     // at construction rather than a raw TypeError (or an injected header) later.

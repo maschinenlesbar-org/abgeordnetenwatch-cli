@@ -113,3 +113,29 @@ export const headerNameProblem: Problem<unknown> = (value) =>
   typeof value === "string" && /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(value)
     ? undefined
     : "Expected an HTTP header name (letters, digits and !#$%&'*+.^_`|~-).";
+
+/** The {@link baseUrlProblem} reason for a query or fragment. */
+export const BASE_URL_QUERY_REASON = "A base URL cannot have a query (?) or fragment (#).";
+
+/**
+ * Rule for the base URL: an absolute `http:`/`https:` URL with no query or
+ * fragment and no surrounding whitespace. Request paths are appended to it as a
+ * string, so a `?` or `#` would swallow every path, and `new URL()` trims
+ * surrounding whitespace silently while the engine would keep the raw value
+ * (`"https://h/ "` requested `/%20/api/v2/...`).
+ */
+export const baseUrlProblem: Problem<unknown> = (value) => {
+  if (typeof value !== "string") return "Expected an absolute http(s) URL.";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "Expected an absolute http(s) URL.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return `Unsupported scheme "${url.protocol}". Expected an http(s) URL.`;
+  }
+  if (/[?#]/.test(value)) return BASE_URL_QUERY_REASON;
+  if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
+  return undefined;
+};

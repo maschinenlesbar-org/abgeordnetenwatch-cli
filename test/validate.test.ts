@@ -11,6 +11,7 @@ import {
   validateListParams,
   headerNameProblem,
   headerValueProblem,
+  baseUrlProblem,
   type Problem,
 } from "../src/client/validate.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
@@ -183,4 +184,21 @@ test("the client rejects a bad userAgent or header at construction, before any r
   }
   assert.equal(mt.calls.length, 0);
   new AbgeordnetenwatchClient({ userAgent: "ok/1.0", headers: { "X-Test": "v" }, transport: mt.transport });
+});
+
+test("baseUrlProblem accepts absolute http(s) URLs only, without query, fragment or padding", () => {
+  for (const url of ["https://www.abgeordnetenwatch.de", "http://127.0.0.1:8080/aw/", "https://u:p@h.example"]) {
+    assert.equal(baseUrlProblem(url), undefined, url);
+  }
+  for (const [url, reason] of [
+    ["", "Expected an absolute http(s) URL."],
+    ["notaurl", "Expected an absolute http(s) URL."],
+    ["ftp://example.org", 'Unsupported scheme "ftp:". Expected an http(s) URL.'],
+    ["https://h.example/?x=1", "A base URL cannot have a query (?) or fragment (#)."],
+    ["https://h.example#f", "A base URL cannot have a query (?) or fragment (#)."],
+    ["https://h.example/ ", "A base URL cannot have surrounding whitespace."],
+    ["\thttps://h.example", "A base URL cannot have surrounding whitespace."],
+  ] as const) {
+    assert.equal(baseUrlProblem(url), reason, JSON.stringify(url));
+  }
 });

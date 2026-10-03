@@ -144,8 +144,21 @@ test("a base URL with a query or fragment is rejected at construction", () => {
     assert.throws(
       () => new AbgeordnetenwatchClient({ baseUrl }),
       (err: unknown) =>
-        err instanceof AwNetworkError && /Base URL must not contain a query or fragment/.test(err.message),
+        err instanceof AwNetworkError &&
+        err.message === `Invalid base URL "${baseUrl}": A base URL cannot have a query (?) or fragment (#).`,
       baseUrl,
+    );
+  }
+});
+
+test("a base URL with surrounding whitespace is rejected at construction, before the slash strip", () => {
+  for (const baseUrl of ["https://example.test/ ", " https://example.test", "https://example.test//\n"]) {
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ baseUrl }),
+      (err: unknown) =>
+        err instanceof AwValidationError &&
+        err.message === `Invalid base URL "${baseUrl}": A base URL cannot have surrounding whitespace.`,
+      JSON.stringify(baseUrl),
     );
   }
 });

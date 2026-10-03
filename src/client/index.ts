@@ -4,6 +4,7 @@ export { AbgeordnetenwatchClient } from "./client.js";
 export {
   RequestEngine,
   DEFAULT_BASE_URL,
+  assertValidBaseUrl,
   MAX_RETRIES,
   MAX_RETRY_AFTER_MS,
   parseRetryAfter,
@@ -32,6 +33,7 @@ export {
   validateListParams,
   headerValueProblem,
   headerNameProblem,
+  baseUrlProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 export {

@@ -189,3 +189,32 @@ test("parity: a valid User-Agent is sent as is", async () => {
     assert.equal(p.cli.requests[0]?.headers?.["User-Agent"], ua);
   }
 });
+
+test("parity: a base URL with surrounding whitespace is rejected before any request", async () => {
+  for (const baseUrl of [
+    "https://api.example.test/ ",
+    "https://api.example.test ",
+    " https://api.example.test",
+    "https://api.example.test\n",
+    "\thttps://api.example.test",
+    "https://api.example.test/\t",
+  ]) {
+    const p = await parity(
+      ["--base-url", baseUrl, "list", "parties"],
+      (transport) => new AbgeordnetenwatchClient({ baseUrl, transport }).list("parties"),
+      listBody,
+    );
+    assertBothReject(p, JSON.stringify(baseUrl));
+  }
+});
+
+test("parity: a valid base URL with a path prefix sends the same request", async () => {
+  for (const baseUrl of ["https://mirror.example/aw/", "http://127.0.0.1:8080"]) {
+    const p = await parity(
+      ["--base-url", baseUrl, "list", "parties"],
+      (transport) => new AbgeordnetenwatchClient({ baseUrl, transport }).list("parties"),
+      listBody,
+    );
+    assertSameRequests(p, baseUrl);
+  }
+});

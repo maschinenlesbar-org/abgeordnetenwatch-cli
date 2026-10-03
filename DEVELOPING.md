@@ -87,6 +87,8 @@ What the library rejects with `AwValidationError`:
   name that is not an HTTP token. Only an absent `userAgent` selects the default
   `abgeordnetenwatch-cli`. The default transport also turns any header Node refuses into
   an `AwNetworkError` instead of a raw `TypeError`.
+- **Base URL** (constructor; `baseUrlProblem`): anything but an absolute `http:`/`https:`
+  URL, and one with surrounding whitespace. See the networking policy below.
 
 ## Scripts
 
@@ -147,11 +149,14 @@ npm start -- --help # run the CLI from source build
   `maxResponseBytes` (0..`Number.MAX_SAFE_INTEGER`) must be integers in range; anything
   else throws `AwError` (`Invalid option timeoutMs: expected an integer from 0 to ...`)
   at construction, instead of a negative or NaN value silently disabling a limit.
-- **Only `http:`/`https:` base URLs are accepted** — `--base-url` is checked at parse
-  time (a usage error), then the scheme is validated again in the engine constructor
-  and per-request in the transport. A base URL with a query (`?`) or fragment (`#`) is
-  rejected too (at parse time, and by the engine for library users): paths are appended
-  to it as a string, so either would swallow every request path.
+- **Only `http:`/`https:` base URLs are accepted** — one rule, `baseUrlProblem`, checked
+  by `--base-url` at parse time (a usage error) and by the engine constructor on the raw
+  value, before it strips trailing slashes (the exported `assertValidBaseUrl`); the
+  transport re-checks the scheme per request. A base URL with a query (`?`) or fragment
+  (`#`) is rejected too, because paths are appended to it as a string and either would
+  swallow every request path, and so is one with surrounding whitespace, which
+  `new URL()` would trim silently while the engine kept the raw string (`"https://h/ "`
+  requested `/%20/api/v2/...`).
 
 ## Website
 
