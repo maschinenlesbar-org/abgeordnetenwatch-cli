@@ -81,6 +81,12 @@ What the library rejects with `AwValidationError`:
   `sortDirectionProblem`) and a `sortDirection` without `sortBy` (`sortPairProblem`; the
   API answers it with HTTP 500). The CLI keeps the argv-to-number parsing
   (`parseIntArg`) and words the pair rule with its flag names.
+- **Header values** (constructor; `headerValueProblem`, `headerNameProblem`): a
+  `userAgent` or `headers` value that is blank, contains a control character other than
+  tab (CR/LF would inject a header), DEL or a character above U+00FF, and a `headers`
+  name that is not an HTTP token. Only an absent `userAgent` selects the default
+  `abgeordnetenwatch-cli`. The default transport also turns any header Node refuses into
+  an `AwNetworkError` instead of a raw `TypeError`.
 
 ## Scripts
 

@@ -30,6 +30,8 @@ export {
   sortDirectionProblem,
   sortPairProblem,
   validateListParams,
+  headerValueProblem,
+  headerNameProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 export {

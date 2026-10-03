@@ -165,3 +165,27 @@ test("parity: list with valid paging and sort options sends the same request", a
     assertSameRequests(p, options.join(" "));
   }
 });
+
+test("parity: an invalid User-Agent is rejected before any request", async () => {
+  for (const ua of ["", " ", "a\r\nX-Injected: 1", "a\u0000b", `a${String.fromCharCode(0x7f)}`, "€uro"]) {
+    const p = await parity(
+      ["--user-agent", ua, "list", "parties"],
+      (transport) => new AbgeordnetenwatchClient({ userAgent: ua, transport }).list("parties"),
+      listBody,
+    );
+    assertBothReject(p, JSON.stringify(ua));
+  }
+});
+
+test("parity: a valid User-Agent is sent as is", async () => {
+  for (const ua of ["my-ua/1.0", "müller-bot/1.0\t(test)"]) {
+    const p = await parity(
+      ["--user-agent", ua, "list", "parties"],
+      (transport) => new AbgeordnetenwatchClient({ userAgent: ua, transport }).list("parties"),
+      listBody,
+    );
+    assertSameRequests(p, JSON.stringify(ua));
+    assert.equal(p.lib.requests[0]?.headers?.["User-Agent"], ua);
+    assert.equal(p.cli.requests[0]?.headers?.["User-Agent"], ua);
+  }
+});

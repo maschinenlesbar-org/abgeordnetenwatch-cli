@@ -9,9 +9,12 @@ import {
   sortDirectionProblem,
   sortPairProblem,
   validateListParams,
+  headerNameProblem,
+  headerValueProblem,
   type Problem,
 } from "../src/client/validate.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
+import type { EngineOptions } from "../src/client/engine.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 import { AwError, AwValidationError } from "../src/client/errors.js";
 import * as library from "../src/index.js";
@@ -136,4 +139,48 @@ test("count() checks the caller's paging and sort parameters before any request"
     await assert.rejects(client.count("politicians", params), AwValidationError, JSON.stringify(params));
   }
   assert.equal(mt.calls.length, 0);
+});
+
+test("headerValueProblem rejects blanks, control characters but tab, DEL and non-Latin-1", () => {
+  for (const [value, reason] of [
+    ["", "Expected a non-empty value."],
+    ["  ", "Expected a non-empty value."],
+    ["a\r\nX-Injected: 1", "Value contains control characters."],
+    ["a\u0000b", "Value contains control characters."],
+    [`a${String.fromCharCode(0x7f)}`, "Value contains control characters."],
+    ["\u20acuro", "Value contains characters outside Latin-1 (above U+00FF)."],
+  ] as const) {
+    assert.equal(headerValueProblem(value), reason, JSON.stringify(value));
+  }
+  for (const value of ["my-ua/1.0", "müller-bot/1.0\t(test)", "é"]) {
+    assert.equal(headerValueProblem(value), undefined, value);
+  }
+});
+
+test("headerNameProblem accepts HTTP tokens only", () => {
+  for (const name of ["X-Api-Key", "Accept", "x_y.z"]) assert.equal(headerNameProblem(name), undefined, name);
+  for (const name of ["", "X Y", "X:Y", "X\r\nY", "Ü"]) {
+    assert.match(headerNameProblem(name) ?? "", /^Expected an HTTP header name/, JSON.stringify(name));
+  }
+});
+
+test("the client rejects a bad userAgent or header at construction, before any request", () => {
+  const mt = makeMockTransport(() => jsonResponse({ meta: {}, data: [] }));
+  const cases: EngineOptions[] = [
+    { userAgent: "" },
+    { userAgent: "a\r\nX-Injected: 1" },
+    { userAgent: "\u20ac" },
+    { headers: { "X-Test": "a\nb" } },
+    { headers: { "X-Test": " " } },
+    { headers: { "X Bad": "v" } },
+  ];
+  for (const options of cases) {
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ ...options, transport: mt.transport }),
+      (err: unknown) => err instanceof AwValidationError && /^Invalid (userAgent|header)/.test(err.message),
+      JSON.stringify(options),
+    );
+  }
+  assert.equal(mt.calls.length, 0);
+  new AbgeordnetenwatchClient({ userAgent: "ok/1.0", headers: { "X-Test": "v" }, transport: mt.transport });
 });

@@ -107,3 +107,20 @@ test("the default transport rejects a non-http(s) URL with AwNetworkError", asyn
     AwNetworkError,
   );
 });
+
+test("a header Node cannot send rejects with AwNetworkError, not a raw TypeError", async () => {
+  await withServer(
+    (_req, res) => res.end(),
+    async (baseUrl) => {
+      await assert.rejects(
+        nodeHttpTransport({
+          method: "GET",
+          url: `${baseUrl}/x`,
+          headers: { "User-Agent": "a\r\nX-Injected: 1" },
+          timeoutMs: 1000,
+        }),
+        (err: unknown) => err instanceof AwNetworkError && /^Invalid request: /.test(err.message),
+      );
+    },
+  );
+});

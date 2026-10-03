@@ -5,6 +5,7 @@
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import { AwApiError, AwError, AwNetworkError, AwParseError, redactUrl } from "./errors.js";
+import { assertValid, headerNameProblem, headerValueProblem } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.abgeordnetenwatch.de";
 const DEFAULT_USER_AGENT = "abgeordnetenwatch-cli";
@@ -25,14 +26,19 @@ export interface EngineOptions {
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
-  /** Value of the User-Agent header. */
+  /**
+   * Value of the User-Agent header. Must not be blank, nor contain control
+   * characters (tab aside) or characters above U+00FF; such a value throws
+   * AwValidationError at construction.
+   */
   userAgent?: string;
   /**
    * Extra headers sent on every request to the configured origin. When a redirect
    * crosses to a different origin, all of them are dropped (only the engine's own
    * Accept and User-Agent go along), so no credential — Authorization,
    * Proxy-Authorization, Cookie, X-API-Key, X-Auth-Token or any other — leaks to an
-   * arbitrary host named in Location.
+   * arbitrary host named in Location. Names must be HTTP tokens and values follow
+   * the `userAgent` rule; anything else throws AwValidationError at construction.
    */
   headers?: Record<string, string>;
   /**
@@ -215,8 +221,17 @@ export class RequestEngine {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     assertValidBaseUrl(this.baseUrl);
     this.transport = options.transport ?? nodeHttpTransport;
-    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
-    this.extraHeaders = options.headers ?? {};
+    // Header names and values are checked here, so a bad one is an AwValidationError
+    // at construction rather than a raw TypeError (or an injected header) later.
+    this.userAgent =
+      options.userAgent === undefined
+        ? DEFAULT_USER_AGENT
+        : assertValid("userAgent", options.userAgent, headerValueProblem);
+    this.extraHeaders = { ...(options.headers ?? {}) };
+    for (const [name, value] of Object.entries(this.extraHeaders)) {
+      assertValid(`header name ${JSON.stringify(name)}`, name, headerNameProblem);
+      assertValid(`header ${JSON.stringify(name)}`, value, headerValueProblem);
+    }
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 30_000, MAX_TIMEOUT_MS);
     this.maxRetries = intOption("maxRetries", options.maxRetries, 2, MAX_RETRIES);
     this.retryDelayMs = intOption(

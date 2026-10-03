@@ -88,3 +88,28 @@ export function validateListParams(params: ListParams): void {
   }
   assertValid("sortDirection", params, sortPairProblem);
 }
+
+/**
+ * Rule for an HTTP header value (the User-Agent, `headers`): not blank, no C0
+ * control character other than tab (so no CR/LF header injection), no DEL and
+ * nothing above U+00FF. Node's HTTP layer throws an opaque "Invalid character in
+ * header content" at request time for those. Checked by char code so the source
+ * stays free of control bytes.
+ */
+export const headerValueProblem: Problem<unknown> = (value) => {
+  const blank = nonBlankProblem(value);
+  if (blank !== undefined) return blank;
+  const text = value as string;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if ((c < 0x20 && c !== 0x09) || c === 0x7f) return "Value contains control characters.";
+    if (c > 0xff) return "Value contains characters outside Latin-1 (above U+00FF).";
+  }
+  return undefined;
+};
+
+/** Rule for an HTTP header name: an RFC 9110 token. */
+export const headerNameProblem: Problem<unknown> = (value) =>
+  typeof value === "string" && /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(value)
+    ? undefined
+    : "Expected an HTTP header name (letters, digits and !#$%&'*+.^_`|~-).";
