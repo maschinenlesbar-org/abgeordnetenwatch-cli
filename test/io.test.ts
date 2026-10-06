@@ -38,3 +38,12 @@ test("another stderr write error exits 1", () => {
   s.stderr.emit("error", epipe("EIO"));
   assert.deepEqual(s.exits, [1]);
 });
+
+test("ENOTCONN (stdout a socket whose reader has gone) is treated like EPIPE", () => {
+  const out = setup();
+  out.stdout.emit("error", epipe("ENOTCONN"));
+  assert.deepEqual(out.exits, [0]);
+  const err = setup();
+  err.stderr.emit("error", epipe("ENOTCONN"));
+  assert.deepEqual(err.exits, []);
+});
