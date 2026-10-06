@@ -10,7 +10,7 @@ import { defaultIO } from "./io.js";
 import { AbgeordnetenwatchClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
 import { MAX_RETRIES } from "../client/engine.js";
-import { parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg } from "./shared.js";
+import { forbidRepeatedOptions, parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg } from "./shared.js";
 import { registerEntityCommands } from "./commands/entities.js";
 
 /**
@@ -71,6 +71,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .showHelpAfterError();
 
   registerEntityCommands(program, deps);
+  forbidRepeatedOptions(program);
 
   return program;
 }

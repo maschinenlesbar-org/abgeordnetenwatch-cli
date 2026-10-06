@@ -1,6 +1,6 @@
 // Public entry point for the API client library.
 
-export { AbgeordnetenwatchClient } from "./client.js";
+export { AbgeordnetenwatchClient, LIST_PARAM_KEYS, assertKnownListParams } from "./client.js";
 export {
   RequestEngine,
   DEFAULT_BASE_URL,
@@ -46,6 +46,8 @@ export type { Problem } from "./validate.js";
 export {
   FILTER_KEY,
   RESERVED_FILTER_FIELDS,
+  FORBIDDEN_FILTER_FIELDS,
+  filterValueProblem,
   filterBlankProblem,
   filterKeyProblem,
   reservedFilterProblem,

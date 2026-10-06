@@ -18,6 +18,29 @@ export const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
  */
 export const RESERVED_FILTER_FIELDS = ["range_start", "range_end", "sort_by", "sort_direction"] as const;
 
+/**
+ * Names that are never a field of any collection but have a meaning in JavaScript.
+ * `__proto__` in particular was dropped silently: assigning it to a plain object sets the
+ * prototype instead of adding a key, so the filter never reached the query string and the
+ * unfiltered set came back with exit 0 (where the API rejects an unknown field).
+ */
+export const FORBIDDEN_FILTER_FIELDS = ["__proto__", "constructor", "prototype"] as const;
+
+/**
+ * Rule for a filter value: one string, finite number or boolean. An array went out as
+ * repeated keys (`sex=f&sex=m`), of which the API keeps one — a blank element included,
+ * which it treats as no filter — and NaN, Infinity or an object went out as text
+ * (`NaN`, `[object Object]`).
+ */
+export const filterValueProblem: Problem<unknown> = (value) => {
+  if (Array.isArray(value)) {
+    return "Expected one value; the API keeps only one of repeated keys.";
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? undefined : `Expected a finite number, got ${String(value)}.`;
+  if (typeof value === "string" || typeof value === "boolean") return undefined;
+  return `Expected a string, number or boolean, got ${describeValue(value)}.`;
+};
+
 /** Rule: neither the key nor the value of a filter may be blank. */
 export const filterBlankProblem: Problem<readonly [string, FilterValue]> = ([key, value]) =>
   key.trim() === "" || String(value).trim() === ""
@@ -28,10 +51,15 @@ export const filterBlankProblem: Problem<readonly [string, FilterValue]> = ([key
  * Rule: the key is a field name with at most one bracket operator. The API ignores
  * anything else: `[gt]=1990` drops the filter, `field[gt]x` loses the trailing text.
  */
-export const filterKeyProblem: Problem<string> = (key) =>
-  FILTER_KEY.test(key)
-    ? undefined
-    : "Use a field name, optionally with one operator: sex=f or 'year_of_birth[gt]=1990'.";
+export const filterKeyProblem: Problem<string> = (key) => {
+  if (!FILTER_KEY.test(key)) {
+    return "Use a field name, optionally with one operator: sex=f or 'year_of_birth[gt]=1990'.";
+  }
+  const field = filterField(key);
+  return (FORBIDDEN_FILTER_FIELDS as readonly string[]).includes(field)
+    ? `"${field}" is not a field of any collection.`
+    : undefined;
+};
 
 /** Rule: the key's field is not a paging or sorting parameter ({@link RESERVED_FILTER_FIELDS}). */
 export const reservedFilterProblem: Problem<string> = (key) => {
@@ -80,7 +108,9 @@ export function filterField(key: string): string {
 /**
  * Check a filters object against every filter rule; throws AwValidationError
  * (`Invalid filter "<key>": <reason>`) at the first problem. An `undefined` or
- * `null` value means the filter is omitted, as in the query string.
+ * `null` value means the filter is omitted, as in the query string. Every other
+ * value must be one string, finite number or boolean (filterValueProblem), and
+ * `__proto__`, `constructor` and `prototype` are no field names (filterKeyProblem).
  */
 export function validateFilters(filters: Readonly<Record<string, FilterValue | null | undefined>>): void {
   if (typeof filters !== "object" || filters === null || Array.isArray(filters)) {
@@ -92,6 +122,7 @@ export function validateFilters(filters: Readonly<Record<string, FilterValue | n
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;
     const name = `filter ${describeValue(key)}`;
+    assertValid(name, value, filterValueProblem);
     assertValid(name, [key, value] as const, filterBlankProblem);
     assertValid(name, key, filterKeyProblem);
     assertValid(name, key, reservedFilterProblem);

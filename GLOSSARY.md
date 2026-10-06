@@ -174,6 +174,12 @@ key and a plain key next to an operator key on the same field (`sex=f 'sex[ne]=m
 would keep only one) as usage errors; one field with two different operators is fine. The
 library's `list()` and `count()` reject the same filters with `AwValidationError` before
 sending anything, because the API would drop them silently and return the unfiltered set.
+They also reject the names `__proto__`, `constructor` and `prototype` (no collection has such
+a field, and `__proto__` used to vanish from the request), a filter value that is not one
+string, number or boolean (an array, which went out as repeated keys of which the API keeps
+one, `NaN`, an object), and a parameter other than `filters`, `rangeStart`, `rangeEnd`,
+`sortBy` and `sortDirection` (a misspelled `filter` returned the whole collection). Every CLI
+option takes one value: giving one twice (`--range-end 5 --range-end 500`) is a usage error.
 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
 or `desc`). With `--sort-by` alone the API sorts **descending**; `--sort-direction` without

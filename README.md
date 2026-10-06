@@ -80,6 +80,9 @@ Add filters as `key=value` arguments after the entity:
 
   (Quote any filter containing `[ ]` so your shell doesn't glob it.)
 
+Each filter key may appear once, and every option takes one value: giving one twice
+(`sex=f sex=m`, `--range-end 5 --range-end 500`) is a usage error, never "the last one wins".
+
 ### Paging
 
 `--range-end` is the **page size** (number of items). The API honours it up to

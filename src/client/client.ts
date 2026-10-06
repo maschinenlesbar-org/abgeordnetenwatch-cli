@@ -26,6 +26,24 @@ import {
 
 const API_PREFIX = "/api/v2";
 
+/**
+ * The keys a ListParams object may have. Any other key (`filter`, `range_end`, `sortby`,
+ * `__proto__` from parsed JSON) used to be ignored, so a misspelled `filters` returned the
+ * whole collection with no error.
+ */
+export const LIST_PARAM_KEYS = ["filters", "rangeStart", "rangeEnd", "sortBy", "sortDirection"] as const;
+
+/** Throw AwValidationError for a ListParams key outside {@link LIST_PARAM_KEYS}. */
+export function assertKnownListParams(params: object): void {
+  for (const key of Object.keys(params)) {
+    if (!(LIST_PARAM_KEYS as readonly string[]).includes(key)) {
+      throw new AwValidationError(
+        `Invalid params: unknown parameter ${JSON.stringify(redactUrl(key))}. Valid parameters: ${LIST_PARAM_KEYS.join(", ")}; filters go in "filters".`,
+      );
+    }
+  }
+}
+
 export class AbgeordnetenwatchClient {
   private readonly engine: RequestEngine;
 
@@ -41,8 +59,10 @@ export class AbgeordnetenwatchClient {
    */
   private toQuery(params: ListParams): QueryParams {
     assertParams("params", params);
+    assertKnownListParams(params);
     validateListParams(params);
-    const query: QueryParams = {};
+    // No prototype: a key such as `__proto__` can only ever be a key here.
+    const query: QueryParams = Object.create(null) as QueryParams;
     if (params.filters !== undefined && params.filters !== null) {
       validateFilters(params.filters);
       for (const [key, value] of Object.entries(params.filters)) query[key] = value;
@@ -97,6 +117,7 @@ export class AbgeordnetenwatchClient {
   async count(collection: EntityCollection, params: ListParams = {}): Promise<number> {
     // Check the caller's own parameters, including a rangeEnd that is then replaced.
     assertParams("params", params);
+    assertKnownListParams(params);
     validateListParams(params);
     const res = await this.list(collection, { ...params, rangeEnd: 1 });
     const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;

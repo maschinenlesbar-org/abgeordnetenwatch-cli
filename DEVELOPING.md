@@ -75,7 +75,17 @@ What the library rejects with `AwValidationError`:
   an operator outside `FILTER_OPERATORS`, a paging or sorting name
   (`RESERVED_FILTER_FIELDS`: `range_start`, `range_end`, `sort_by`, `sort_direction`)
   and a plain key next to a bracket key on the same field. The API drops such a filter
-  silently and returns the unfiltered (or partly filtered) set as a success. The CLI
+  silently and returns the unfiltered (or partly filtered) set as a success. Also the
+  names `__proto__`, `constructor` and `prototype` (`FORBIDDEN_FILTER_FIELDS`; assigning
+  `__proto__` to a plain object set the prototype, so the filter vanished from the
+  request), and a value that is not one string, finite number or boolean
+  (`filterValueProblem`: an array went out as repeated keys, of which the API keeps
+  one, `NaN` and objects as text). An ordinary unknown field is sent: the API rejects it
+  itself with HTTP 500 ("The following parameter(s) are not valid: …").
+- **Parameter keys** (`list`, `count`; `assertKnownListParams`): a key outside
+  `LIST_PARAM_KEYS` (`filters`, `rangeStart`, `rangeEnd`, `sortBy`, `sortDirection`). A
+  misspelled `filter` or a wire name such as `range_end` used to be ignored. The CLI makes
+  a repeated single-value option a usage error (`forbidRepeatedOptions`). The CLI
   keeps only what argv needs on top: the split at the first `=` and the check for an
   exact repeated key.
 - **Paging and sorting** (`list`, `count`; `validateListParams`): `rangeStart` and

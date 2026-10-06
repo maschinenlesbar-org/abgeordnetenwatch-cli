@@ -84,6 +84,8 @@ export function parseBaseUrl(value: string): string {
  * so values may themselves contain `=`. A missing `=` or empty key is an error.
  */
 export function parseFilters(args: string[]): Record<string, string> {
+  // `__proto__`, `constructor` and `prototype` never get here: filterArg rejects them
+  // (filterKeyProblem), so plain assignment can't set a prototype.
   const filters: Record<string, string> = {};
   for (const arg of args) {
     const eq = arg.indexOf("=");
@@ -95,6 +97,28 @@ export function parseFilters(args: string[]): Record<string, string> {
     filters[arg.slice(0, eq)] = arg.slice(eq + 1);
   }
   return filters;
+}
+
+/**
+ * Make giving a single-value option twice a usage error, on `command` and every
+ * subcommand. Commander keeps the last value silently: `--range-end 5 --range-end 500`
+ * fetched 500 rows, and `--base-url a --base-url b` asked b, with nothing telling the
+ * user a value was dropped. Flags without a value are left alone. Call it once on a
+ * freshly built program: the check counts per Option object.
+ */
+export function forbidRepeatedOptions(command: Command): void {
+  for (const option of command.options) {
+    if ((!option.required && !option.optional) || option.variadic) continue;
+    const parse = option.parseArg;
+    let given = false;
+    const guarded = (value: string, previous: unknown): unknown => {
+      if (given) throw new InvalidArgumentError(`${option.long ?? option.short} may be given only once.`);
+      given = true;
+      return parse === undefined ? value : parse(value, previous);
+    };
+    option.parseArg = guarded as typeof option.parseArg;
+  }
+  for (const child of command.commands) forbidRepeatedOptions(child);
 }
 
 export interface GlobalOptions {

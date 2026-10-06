@@ -183,7 +183,14 @@ wiederholten Schlüssel und einen einfachen Schlüssel neben einem Operator-Schl
 Feld (`sex=f 'sex[ne]=m'`: die API würde nur einen behalten) als Aufruffehler ab; ein Feld mit
 zwei verschiedenen Operatoren ist erlaubt. `list()` und `count()` der Bibliothek weisen dieselben
 Filter mit `AwValidationError` ab, bevor sie etwas senden, denn die API würde sie stillschweigend
-verwerfen und die ungefilterte Menge liefern.
+verwerfen und die ungefilterte Menge liefern. Sie weisen außerdem die Namen `__proto__`,
+`constructor` und `prototype` ab (keine Sammlung hat ein solches Feld, und `__proto__`
+verschwand bisher aus der Anfrage), einen Filterwert, der nicht genau eine Zeichenkette, Zahl
+oder ein Wahrheitswert ist (ein Array, das als wiederholter Schlüssel hinausging, von dem die
+API nur einen behält, `NaN`, ein Objekt), und einen Parameter außer `filters`, `rangeStart`,
+`rangeEnd`, `sortBy` und `sortDirection` (ein falsch geschriebenes `filter` lieferte die ganze
+Sammlung). Jede CLI-Option nimmt einen Wert: zweimal angegeben (`--range-end 5 --range-end 500`)
+ist sie ein Aufruffehler.
 
 **Sortieren (`--sort-by`, `--sort-direction`).** Gesendet als `sort_by` und `sort_direction`
 (`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**; `--sort-direction`
