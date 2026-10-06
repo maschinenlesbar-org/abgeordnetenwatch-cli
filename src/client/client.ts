@@ -11,7 +11,7 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwError, AwParseError } from "./errors.js";
+import { AwError, AwParseError, redactUrl } from "./errors.js";
 import { normalizeEntityId, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
@@ -113,7 +113,7 @@ export class AbgeordnetenwatchClient {
 function checkCollection(collection: string): string {
   if (!isEntityCollection(collection)) {
     throw new AwError(
-      `Unknown collection "${collection}". Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
+      `Unknown collection ${JSON.stringify(redactUrl(String(collection)))}. Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
     );
   }
   return collection;

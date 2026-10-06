@@ -4,7 +4,7 @@
 // a request; the CLI's commander parsers call the same Problem functions, so a
 // rule is written once and both layers reject exactly the same inputs.
 
-import { AwValidationError } from "./errors.js";
+import { AwValidationError, redactUrl } from "./errors.js";
 import { SORT_DIRECTIONS, type ListParams } from "./types.js";
 
 /**
@@ -47,7 +47,7 @@ export const entityIdProblem: Problem<number | string> = (id) => {
  * so `0002` would be "no such entity" although party 2 exists. Idempotent.
  */
 export function normalizeEntityId(id: number | string): string {
-  assertValid(`id "${String(id)}"`, id, entityIdProblem);
+  assertValid(`id ${describeValue(String(id))}`, id, entityIdProblem);
   return String(id).replace(/^0+/, "");
 }
 
@@ -58,11 +58,20 @@ export function normalizeEntityId(id: number | string): string {
 export const nonBlankProblem: Problem<unknown> = (value) =>
   typeof value !== "string" || value.trim() === "" ? "Expected a non-empty value." : undefined;
 
+/**
+ * A rejected value as a message shows it: a string quoted, with any URL userinfo cut
+ * out (`redactUrl`), so a credential URL passed in the wrong place never reaches the
+ * message.
+ */
+export function describeValue(value: unknown): string {
+  return typeof value === "string" ? JSON.stringify(redactUrl(value)) : String(value);
+}
+
 /** Rule for `rangeStart` and `rangeEnd`: a non-negative safe integer. */
 export const rangeProblem: Problem<unknown> = (value) =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? undefined
-    : `Expected a non-negative integer up to ${Number.MAX_SAFE_INTEGER}, got ${String(value)}.`;
+    : `Expected a non-negative integer up to ${Number.MAX_SAFE_INTEGER}, got ${describeValue(value)}.`;
 
 /** Rule for `sortDirection`: one of {@link SORT_DIRECTIONS}; the API answers anything else with HTTP 500. */
 export const sortDirectionProblem: Problem<unknown> = (value) =>

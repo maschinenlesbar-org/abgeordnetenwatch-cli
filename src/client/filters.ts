@@ -5,7 +5,7 @@
 // sends a request, and the CLI's filter parser calls the same rules.
 
 import { FILTER_OPERATORS, type FilterValue } from "./types.js";
-import { assertValid, type Problem } from "./validate.js";
+import { assertValid, describeValue, type Problem } from "./validate.js";
 
 /** A filter key: a field name, optionally followed by one `[op]` suffix. */
 export const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
@@ -44,7 +44,7 @@ export const reservedFilterProblem: Problem<string> = (key) => {
 export const filterOperatorProblem: Problem<string> = (key) => {
   const op = FILTER_KEY.exec(key)?.[2];
   if (op === undefined || (FILTER_OPERATORS as readonly string[]).includes(op)) return undefined;
-  return `Unknown filter operator "[${op}]" in "${key}". Valid operators: ${FILTER_OPERATORS.join(", ")}.`;
+  return `Unknown filter operator "[${op}]" in ${describeValue(key)}. Valid operators: ${FILTER_OPERATORS.join(", ")}.`;
 };
 
 /**
@@ -85,7 +85,7 @@ export function validateFilters(filters: Readonly<Record<string, FilterValue | n
   const keys: string[] = [];
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;
-    const name = `filter "${key}"`;
+    const name = `filter ${describeValue(key)}`;
     assertValid(name, [key, value] as const, filterBlankProblem);
     assertValid(name, key, filterKeyProblem);
     assertValid(name, key, reservedFilterProblem);

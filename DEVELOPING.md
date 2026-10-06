@@ -160,6 +160,17 @@ npm start -- --help # run the CLI from source build
   `new URL()` would trim silently while the engine kept the raw string (`"https://h/ "`
   requested `/%20/api/v2/...`).
 
+- **Credentials never reach output.** Userinfo in the base URL
+  (`https://user:secret@mirror/`) is allowed, but `redactUrl` (exported from
+  [`errors.ts`](src/client/errors.ts)) shows it as `***@` in every error message and in
+  `AwApiError.url`, and library messages quote a rejected value through it. The CLI also
+  redacts on output: `run.ts` (`withRedactedOutput`) takes the exact userinfo of every
+  argument (`credentialsIn`, exported) and replaces it with `***` in everything it prints
+  — commander's usage errors, which echo rejected values, an unknown command, a stray
+  argument — so a password with spaces, quotes, `#`, `?` or `/` is caught as well as an
+  ordinary one. `redactUrl` falls back to the same text-based cut (`redactCredentials`,
+  exported) for a value that doesn't parse as a URL.
+
 ## Website
 
 The project website — <https://maschinenlesbar-org.github.io/abgeordnetenwatch-cli/> in English

@@ -101,6 +101,10 @@ See [openapi.yaml](openapi.yaml) for every field of every entity.
 `--base-url <url>`, `--timeout <ms>`, `--user-agent <ua>`,
 `--max-retries <n>` (transient 429/503, 0..10), `--max-response-bytes <n>`, `--compact`.
 
+Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mirror; the
+API itself needs none) are sent as HTTP Basic auth and shown as `***` in everything the CLI
+prints, usage errors included.
+
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically. Sending a descriptive `--user-agent` is appreciated by the
 provider.

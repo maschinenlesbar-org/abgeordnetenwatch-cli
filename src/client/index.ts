@@ -21,6 +21,8 @@ export {
   AwParseError,
   AwValidationError,
   redactUrl,
+  credentialsIn,
+  redactCredentials,
 } from "./errors.js";
 export {
   assertValid,
@@ -34,6 +36,7 @@ export {
   headerValueProblem,
   headerNameProblem,
   baseUrlProblem,
+  describeValue,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 export {
