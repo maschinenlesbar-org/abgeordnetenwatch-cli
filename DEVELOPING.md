@@ -134,7 +134,9 @@ npm start -- --help # run the CLI from source build
   transport contract, P6 the retry policy, P7 pipes and exit codes (runs the built bin),
   P8/P9/P13 charset, envelopes and error classes, P10 strict filters and parameters,
   P20 the stderr warning for a plain-`http:` base URL (its env-variable and other-secret
-  cases are skipped: this CLI reads no environment variable and sends no key).
+  cases are skipped: this CLI reads no environment variable and sends no key), P21 the
+  README's relative links (README.md ships to npmjs.com, so a link to a document the
+  `files` allowlist leaves out must be an absolute GitHub URL).
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)

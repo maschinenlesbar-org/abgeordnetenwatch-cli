@@ -20,8 +20,8 @@ matches, and pipe the JSON straight into [`jq`](https://jqlang.github.io/jq/).
   is **CC0 1.0** (public domain); see [DATA_LICENSE.md](DATA_LICENSE.md).
 
 > Want to use this as a TypeScript library or understand how it's built?
-> See **[DEVELOPING.md](DEVELOPING.md)**. The full API reference lives in
-> **[openapi.yaml](openapi.yaml)**.
+> See **[DEVELOPING.md](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/DEVELOPING.md)**. The full API reference lives in
+> **[openapi.yaml](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/openapi.yaml)**.
 
 ## Install
 
@@ -65,7 +65,7 @@ abgeordnetenwatch list votes poll=6569 --data-only | jq '.[].vote' | sort | uniq
 `--data-only` (on `list`/`get`) prints just the `data` payload instead of the
 full `{ meta, data }` envelope.
 
-New to terms like *mandate*, *poll* or *fraction*? The **[Glossary](GLOSSARY.md)**
+New to terms like *mandate*, *poll* or *fraction*? The **[Glossary](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/GLOSSARY.md)**
 explains every entity, its key fields and the filter syntax.
 
 ### Filtering
@@ -97,7 +97,7 @@ reports the true total.
 `election-program`, `electoral-lists`, `constituencies`, `sidejobs`,
 `sidejob-organizations`, `topics`, `cities`, `countries`.
 
-See [openapi.yaml](openapi.yaml) for every field of every entity.
+See [openapi.yaml](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/openapi.yaml) for every field of every entity.
 
 ## Global options
 
@@ -136,7 +136,7 @@ failed run still exits with its own code.
 
 ## Claude Code skills
 
-Three [Agent Skills](SKILLS.md) teach Claude Code to use this CLI for real questions:
+Three [Agent Skills](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/SKILLS.md) teach Claude Code to use this CLI for real questions:
 summarise a politician's roll-call voting record (**abgeordnetenwatch-voting-record**), surface
 disclosed side income (**abgeordnetenwatch-sidejobs**), and show how each fraction voted on a
 named roll call (**abgeordnetenwatch-poll-breakdown**). Install them from the maschinenlesbar.org marketplace:
@@ -146,7 +146,7 @@ named roll call (**abgeordnetenwatch-poll-breakdown**). Install them from the ma
 /plugin install abgeordnetenwatch@maschinenlesbar
 ```
 
-See **[SKILLS.md](SKILLS.md)** for details.
+See **[SKILLS.md](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/SKILLS.md)** for details.
 
 ## License
 
