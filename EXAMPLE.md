@@ -3,7 +3,7 @@
 Real examples for the Claude Code skills of the `abgeordnetenwatch` plugin, one per skill: a request,
 the `abgeordnetenwatch` commands the skill ran, and the answer Claude gave.
 
-Every example ran against the live API on 15 September 2026 with `abgeordnetenwatch` 0.0.7.
+Every example ran against the live API on 6 October 2026 with `abgeordnetenwatch` 0.2.0.
 The data changes, so your results will differ; the ids and keys shown work for trying the
 requests yourself. Long lists are shortened.
 
@@ -17,16 +17,15 @@ Skills: [abgeordnetenwatch-poll-breakdown](#abgeordnetenwatch-poll-breakdown) ·
 
 ```bash
 abgeordnetenwatch list parliament-periods parliament=5 --sort-by id --sort-direction desc --range-end 5 --data-only --compact
-abgeordnetenwatch list polls field_legislature=161 --sort-by id --sort-direction desc --range-end 20 --data-only --compact   # exit 1: HTTP 500 "id is not a valid value for sort_by"
-abgeordnetenwatch list polls field_legislature=161 --sort-by field_poll_date --sort-direction desc --range-end 20 --data-only --compact
-abgeordnetenwatch --compact get polls 6600
+abgeordnetenwatch list polls field_legislature=161 'label[cn]=Tempolimit' --sort-by field_poll_date --sort-direction desc --range-end 20 --data-only --compact
 abgeordnetenwatch count votes poll=6600                      # 630
-abgeordnetenwatch list votes poll=6600 --range-start 0 --range-end 100 --data-only --compact   # 7 pages, start 0…600
+abgeordnetenwatch list votes poll=6600 --range-start 0 --range-end 1000 --data-only --compact   # the skill's loop: one page
 ```
 
-The skill's own poll listing (`--sort-by id`) is rejected by the API for polls, so it sorted by
-`field_poll_date` instead. Poll 6600 (period 161 = Bundestag 2025 - 2029) was the match. The
-paging loop collected 630 of 630 votes, and the totals match the poll text (467 no, 137 yes).
+Period 161 is the Bundestag 2025 - 2029. The poll listing, sorted by `field_poll_date` as the
+skill says and narrowed to the subject with a `label[cn]` filter, had one match: poll 6600. The
+paging loop collected 630 of 630 votes (630 distinct ids) in one 1000-row page, and the totals
+match the poll text (467 no, 137 yes, no abstentions).
 
 ```
 Roll-call breakdown — "Einführung eines allgemeinen Tempolimits" (Bundestag 2025 - 2029, 2026-07-09) — accepted: no
@@ -41,15 +40,15 @@ By fraction:
   fraktionslos             1 yes ·   2 no · 0 abstain · 0 no-show
     (yes: Stefan Seidler; no: Jan Wenzel Schmidt, Sieghard Knodel)
 
-What it was: a Green bill (Drucksache 21/5319) for a general 130 km/h limit on Autobahns and
-similar multi-lane roads, plus a government report on fuel use, CO₂ and road deaths five months
-after it took effect. The Verkehrsausschuss recommended rejection; the coalition and the AfD
-voted it down together.
+What it was: a bill by the Greens for a general 130 km/h limit on Autobahns and similar
+multi-lane roads (100 km/h stays the rule on rural roads), plus a government report on fuel use,
+energy prices, CO₂, air quality and road deaths five months after it took effect. The
+Verkehrsausschuss recommended rejection; the coalition and the AfD voted it down together.
 Poll 6600 · https://www.abgeordnetenwatch.de/bundestag/21/abstimmungen/einfuehrung-eines-allgemeinen-tempolimits
 ```
 
-Next steps offered: the same breakdown for the GKV-Reform vote on 2026-07-10 (poll 6601), or one
-member's record via abgeordnetenwatch-voting-record.
+Next steps offered: the same breakdown for another vote of the period, or one member's record
+via abgeordnetenwatch-voting-record.
 
 ## abgeordnetenwatch-sidejobs
 
@@ -57,37 +56,41 @@ member's record via abgeordnetenwatch-voting-record.
 
 ```bash
 abgeordnetenwatch list politicians 'last_name[cn]=Gysi' --range-end 10 --data-only --compact
-abgeordnetenwatch list candidacies-mandates politician=79334 --data-only --compact
-abgeordnetenwatch count sidejobs mandates=68562              # 82
-abgeordnetenwatch list sidejobs mandates=68562 --range-end 100 --data-only --compact > sj.json
+abgeordnetenwatch list candidacies-mandates politician=79334 current_on=all --data-only --compact
+abgeordnetenwatch count sidejobs mandates=68562              # 89
+abgeordnetenwatch list sidejobs mandates=68562 --range-end 1000 --data-only --compact > sj.json
 ```
 
-One politician matched (id 79334, Die Linke, born 1948), with one current mandate. Every entry
-that has an income band also has an exact amount, so the brief uses the amounts; per-payer sums
-add exact figures only.
+One politician matched (id 79334, Die Linke, born 1948). With `current_on=all` the mandate
+lookup listed six Bundestag mandates (2005 - 2009 to 2025 - 2029); the brief covers the most
+recent, 68562, and offers the others. Every entry with an income band also has an exact
+amount, so the brief uses the amounts; per-payer sums add exact figures only.
 
 ```
 Side jobs — Gregor Gysi (Die Linke), Bundestag 2025 - 2029  ·  mandate 68562
-82 disclosed activities: 78 with a declared amount, 4 without an amount
-(64 marked "Einkommen im Jahr 2025", 15 "Einkommen im Jahr 2026", 3 unmarked)
+89 disclosed activities: 85 with a declared amount, 4 without an amount
+(64 marked "Einkommen im Jahr 2025", 22 "Einkommen im Jahr 2026", 3 unmarked)
 
 Largest single declared amounts:
 • Publizistische Tätigkeit — Aufbau Verlage GmbH & Co. KG — declared €10,321.53 (band 3) · Berlin
 • Vortrag „Investmentstrategie 2026 - Europa Quo Vadis?" (Bankhaus Metzler) — Celebrity Speakers Limited — €8,000 (band 3) · Burnham (Buckinghamshire)
 • Keynote bei der ARENIT Industrie GmbH — CSA Celebrity Speakers GmbH — €8,000 (band 3) · Hamburg
-• Vortrag bei der Jahrestagung des VDKL, Bonn — Econ Referenten-Agentur - Dölle & Gissing GbR — €7,200 (band 3)
+• Publizistische Tätigkeit — Aufbau Verlage GmbH & Co. KG — €8,000 (band 3) · Berlin
+• Vortrag bei der Jahrestagung des VDKL, Bonn — Econ Referenten-Agentur - Dölle & Gissing GbR — €7,200 (band 3) · Leipzig
+• Gespräch „Blick auf die deutsche Wirtschaft und der globale Vergleich" — Synsero Expert GmbH — €7,000 (band 2) · München
 • Mitglied in der Jury zur Vergabe des Powered by Philip Morris Award — Boros GmbH — €7,000 (band 2) · Berlin
-• Mitglied des Beirates für gemeinnützige Zwecke — Spielbank Berlin GmbH & Co. KG — €6,302.52 (band 2)
-  … 72 more, mostly talks and book events at €1,100–€7,000
+  … 78 more, mostly talks and book events at €1,100–€7,000
 
 Most frequent payers (entries · sum of declared amounts):
-  Tränenpalast Management GmbH                    18 · €35,300    ("Gespräch mit …" series)
-  Openminds Media GmbH                             8 · €19,975    (Gysi vs. Guttenberg events, podcast)
+  Tränenpalast Management GmbH                    19 · €37,300    ("Gespräch mit …" series)
+  Openminds Media GmbH                             9 · €22,475    (talks and podcasts with Guttenberg)
+  ART 28 GmbH & Co. KG                             7 · €14,000
   kulturbotschafter EVENTS GbR                     6 · €24,100.74 (book presentations)
-  ART 28 GmbH & Co. KG                             6 · €12,000
   Lausitz.Live GmbH                                5 · €7,500
+  Jahn Event                                       5 · €6,600
   Econ Referenten-Agentur - Dölle & Gissing GbR    4 · €27,200
-  … 23 more payers, incl. Knorr Bremse AG (€4,000)
+  MEET Live GmbH                                   3 · €18,000
+  … 22 more payers, incl. Spielbank Berlin (€6,302.52) and Knorr Bremse AG (€4,000)
 
 Disclosed without an amount: Rechtsanwalt und Publizist (no payer named); Beteiligung and
 "Rechtsanwalt - Mandant 2" at Venedey, Dr. Gysi, Holter, Höfler, Rechtsanwälte in Partnerschaft;
@@ -96,29 +99,33 @@ These are self-disclosures under the Bundestag code of conduct.
 Profile: https://www.abgeordnetenwatch.de/profile/gregor-gysi
 ```
 
+Next steps offered: the disclosures of an earlier period (mandate 53789, 2021 - 2025).
+
 ## abgeordnetenwatch-voting-record
 
 > How has Heidi Reichinnek voted in the Bundestag so far this term?
 
 ```bash
 abgeordnetenwatch list politicians 'last_name[cn]=Reichinnek' --range-end 10 --data-only --compact
-abgeordnetenwatch list candidacies-mandates politician=149570 --data-only --compact   # only the current mandate
-abgeordnetenwatch list candidacies-mandates politician=149570 current_on=all --data-only --compact   # also 53483 (2021 - 2025)
-abgeordnetenwatch count votes mandate=68819                  # 68, one page
-abgeordnetenwatch list votes mandate=68819 --range-end 100 --data-only --compact > v.json
-abgeordnetenwatch list polls field_legislature=161 --range-end 100 --data-only --compact   # poll dates
+abgeordnetenwatch list candidacies-mandates politician=149570 current_on=all --data-only --compact   # 68819 (2025 - 2029), 53483 (2021 - 2025)
+abgeordnetenwatch count votes mandate=68819                  # 72, one page
+abgeordnetenwatch list votes mandate=68819 --range-end 1000 --data-only --compact > v.json
+abgeordnetenwatch list polls field_legislature=161 --range-end 1000 --data-only --compact   # poll dates
 ```
 
-The skill's mandate lookup returned only the current seat; the earlier one showed up only with
-`current_on=all`. Poll dates were joined in to explain the no-shows, which all fall on one day.
+The mandate lookup with `current_on=all` returned both seats; the brief covers the current one.
+Vote records carry no date, so the poll dates were joined in to place the no-shows: eight fall on
+one day, two on the latest sitting.
 
 ```
 Voting record — Heidi Reichinnek (Die Linke), Bundestag 2025 - 2029
 politician 149570 · mandate 68819
-68 recorded roll-call votes (2025-06-25 – 2026-07-10): 22 yes · 34 no · 4 abstain · 8 no-show
-(no_show = did not participate; all 8 were on 2025-11-13)
+72 recorded roll-call votes (2025-06-25 – 2026-09-25): 23 yes · 35 no · 4 abstain · 10 no-show
+(no_show = did not participate; 8 on 2025-11-13, 2 on 2026-09-25)
 
 Recent notable votes:
+• no  — Modernisierung des Bundespolizeigesetzes (6662)
+• yes — Klimaanpassung und Naturschutz im Grundgesetz verankern (6664)
 • yes — Einführung eines allgemeinen Tempolimits (6600)
 • no  — GKV-Reform (6601)
 • no  — Gebäudemodernisierungsgesetz (6605)
@@ -127,6 +134,7 @@ Recent notable votes:
 • no  — Modernisierung des Wehrdienstes (6359)
 • no  — Umgestaltung des Bürgergelds zur neuen Grundsicherung (SGB II) (6422)
 • yes — Mietwuchergesetz (6311)
+Not taking part on 2026-09-25: Tankrabatt für Benzin und Diesel; Einführung einer Übergewinnsteuer.
 Abstained: Stabilisierung des Rentenniveaus und Gleichstellung der Kindererziehungszeiten;
 Eingefrorenes russisches Staatsvermögen nicht der Ukraine zur Verfügung stellen (both 2025-12-05);
 Keine stärkere Absicherung des EU-Förderprogramms LEADER (2026-05-08);

@@ -3,7 +3,7 @@
 Echte Beispiele für die Claude-Code-Skills des Plugins `abgeordnetenwatch`, eines pro Skill: eine
 Anfrage, die `abgeordnetenwatch`-Befehle, die der Skill ausgeführt hat, und Claudes Antwort.
 
-Jedes Beispiel lief am 15. September 2026 mit `abgeordnetenwatch` 0.0.7 gegen die Live-API.
+Jedes Beispiel lief am 6. Oktober 2026 mit `abgeordnetenwatch` 0.2.0 gegen die Live-API.
 Die Daten ändern sich, Ihre Ergebnisse werden also abweichen; mit den gezeigten IDs und
 Schlüsseln können Sie die Anfragen selbst ausprobieren. Lange Listen sind gekürzt.
 
@@ -17,17 +17,16 @@ Skills: [abgeordnetenwatch-poll-breakdown](#abgeordnetenwatch-poll-breakdown) ·
 
 ```bash
 abgeordnetenwatch list parliament-periods parliament=5 --sort-by id --sort-direction desc --range-end 5 --data-only --compact
-abgeordnetenwatch list polls field_legislature=161 --sort-by id --sort-direction desc --range-end 20 --data-only --compact   # Exit 1: HTTP 500 "id is not a valid value for sort_by"
-abgeordnetenwatch list polls field_legislature=161 --sort-by field_poll_date --sort-direction desc --range-end 20 --data-only --compact
-abgeordnetenwatch --compact get polls 6600
+abgeordnetenwatch list polls field_legislature=161 'label[cn]=Tempolimit' --sort-by field_poll_date --sort-direction desc --range-end 20 --data-only --compact
 abgeordnetenwatch count votes poll=6600                      # 630
-abgeordnetenwatch list votes poll=6600 --range-start 0 --range-end 100 --data-only --compact   # 7 Seiten, Start 0…600
+abgeordnetenwatch list votes poll=6600 --range-start 0 --range-end 1000 --data-only --compact   # die Schleife des Skills: eine Seite
 ```
 
-Die im Skill vorgesehene Sortierung (`--sort-by id`) lehnt die API für Abstimmungen ab. Deshalb
-hat der Skill nach `field_poll_date` sortiert. Treffer war Abstimmung 6600 (Periode 161 =
-Bundestag 2025 - 2029). Die Blätterschleife hat alle 630 von 630 Stimmen geholt, und die Summen
-stimmen mit dem Abstimmungstext überein (467 Nein, 137 Ja).
+Periode 161 ist der Bundestag 2025 - 2029. Die Liste der Abstimmungen, wie im Skill nach
+`field_poll_date` sortiert und mit einem `label[cn]`-Filter auf das Thema eingegrenzt, hatte
+einen Treffer: Abstimmung 6600. Die Blätterschleife hat alle 630 von 630 Stimmen (630
+verschiedene IDs) mit einer Seite zu 1.000 Einträgen geholt, und die Summen stimmen mit dem
+Abstimmungstext überein (467 Nein, 137 Ja, keine Enthaltungen).
 
 ```
 Namentliche Abstimmung – „Einführung eines allgemeinen Tempolimits" (Bundestag 2025 - 2029, 2026-07-09) – angenommen: nein
@@ -42,15 +41,16 @@ Nach Fraktion:
   fraktionslos             1 Ja ·   2 Nein · 0 Enth. · 0 nicht beteiligt
     (Ja: Stefan Seidler; Nein: Jan Wenzel Schmidt, Sieghard Knodel)
 
-Worum es ging: ein Gesetzentwurf der Grünen (Drucksache 21/5319) für ein allgemeines Tempolimit
-von 130 km/h auf Autobahnen und ähnlichen mehrspurigen Straßen, dazu ein Bericht der
-Bundesregierung zu Kraftstoffverbrauch, CO₂ und Verkehrstoten fünf Monate nach Einführung. Der
-Verkehrsausschuss hatte die Ablehnung empfohlen; Koalition und AfD stimmten gemeinsam dagegen.
+Worum es ging: ein Gesetzentwurf der Grünen für ein allgemeines Tempolimit von 130 km/h auf
+Autobahnen und ähnlichen mehrspurigen Straßen (auf Landstraßen bleibt es bei 100 km/h), dazu ein
+Bericht der Bundesregierung zu Kraftstoffverbrauch, Energiepreisen, CO₂, Luftqualität und
+Verkehrstoten fünf Monate nach Einführung. Der Verkehrsausschuss hatte die Ablehnung empfohlen;
+Koalition und AfD stimmten gemeinsam dagegen.
 Abstimmung 6600 · https://www.abgeordnetenwatch.de/bundestag/21/abstimmungen/einfuehrung-eines-allgemeinen-tempolimits
 ```
 
-Als Nächstes angeboten: dieselbe Aufschlüsselung für die Abstimmung zur GKV-Reform am 10.07.2026
-(Abstimmung 6601) oder das Stimmverhalten einzelner Abgeordneter über abgeordnetenwatch-voting-record.
+Als Nächstes angeboten: dieselbe Aufschlüsselung für eine andere Abstimmung der Periode oder das
+Stimmverhalten einzelner Abgeordneter über abgeordnetenwatch-voting-record.
 
 ## abgeordnetenwatch-sidejobs
 
@@ -58,37 +58,42 @@ Als Nächstes angeboten: dieselbe Aufschlüsselung für die Abstimmung zur GKV-R
 
 ```bash
 abgeordnetenwatch list politicians 'last_name[cn]=Gysi' --range-end 10 --data-only --compact
-abgeordnetenwatch list candidacies-mandates politician=79334 --data-only --compact
-abgeordnetenwatch count sidejobs mandates=68562              # 82
-abgeordnetenwatch list sidejobs mandates=68562 --range-end 100 --data-only --compact > sj.json
+abgeordnetenwatch list candidacies-mandates politician=79334 current_on=all --data-only --compact
+abgeordnetenwatch count sidejobs mandates=68562              # 89
+abgeordnetenwatch list sidejobs mandates=68562 --range-end 1000 --data-only --compact > sj.json
 ```
 
-Es gab genau einen Treffer (ID 79334, Die Linke, Jahrgang 1948) mit einem aktuellen Mandat. Jeder
-Eintrag mit Einkommensstufe nennt auch einen genauen Betrag. Deshalb zeigt die Übersicht die
-Beträge; die Summen je Zahler addieren nur genaue Angaben.
+Es gab genau einen Treffer (ID 79334, Die Linke, Jahrgang 1948). Mit `current_on=all` nannte die
+Mandatsabfrage sechs Bundestagsmandate (2005 - 2009 bis 2025 - 2029); die Übersicht behandelt das
+jüngste, 68562, und bietet die anderen an. Jeder Eintrag mit Einkommensstufe nennt auch einen
+genauen Betrag. Deshalb zeigt die Übersicht die Beträge; die Summen je Zahler addieren nur genaue
+Angaben.
 
 ```
 Nebentätigkeiten – Gregor Gysi (Die Linke), Bundestag 2025 - 2029  ·  Mandat 68562
-82 veröffentlichte Tätigkeiten: 78 mit angegebenem Betrag, 4 ohne Betrag
-(64 mit „Einkommen im Jahr 2025", 15 mit „Einkommen im Jahr 2026", 3 ohne Angabe)
+89 veröffentlichte Tätigkeiten: 85 mit angegebenem Betrag, 4 ohne Betrag
+(64 mit „Einkommen im Jahr 2025", 22 mit „Einkommen im Jahr 2026", 3 ohne Angabe)
 
 Höchste Einzelbeträge (angegeben):
 • Publizistische Tätigkeit – Aufbau Verlage GmbH & Co. KG – 10.321,53 € (Stufe 3) · Berlin
 • Vortrag „Investmentstrategie 2026 - Europa Quo Vadis?" (Bankhaus Metzler) – Celebrity Speakers Limited – 8.000 € (Stufe 3) · Burnham (Buckinghamshire)
 • Keynote bei der ARENIT Industrie GmbH – CSA Celebrity Speakers GmbH – 8.000 € (Stufe 3) · Hamburg
-• Vortrag bei der Jahrestagung des VDKL, Bonn – Econ Referenten-Agentur - Dölle & Gissing GbR – 7.200 € (Stufe 3)
+• Publizistische Tätigkeit – Aufbau Verlage GmbH & Co. KG – 8.000 € (Stufe 3) · Berlin
+• Vortrag bei der Jahrestagung des VDKL, Bonn – Econ Referenten-Agentur - Dölle & Gissing GbR – 7.200 € (Stufe 3) · Leipzig
+• Gespräch „Blick auf die deutsche Wirtschaft und der globale Vergleich" – Synsero Expert GmbH – 7.000 € (Stufe 2) · München
 • Mitglied in der Jury zur Vergabe des Powered by Philip Morris Award – Boros GmbH – 7.000 € (Stufe 2) · Berlin
-• Mitglied des Beirates für gemeinnützige Zwecke – Spielbank Berlin GmbH & Co. KG – 6.302,52 € (Stufe 2)
-  … 72 weitere, meist Vorträge und Buchveranstaltungen zu 1.100–7.000 €
+  … 78 weitere, meist Vorträge und Buchveranstaltungen zu 1.100–7.000 €
 
 Häufigste Zahler (Einträge · Summe der angegebenen Beträge):
-  Tränenpalast Management GmbH                    18 · 35.300 €     (Reihe „Gespräch mit …")
-  Openminds Media GmbH                             8 · 19.975 €     (Gysi gegen Guttenberg, Podcast)
+  Tränenpalast Management GmbH                    19 · 37.300 €     (Reihe „Gespräch mit …")
+  Openminds Media GmbH                             9 · 22.475 €     (Gespräche und Podcasts mit Guttenberg)
+  ART 28 GmbH & Co. KG                             7 · 14.000 €
   kulturbotschafter EVENTS GbR                     6 · 24.100,74 €  (Buchvorstellungen)
-  ART 28 GmbH & Co. KG                             6 · 12.000 €
   Lausitz.Live GmbH                                5 · 7.500 €
+  Jahn Event                                       5 · 6.600 €
   Econ Referenten-Agentur - Dölle & Gissing GbR    4 · 27.200 €
-  … 23 weitere Zahler, darunter Knorr Bremse AG (4.000 €)
+  MEET Live GmbH                                   3 · 18.000 €
+  … 22 weitere Zahler, darunter Spielbank Berlin (6.302,52 €) und Knorr Bremse AG (4.000 €)
 
 Ohne Betrag angegeben: Rechtsanwalt und Publizist (kein Zahler genannt); Beteiligung und
 „Rechtsanwalt - Mandant 2" bei Venedey, Dr. Gysi, Holter, Höfler, Rechtsanwälte in Partnerschaft;
@@ -97,30 +102,33 @@ Es handelt sich um Selbstauskünfte nach den Verhaltensregeln des Bundestages.
 Profil: https://www.abgeordnetenwatch.de/profile/gregor-gysi
 ```
 
+Als Nächstes angeboten: die Angaben einer früheren Periode (Mandat 53789, 2021 - 2025).
+
 ## abgeordnetenwatch-voting-record
 
 > Wie hat Heidi Reichinnek in dieser Wahlperiode bisher im Bundestag abgestimmt?
 
 ```bash
 abgeordnetenwatch list politicians 'last_name[cn]=Reichinnek' --range-end 10 --data-only --compact
-abgeordnetenwatch list candidacies-mandates politician=149570 --data-only --compact   # nur das aktuelle Mandat
-abgeordnetenwatch list candidacies-mandates politician=149570 current_on=all --data-only --compact   # zusätzlich 53483 (2021 - 2025)
-abgeordnetenwatch count votes mandate=68819                  # 68, eine Seite
-abgeordnetenwatch list votes mandate=68819 --range-end 100 --data-only --compact > v.json
-abgeordnetenwatch list polls field_legislature=161 --range-end 100 --data-only --compact   # Abstimmungsdaten
+abgeordnetenwatch list candidacies-mandates politician=149570 current_on=all --data-only --compact   # 68819 (2025 - 2029), 53483 (2021 - 2025)
+abgeordnetenwatch count votes mandate=68819                  # 72, eine Seite
+abgeordnetenwatch list votes mandate=68819 --range-end 1000 --data-only --compact > v.json
+abgeordnetenwatch list polls field_legislature=161 --range-end 1000 --data-only --compact   # Abstimmungsdaten
 ```
 
-Die im Skill vorgesehene Mandatsabfrage lieferte nur den aktuellen Sitz; das frühere Mandat
-tauchte erst mit `current_on=all` auf. Die Abstimmungsdaten wurden ergänzt, um die fehlenden
-Stimmen einzuordnen – sie fallen alle auf einen Tag.
+Die Mandatsabfrage mit `current_on=all` lieferte beide Sitze; die Übersicht behandelt den
+aktuellen. Stimmen tragen kein Datum, deshalb wurden die Abstimmungsdaten ergänzt, um die
+fehlenden Stimmen einzuordnen: acht fallen auf einen Tag, zwei auf die letzte Sitzung.
 
 ```
 Stimmverhalten – Heidi Reichinnek (Die Linke), Bundestag 2025 - 2029
 Politikerin 149570 · Mandat 68819
-68 namentliche Abstimmungen (2025-06-25 – 2026-07-10): 22 Ja · 34 Nein · 4 Enthaltungen · 8 nicht beteiligt
-(no_show = nicht teilgenommen; alle 8 am 2025-11-13)
+72 namentliche Abstimmungen (2025-06-25 – 2026-09-25): 23 Ja · 35 Nein · 4 Enthaltungen · 10 nicht beteiligt
+(no_show = nicht teilgenommen; 8 am 2025-11-13, 2 am 2026-09-25)
 
 Auffällige Abstimmungen zuletzt:
+• Nein – Modernisierung des Bundespolizeigesetzes (6662)
+• Ja   – Klimaanpassung und Naturschutz im Grundgesetz verankern (6664)
 • Ja   – Einführung eines allgemeinen Tempolimits (6600)
 • Nein – GKV-Reform (6601)
 • Nein – Gebäudemodernisierungsgesetz (6605)
@@ -129,6 +137,7 @@ Auffällige Abstimmungen zuletzt:
 • Nein – Modernisierung des Wehrdienstes (6359)
 • Nein – Umgestaltung des Bürgergelds zur neuen Grundsicherung (SGB II) (6422)
 • Ja   – Mietwuchergesetz (6311)
+Nicht beteiligt am 2026-09-25: Tankrabatt für Benzin und Diesel; Einführung einer Übergewinnsteuer.
 Enthaltungen: Stabilisierung des Rentenniveaus und Gleichstellung der Kindererziehungszeiten;
 Eingefrorenes russisches Staatsvermögen nicht der Ukraine zur Verfügung stellen (beide 2025-12-05);
 Keine stärkere Absicherung des EU-Förderprogramms LEADER (2026-05-08);
