@@ -78,16 +78,17 @@ export interface EngineOptions {
   /**
    * Number of automatic retries for transient (429/503) responses and for a GET whose
    * connection was reset (see {@link isTransientNetworkError}), 0..`MAX_RETRIES` (10).
-   * A 429/503 waits the response's `Retry-After` (up to `MAX_RETRY_AFTER_MS`; a longer
-   * one is not retried), or else `retryDelayMs * attempt`; a reset waits
-   * `retryDelayMs * attempt`.
+   * Each waits `retryDelayMs * attempt`, or a 429/503's `Retry-After` when that is
+   * longer (up to `MAX_RETRY_AFTER_MS`; a longer one is not retried, and the AwApiError
+   * says so and carries it as `retryAfterMs`).
    */
   maxRetries?: number;
   /**
    * Base backoff between retries in milliseconds (grows linearly: 1 s, 2 s, ... by
    * default). The upstream rate limiter answers a burst with 429s and no
    * Retry-After for about 1–2 s, so the default outlasts that window. At most
-   * `MAX_RETRY_AFTER_MS`.
+   * `MAX_RETRY_AFTER_MS`. It is also the floor under a `Retry-After`: the header can
+   * lengthen a wait, never shorten it.
    */
   retryDelayMs?: number;
   /**
@@ -247,7 +248,7 @@ export function assertValidBaseUrl(baseUrl: string): void {
 /**
  * Longest `Retry-After` the engine waits out before retrying a 429/503. When the
  * server asks for longer, the engine does not retry at all and surfaces the error at
- * once: retrying early would only land inside the window the server asked us to wait
+ * once, naming the requested wait (`AwApiError.retryAfterMs`): retrying early would only land inside the window the server asked us to wait
  * out, and a hostile value must not stall the CLI.
  */
 export const MAX_RETRY_AFTER_MS = 30_000;
@@ -515,15 +516,18 @@ export class RequestEngine {
         throw new AwNetworkError(`${method} ${redactUrl(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
       }
       const retryable = status === 429 || status === 503;
-      if (retryable && attempt < this.maxRetries) {
-        // Honour Retry-After; without a usable one, back off linearly. A Retry-After
-        // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
-        const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
-        if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
-          attempt += 1;
-          await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
-          continue;
-        }
+      // A Retry-After beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at
+      // once and names the wait the server asked for.
+      const retryAfter = retryable ? parseRetryAfter(responseHeaders["retry-after"]) : undefined;
+      const tooLong = retryAfter !== undefined && retryAfter > MAX_RETRY_AFTER_MS;
+      if (retryable && !tooLong && attempt < this.maxRetries) {
+        attempt += 1;
+        // Back off linearly from retryDelayMs. A Retry-After can ask for longer, never for
+        // less: `Retry-After: 0` or a date in the past turned the retries into a zero-delay
+        // burst against a server that had just asked for less load.
+        const backoff = this.retryDelayMs * attempt;
+        await this.sleep(retryAfter === undefined ? backoff : Math.max(retryAfter, backoff));
+        continue;
       }
 
       // Follow redirects, resolving the Location relative to the current URL.
@@ -580,6 +584,7 @@ export class RequestEngine {
           body,
           location,
           status === 401 || status === 403 ? dropped : undefined,
+          { retries: attempt, ...(tooLong ? { retryAfterMs: retryAfter } : {}) },
         );
       }
 
@@ -615,6 +620,7 @@ export class RequestEngine {
     body: Buffer,
     locationHeader: string | undefined,
     hint: string | undefined,
+    retry: { retries: number; retryAfterMs?: number },
   ): AwApiError {
     const text = this.scrub(body.toString("utf8"));
     let detail: string | undefined;
@@ -642,7 +648,18 @@ export class RequestEngine {
       status >= 300 && status < 400 && locationHeader
         ? redirectTarget(url, this.scrub(locationHeader))
         : undefined;
-    return new AwApiError({ status, url, method, body: text, detail, location });
+    return new AwApiError({
+      status,
+      url,
+      method,
+      body: text,
+      detail,
+      location,
+      retries: retry.retries,
+      ...(retry.retryAfterMs === undefined
+        ? {}
+        : { retryAfterMs: retry.retryAfterMs, maxRetryAfterMs: MAX_RETRY_AFTER_MS }),
+    });
   }
 }
 

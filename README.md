@@ -106,8 +106,12 @@ API itself needs none) are sent as HTTP Basic auth and shown as `***` in everyth
 prints, usage errors included.
 
 The service rate-limits bursts with HTTP `429`; the client retries these
-automatically. Sending a descriptive `--user-agent` is appreciated by the
-provider.
+automatically (up to `--max-retries`, default `2`), backing off 1 s, 2 s, … or waiting
+the server's `Retry-After` when that is longer, up to 30 s. The error ends
+`(after N retries)` when they ran out. When the server asks for a longer wait the CLI
+does not retry at all and says so (`the server asked to retry after 120 s, longer than
+the 30 s the client waits; not retried`): wait that long before trying again. Sending a
+descriptive `--user-agent` is appreciated by the provider.
 
 ## Exit codes
 

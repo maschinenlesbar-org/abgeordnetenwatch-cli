@@ -153,12 +153,18 @@ npm start -- --help # run the CLI from source build
   then says so ("the server redirected http→https, which dropped the credentials; use an
   https base URL"). Userinfo in a `Location` is never used.
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2; the CLI's
-  `--max-retries` accepts 0..10). The retry delay honours a `Retry-After` header
+  `--max-retries` accepts 0..10). Each retry waits the linear backoff
+  (`retryDelayMs * attempt`, default 1 s then 2 s), or a `Retry-After` header
   (delta-seconds or an IMF-fixdate HTTP-date, parsed strictly by the exported
-  `parseRetryAfter`); one above `MAX_RETRY_AFTER_MS` (30 s) is not retried at all, the
-  error surfaces at once. Absent or malformed (`-1`, `1.5`, other date formats), it
-  falls back to linear backoff (`retryDelayMs * attempt`,
-  default 1 s then 2 s). The live API answers a burst with `429` and no `Retry-After`
+  `parseRetryAfter`) when that is longer: the header can lengthen a wait, never shorten
+  it, so `Retry-After: 0` or a past date can't turn the retries into a burst. A
+  `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not retried at all: the error
+  surfaces at once, names the requested wait (`the server asked to retry after 120 s,
+  longer than the 30 s the client waits; not retried`) and carries it as
+  `AwApiError.retryAfterMs`, and the CLI's hint says to wait that long instead of
+  pointing at `--max-retries`. After spent retries the message ends `(after N retries)`
+  (`AwApiError.retries`). A malformed `Retry-After` (`-1`, `1.5`, other date formats)
+  is ignored. The live API answers a burst with `429` and no `Retry-After`
   for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs. A GET
   whose connection was reset (`ECONNRESET`, `EPIPE`, `ECONNABORTED`, undici's
   `UND_ERR_SOCKET`, anywhere in the error's `cause` chain; `isTransientNetworkError`) is

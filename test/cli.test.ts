@@ -307,6 +307,22 @@ test("a 429 prints rate-limit guidance and exits 1", async () => {
   assert.match(cap.err.join("\n"), /--max-retries/);
 });
 
+test("a Retry-After above 30 s fails at once, names the wait and does not suggest --max-retries", async () => {
+  const { deps, cap, mt } = makeTransportDeps(() => ({
+    status: 429,
+    headers: { "content-type": "application/json", "retry-after": "120" },
+    body: Buffer.from("{}"),
+  }));
+  const code = await run(["--max-retries", "10", "count", "parties"], deps);
+  assert.equal(code, 1);
+  assert.equal(mt.calls.length, 1, "not retried");
+  const err = cap.err.join("\n");
+  assert.match(err, /asked to retry after 120 s, longer than the 30 s the client waits; not retried/);
+  assert.match(err, /wait 120 s/);
+  assert.doesNotMatch(err, /Wait a moment/);
+  assert.doesNotMatch(err, /raises the number of automatic retries/);
+});
+
 test("DEL and C1 control characters in server data are escaped in the JSON output", async () => {
   const controls = String.fromCharCode(0x7f, 0x85, 0x9b) + "2J";
   const served = {

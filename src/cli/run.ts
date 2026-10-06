@@ -123,10 +123,17 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
             "field names and values.",
         );
       }
-      // 429/503 are transient: the automatic retries (honouring Retry-After) were
-      // already exhausted by the time we get here, so point the user at waiting
-      // and at the knob that raises the retry count.
-      if (err.isRetryable) {
+      // 429/503 are transient. When the server asked for a wait longer than the client
+      // sleeps, nothing was retried and more retries cannot help: say to wait that long
+      // (the message names it). Otherwise the automatic retries were exhausted, so point
+      // the user at waiting and at the knob that raises the retry count.
+      if (err.isRetryable && err.retryAfterMs !== undefined) {
+        deps.io.err(
+          `Hint: the server asked clients to wait ${Math.ceil(err.retryAfterMs / 1000)} s. ` +
+            "Wait that long before trying again; --max-retries cannot help, the client " +
+            "never waits longer than 30 s by itself.",
+        );
+      } else if (err.isRetryable) {
         deps.io.err(
           "Hint: the API is rate-limiting or temporarily unavailable. Wait a " +
             "moment and retry; --max-retries raises the number of automatic retries.",
