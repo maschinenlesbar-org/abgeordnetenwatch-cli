@@ -109,6 +109,9 @@ What the library rejects with `AwValidationError`:
 
 ## Scripts
 
+Node.js 22.12 or later (`engines`; commander 15 needs it). CI (`ci.yml`) type-checks, builds
+and tests on Node 22/24.
+
 ```bash
 npm run build       # tsc → dist/
 npm test            # build, then run node:test suites against dist/

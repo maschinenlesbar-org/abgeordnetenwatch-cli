@@ -10,6 +10,7 @@ import {
   type HttpResponse,
   type Transport,
 } from "./http.js";
+import { TextDecoder } from "node:util";
 import { buildQueryString, type QueryParams } from "./query.js";
 import {
   AwApiError,

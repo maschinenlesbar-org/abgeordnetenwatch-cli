@@ -29,7 +29,7 @@ matches, and pipe the JSON straight into [`jq`](https://jqlang.github.io/jq/).
 npm i -g @maschinenlesbar.org/abgeordnetenwatch-cli
 ```
 
-This installs the **`abgeordnetenwatch`** command. Requires **Node.js 20+**.
+This installs the **`abgeordnetenwatch`** command. Requires **Node.js 22.12+**.
 
 ```bash
 abgeordnetenwatch --help
