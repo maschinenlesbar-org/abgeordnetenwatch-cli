@@ -118,6 +118,10 @@ descriptive `--user-agent` is appreciated by the provider.
 `0` success · `1` runtime/network/server error · `2` usage error (unknown
 entity, bad option/filter) · `4` HTTP 404 (unknown collection path).
 
+A reader that stops early (`abgeordnetenwatch list votes poll=6569 | head -c 100`) is
+ordinary use: the CLI exits `0` quietly. If stderr's reader is gone (`2>&1 | true`), a
+failed run still exits with its own code.
+
 > Note: the API returns HTTP **500** (not 404) for a missing id; the CLI surfaces
 > the reason from `meta.status_message` and exits `1`.
 
