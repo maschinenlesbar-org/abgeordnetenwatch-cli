@@ -2,13 +2,16 @@
 // requests via a Transport, applies retry/backoff for transient statuses
 // (429, 503), and decodes responses.
 
-import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
+import { MAX_TIMEOUT_MS, nodeHttpTransport, type HttpResponse, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import {
   AwApiError,
   AwError,
+  AwNetworkError,
   AwParseError,
   AwValidationError,
+  credentialsIn,
+  redactCredentials,
   redactUrl,
 } from "./errors.js";
 import {
@@ -208,10 +211,16 @@ function intOption(name: string, value: number | undefined, fallback: number, ma
 }
 
 export class RequestEngine {
-  private readonly baseUrl: string;
+  // A real private field (not TypeScript's `private`): util.inspect, console.log and
+  // JSON.stringify of a client never show it, so a password in the base URL can't be
+  // logged by accident. Messages show request URLs through redactUrl.
+  readonly #baseUrl: string;
+  /** The base URL's userinfo, raw and percent-decoded, for scrubbing server and transport text. */
+  readonly #credentials: string[];
   private readonly transport: Transport;
   private readonly userAgent: string;
-  private readonly extraHeaders: Record<string, string>;
+  // Caller headers may hold credentials (Authorization for a proxy): private, like the base URL.
+  readonly #extraHeaders: Record<string, string>;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
@@ -222,7 +231,14 @@ export class RequestEngine {
   constructor(options: EngineOptions = {}) {
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
     assertValidBaseUrl(baseUrl);
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.#baseUrl = baseUrl.replace(/\/+$/, "");
+    this.#credentials = credentialsIn(this.#baseUrl).flatMap((raw) => {
+      try {
+        return [raw, decodeURIComponent(raw)];
+      } catch {
+        return [raw];
+      }
+    });
     this.transport = options.transport ?? nodeHttpTransport;
     // Header names and values are checked here, so a bad one is an AwValidationError
     // at construction rather than a raw TypeError (or an injected header) later.
@@ -230,8 +246,8 @@ export class RequestEngine {
       options.userAgent === undefined
         ? DEFAULT_USER_AGENT
         : assertValid("userAgent", options.userAgent, headerValueProblem);
-    this.extraHeaders = { ...(options.headers ?? {}) };
-    for (const [name, value] of Object.entries(this.extraHeaders)) {
+    this.#extraHeaders = { ...(options.headers ?? {}) };
+    for (const [name, value] of Object.entries(this.#extraHeaders)) {
       assertValid(`header name ${JSON.stringify(name)}`, name, headerNameProblem);
       assertValid(`header ${JSON.stringify(name)}`, value, headerValueProblem);
     }
@@ -253,11 +269,40 @@ export class RequestEngine {
     this.sleep = options.sleep ?? realSleep;
   }
 
+  /**
+   * `text` without the base URL's credentials: server text (an error body that echoes the
+   * request URL) and transport text (fetch's "Request cannot be constructed from a URL that
+   * includes credentials: <url>") can carry them.
+   */
+  private scrub(text: string): string {
+    return this.#credentials.length === 0 ? text : redactCredentials(text, this.#credentials);
+  }
+
+  /**
+   * A transport failure as the `cause` of the error the engine raises: the original when its
+   * text carries no credentials, otherwise a copy with them scrubbed (message, `code` and the
+   * cause chain kept), so logging the error with its causes can't reveal the base URL's
+   * password.
+   */
+  private scrubCause(cause: unknown, depth = 0): unknown {
+    if (this.#credentials.length === 0 || depth > 5) return cause;
+    if (typeof cause === "string") return this.scrub(cause);
+    if (!(cause instanceof Error)) return cause;
+    const inner = this.scrubCause(cause.cause, depth + 1);
+    const message = this.scrub(cause.message);
+    if (message === cause.message && inner === cause.cause && !this.scrub(cause.stack ?? "").includes("***@")) return cause;
+    const copy = new Error(message, inner === undefined ? undefined : { cause: inner });
+    copy.name = cause.name;
+    const code = (cause as { code?: unknown }).code;
+    if (code !== undefined) Object.assign(copy, { code });
+    return copy;
+  }
+
   /** Build a fully-qualified URL from a path and optional query parameters. */
   buildUrl(path: string, query?: QueryParams): string {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const qs = query ? buildQueryString(query) : "";
-    return `${this.baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
+    return `${this.#baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
   }
 
   /** Perform a request with Accept negotiation and transient-error retries. */
@@ -268,7 +313,7 @@ export class RequestEngine {
   ): Promise<RawResponse> {
     let url = this.buildUrl(path, options.query);
     let headers: Record<string, string> = {
-      ...this.extraHeaders,
+      ...this.#extraHeaders,
       Accept: options.accept,
       "User-Agent": this.userAgent,
     };
@@ -277,13 +322,28 @@ export class RequestEngine {
     let redirects = 0;
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
-      const response = await this.transport({
-        method,
-        url,
-        headers,
-        timeoutMs: this.timeoutMs,
-        ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
-      });
+      let response: HttpResponse;
+      try {
+        response = await this.transport({
+          method,
+          url,
+          headers,
+          timeoutMs: this.timeoutMs,
+          ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
+        });
+      } catch (cause) {
+        // The default transport rejects with AwNetworkError only; an injected one may
+        // throw anything, and its text may carry the request URL with the base URL's
+        // password (fetch refuses a URL with credentials and quotes it). Keep the
+        // library's error contract — every failure is an AwError — and scrub that text.
+        if (cause instanceof AwError && !(cause instanceof AwNetworkError)) throw cause;
+        if (cause instanceof AwNetworkError && this.scrub(cause.message) === cause.message) throw cause;
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        throw new AwNetworkError(
+          `${method} ${redactUrl(url)} failed: ${sanitizeServerText(this.scrub(reason))}`,
+          { cause: this.scrubCause(cause) },
+        );
+      }
 
       const status = response.status;
       const retryable = status === 429 || status === 503;
@@ -359,7 +419,7 @@ export class RequestEngine {
     body: Buffer,
     locationHeader?: string,
   ): AwApiError {
-    const text = body.toString("utf8");
+    const text = this.scrub(body.toString("utf8"));
     let detail: string | undefined;
     try {
       // abgeordnetenwatch error bodies carry the message at meta.status_message;
@@ -381,7 +441,9 @@ export class RequestEngine {
     if (detail !== undefined) detail = sanitizeServerText(detail);
     // Name the target of a redirect that was not followed.
     const location =
-      status >= 300 && status < 400 && locationHeader ? redirectTarget(url, locationHeader) : undefined;
+      status >= 300 && status < 400 && locationHeader
+        ? redirectTarget(url, this.scrub(locationHeader))
+        : undefined;
     return new AwApiError({ status, url, method, body: text, detail, location });
   }
 }

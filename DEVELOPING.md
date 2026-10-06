@@ -169,7 +169,13 @@ npm start -- --help # run the CLI from source build
   — commander's usage errors, which echo rejected values, an unknown command, a stray
   argument — so a password with spaces, quotes, `#`, `?` or `/` is caught as well as an
   ordinary one. `redactUrl` falls back to the same text-based cut (`redactCredentials`,
-  exported) for a value that doesn't parse as a URL.
+  exported) for a value that doesn't parse as a URL. The engine keeps the base URL and
+  the caller's `headers` in real `#private` fields, so `console.log(client)`,
+  `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
+  userinfo (raw and percent-decoded) from error bodies and details, a redirect `Location`,
+  a custom transport's error text and the `cause` chain. Whatever a custom transport
+  throws reaches the caller as an `AwNetworkError` (`GET <url> failed: <reason>`, the
+  original as `cause`).
 
 ## Website
 
