@@ -88,7 +88,9 @@ What the library rejects with `AwValidationError`:
   `abgeordnetenwatch-cli`. The default transport also turns any header Node refuses into
   an `AwNetworkError` instead of a raw `TypeError`.
 - **Base URL** (constructor; `baseUrlProblem`): anything but an absolute `http:`/`https:`
-  URL, one with a query or fragment and one with surrounding whitespace. All of them are
+  URL, one with a query or fragment, one with surrounding whitespace and one whose user
+  name or password has a `%` that doesn't start an escape (write a literal `%` as `%25`;
+  the engine percent-decodes the userinfo for the Authorization header). All of them are
   configuration errors, so the class is `AwValidationError`, never `AwNetworkError`
   (which a caller may retry as transient). See the networking policy below.
 
@@ -170,7 +172,9 @@ npm start -- --help # run the CLI from source build
   (`#`) is rejected too, because paths are appended to it as a string and either would
   swallow every request path, and so is one with surrounding whitespace, which
   `new URL()` would trim silently while the engine kept the raw string (`"https://h/ "`
-  requested `/%20/api/v2/...`).
+  requested `/%20/api/v2/...`). A `%` in the userinfo that isn't an escape
+  (`http://alice:100%@mirror`) is rejected the same way, as a usage error before any
+  request, instead of a raw `URIError` when the Authorization header is built.
 
 - **Credentials never reach output.** Userinfo in the base URL
   (`https://user:secret@mirror/`) is allowed, but `redactUrl` (exported from

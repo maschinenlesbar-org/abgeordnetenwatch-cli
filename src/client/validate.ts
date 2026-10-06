@@ -125,7 +125,9 @@ export const headerNameProblem: Problem<unknown> = (value) =>
 
 /**
  * Rule for the base URL: an absolute `http:`/`https:` URL with no query or
- * fragment and no surrounding whitespace. Request paths are appended to it as a
+ * fragment, no surrounding whitespace, and no `%` in the userinfo that doesn't start
+ * an escape (`%25` for a literal one: the engine percent-decodes it for the
+ * Authorization header). Request paths are appended to it as a
  * string, so a `?` or `#` would swallow every path, and `new URL()` trims
  * surrounding whitespace silently while the engine would keep the raw value
  * (`"https://h/ "` requested `/%20/api/v2/...`).
@@ -143,5 +145,14 @@ export const baseUrlProblem: Problem<unknown> = (value) => {
   }
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
   if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
+  // The userinfo is percent-decoded for the Authorization header; a "%" that isn't an
+  // escape fails there ("URI malformed") at request time, as a raw URIError. Reject it here.
+  for (const part of [url.username, url.password]) {
+    try {
+      decodeURIComponent(part);
+    } catch {
+      return 'The user name or password has a "%" that is not followed by two hex digits; write a literal "%" as %25.';
+    }
+  }
   return undefined;
 };
