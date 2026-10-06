@@ -132,7 +132,9 @@ npm start -- --help # run the CLI from source build
   P1 CLI redaction, P2 library redaction, P3 redirect credentials, P4 base-URL
   validation (its P19 case is skipped: this CLI reads no environment variable), P5 the
   transport contract, P6 the retry policy, P7 pipes and exit codes (runs the built bin),
-  P8/P9/P13 charset, envelopes and error classes, P10 strict filters and parameters.
+  P8/P9/P13 charset, envelopes and error classes, P10 strict filters and parameters,
+  P20 the stderr warning for a plain-`http:` base URL (its env-variable and other-secret
+  cases are skipped: this CLI reads no environment variable and sends no key).
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
@@ -225,6 +227,13 @@ npm start -- --help # run the CLI from source build
   requested `/%20/api/v2/...`). A `%` in the userinfo that isn't an escape
   (`http://alice:100%@mirror`) is rejected the same way, as a usage error before any
   request, instead of a raw `URIError` when the Authorization header is built.
+- **Plain `http:` gets a warning, not a refusal.** `cleartextProblem(baseUrl, secrets)`
+  (engine, exported) returns one sentence naming the host (`url.host`, never the userinfo)
+  and what travels unencrypted — the base URL's credentials when it carries userinfo — or
+  `undefined` for `https:`, an unparseable URL and loopback hosts (`localhost`,
+  `127.0.0.0/8`, `::1`). The CLI's `action()` wrapper (`shared.ts`, `warnOnCleartext`)
+  prints it once per run as `warning: <sentence>` on stderr, after the options are parsed
+  and before the first request; `--help`, `--version` and usage errors never get there.
 
 - **Credentials never reach output.** Userinfo in the base URL
   (`https://user:secret@mirror/`) is allowed, but `redactUrl` (exported from

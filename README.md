@@ -108,6 +108,12 @@ Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mi
 API itself needs none) are sent as HTTP Basic auth and shown as `***` in everything the CLI
 prints, usage errors included.
 
+A base URL on plain `http:` to a host other than loopback (`localhost`, `127.0.0.0/8`,
+`::1`) works, but the CLI writes one line to stderr before the first request, e.g.
+`warning: requests to mirror.example are sent unencrypted (http:, not https:)`, or
+`warning: the base URL's credentials are sent unencrypted to mirror.example (http:, not https:)`
+when the URL carries userinfo. stdout and the exit code are unchanged.
+
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically (up to `--max-retries`, default `2`), backing off 1 s, 2 s, … or waiting
 the server's `Retry-After` when that is longer, up to 30 s. The error ends
