@@ -67,6 +67,18 @@ export function describeValue(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(redactUrl(value)) : String(value);
 }
 
+/**
+ * A parameter object: a plain object, not null, an array or a primitive. Checked first, so a
+ * wrong-typed argument (`list("parties", null)`) is an AwValidationError rather than a raw
+ * TypeError from reading its fields, and `count("parties", 5)` sends no request.
+ */
+export function assertParams<T>(name: string, value: T): T {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new AwValidationError(`Invalid ${name}: expected an object of parameters, got ${describeValue(value)}.`);
+  }
+  return value;
+}
+
 /** Rule for `rangeStart` and `rangeEnd`: a non-negative safe integer. */
 export const rangeProblem: Problem<unknown> = (value) =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0

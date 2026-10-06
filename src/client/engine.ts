@@ -40,7 +40,9 @@ export interface RawResponse {
 /**
  * Options for {@link RequestEngine} and the client. The numeric options must be
  * integers within their documented range; anything else (negative, fractional,
- * NaN, Infinity, too large) makes the constructor throw an AwError.
+ * NaN, Infinity, too large, not a number) makes the constructor throw an
+ * AwValidationError, as does an options value that is not an object, a `transport`
+ * or `sleep` that is not a function, and `headers` that are not a plain object.
  */
 export interface EngineOptions {
   /**
@@ -228,6 +230,18 @@ export function isTransientNetworkError(err: unknown): boolean {
   return err instanceof AwNetworkError && hasTransientCode(err.cause);
 }
 
+/**
+ * Longest server text (in characters) an error message shows; `AwApiError.body` keeps
+ * the whole body. A proxy's 200 kB error page would otherwise flood the terminal.
+ */
+export const MAX_MESSAGE_TEXT = 500;
+
+/** `text` cut to {@link MAX_MESSAGE_TEXT} characters, marked with "…" when cut. */
+export function cutForMessage(text: string): string {
+  const chars = [...text];
+  return chars.length <= MAX_MESSAGE_TEXT ? text : `${chars.slice(0, MAX_MESSAGE_TEXT).join("")}…`;
+}
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -287,13 +301,13 @@ const MAX_REDIRECTS = 20;
 
 /**
  * Read a numeric engine option: `undefined` gives the default; anything but an
- * integer in [0, max] throws. Without this a negative or NaN `timeoutMs` silently
- * disabled the timeout, and `maxResponseBytes: -1` the size cap.
+ * integer in [0, max] throws an AwValidationError. Without this a negative or NaN
+ * `timeoutMs` silently disabled the timeout, and `maxResponseBytes: -1` the size cap.
  */
 function intOption(name: string, value: number | undefined, fallback: number, max: number): number {
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || value < 0 || value > max) {
-    throw new AwError(
+    throw new AwValidationError(
       `Invalid option ${name}: expected an integer from 0 to ${max}, got ${String(value)}.`,
     );
   }
@@ -319,6 +333,21 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: EngineOptions = {}) {
+    if (typeof options !== "object" || options === null || Array.isArray(options)) {
+      throw new AwValidationError("Invalid options: expected an object of engine options.");
+    }
+    for (const name of ["transport", "sleep"] as const) {
+      if (options[name] !== undefined && typeof options[name] !== "function") {
+        throw new AwValidationError(`Invalid option ${name}: expected a function.`);
+      }
+    }
+    const rawHeaders: unknown = options.headers;
+    if (
+      rawHeaders !== undefined &&
+      (typeof rawHeaders !== "object" || rawHeaders === null || Array.isArray(rawHeaders))
+    ) {
+      throw new AwValidationError("Invalid option headers: expected an object of header names and values.");
+    }
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
     assertValidBaseUrl(baseUrl);
     this.#baseUrl = baseUrl.replace(/\/+$/, "");
@@ -641,7 +670,7 @@ export class RequestEngine {
     }
     // `detail` came from the response body; strip control characters so a hostile
     // endpoint cannot inject terminal escape sequences via the stderr error message.
-    if (detail !== undefined) detail = sanitizeServerText(detail);
+    if (detail !== undefined) detail = cutForMessage(sanitizeServerText(detail));
     if (hint !== undefined) detail = detail === undefined ? hint : `${detail}; ${hint}`;
     // Name the target of a redirect that was not followed.
     const location =

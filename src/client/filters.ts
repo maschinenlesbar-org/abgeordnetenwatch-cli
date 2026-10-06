@@ -5,6 +5,7 @@
 // sends a request, and the CLI's filter parser calls the same rules.
 
 import { FILTER_OPERATORS, type FilterValue } from "./types.js";
+import { AwValidationError } from "./errors.js";
 import { assertValid, describeValue, type Problem } from "./validate.js";
 
 /** A filter key: a field name, optionally followed by one `[op]` suffix. */
@@ -82,6 +83,11 @@ export function filterField(key: string): string {
  * `null` value means the filter is omitted, as in the query string.
  */
 export function validateFilters(filters: Readonly<Record<string, FilterValue | null | undefined>>): void {
+  if (typeof filters !== "object" || filters === null || Array.isArray(filters)) {
+    throw new AwValidationError(
+      `Invalid filters: expected an object of field names and values, got ${describeValue(filters)}.`,
+    );
+  }
   const keys: string[] = [];
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;

@@ -219,3 +219,21 @@ test("the redirect target in the message is redacted and stripped of control cha
       err.message.includes("redirect to https://***@b.example/x"),
   );
 });
+
+test("server text in an API error message is cut at 500 characters; body keeps it all", async () => {
+  const long = "x".repeat(2000);
+  const engine = new RequestEngine({
+    transport: async () => ({
+      status: 500,
+      headers: { "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ meta: { status_message: long } })),
+    }),
+    maxRetries: 0,
+  });
+  await assert.rejects(engine.getJson("/api/v2/parties"), (e: unknown) => {
+    assert.ok(e instanceof AwApiError);
+    assert.ok(e.message.includes(`${"x".repeat(500)}…`) && !e.message.includes("x".repeat(501)), e.message.length.toString());
+    assert.ok(e.body.includes(long));
+    return true;
+  });
+});

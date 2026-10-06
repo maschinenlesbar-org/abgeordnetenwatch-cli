@@ -11,8 +11,8 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwError, AwParseError, redactUrl } from "./errors.js";
-import { normalizeEntityId, validateListParams } from "./validate.js";
+import { AwParseError, AwValidationError, redactUrl } from "./errors.js";
+import { assertParams, normalizeEntityId, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
   ENTITY_COLLECTIONS,
@@ -40,9 +40,10 @@ export class AbgeordnetenwatchClient {
    * `range_end=1` that `count()` relies on.
    */
   private toQuery(params: ListParams): QueryParams {
+    assertParams("params", params);
     validateListParams(params);
     const query: QueryParams = {};
-    if (params.filters) {
+    if (params.filters !== undefined && params.filters !== null) {
       validateFilters(params.filters);
       for (const [key, value] of Object.entries(params.filters)) query[key] = value;
     }
@@ -95,6 +96,7 @@ export class AbgeordnetenwatchClient {
    */
   async count(collection: EntityCollection, params: ListParams = {}): Promise<number> {
     // Check the caller's own parameters, including a rangeEnd that is then replaced.
+    assertParams("params", params);
     validateListParams(params);
     const res = await this.list(collection, { ...params, rangeEnd: 1 });
     const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
@@ -108,11 +110,12 @@ export class AbgeordnetenwatchClient {
 /**
  * The collection is interpolated into the path, so check it at run time as well:
  * a JavaScript caller (or a cast) could otherwise pass `../../x` or `parties?x=1`
- * and walk out of `/api/v2` or inject a query.
+ * and walk out of `/api/v2` or inject a query. An unknown one is rejected before any
+ * request, so it is an AwValidationError like every other rejected input.
  */
 function checkCollection(collection: string): string {
   if (!isEntityCollection(collection)) {
-    throw new AwError(
+    throw new AwValidationError(
       `Unknown collection ${JSON.stringify(redactUrl(String(collection)))}. Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
     );
   }

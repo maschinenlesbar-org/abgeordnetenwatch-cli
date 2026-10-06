@@ -63,6 +63,9 @@ the library on one recording mock transport and returns both outcomes.
 
 What the library rejects with `AwValidationError`:
 
+- **Arguments of the wrong type**: a collection outside `ENTITY_COLLECTIONS` (`list`,
+  `get`, `count`), a `params` that is not an object (`assertParams`; `count("parties",
+  5)` used to send a request) and `filters` that are not an object.
 - **Entity ids** (`get`): anything but a positive integer, as a number or a string of
   ASCII digits (`entityIdProblem`). `0` and `""` would fetch the whole collection, and
   `" 2 "`, `"abc"`, `-1` or `1.5` a generic HTTP 500. `normalizeEntityId` drops leading
@@ -185,8 +188,13 @@ npm start -- --help # run the CLI from source build
 - **Numeric engine options are validated.** `timeoutMs` (0..2^31-1), `maxRetries`
   (0..`MAX_RETRIES`, 10), `retryDelayMs` (0..30 000), `maxRedirects` (0..20) and
   `maxResponseBytes` (0..`Number.MAX_SAFE_INTEGER`) must be integers in range; anything
-  else throws `AwError` (`Invalid option timeoutMs: expected an integer from 0 to ...`)
-  at construction, instead of a negative or NaN value silently disabling a limit.
+  else throws `AwValidationError` (`Invalid option timeoutMs: expected an integer from 0
+  to ...`) at construction, instead of a negative or NaN value silently disabling a
+  limit. So does an options value that is not an object, a `transport` or `sleep` that
+  is not a function, and `headers` that are not a plain object.
+- **Server text in messages is cut.** An API error's `detail` (`meta.status_message`,
+  `detail` or `message` of the body) is cut at 500 characters (`MAX_MESSAGE_TEXT`,
+  `cutForMessage`) in the message; `AwApiError.body` keeps the whole body.
 - **Only `http:`/`https:` base URLs are accepted** — one rule, `baseUrlProblem`, checked
   by `--base-url` at parse time (a usage error) and by the engine constructor on the raw
   value, before it strips trailing slashes (the exported `assertValidBaseUrl`); the
