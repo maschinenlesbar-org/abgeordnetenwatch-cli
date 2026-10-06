@@ -432,9 +432,10 @@ test("credentials in --base-url are redacted from error messages", async () => {
   const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({}, 418));
   const code = await run(["--base-url", "http://user:secret@127.0.0.1:18101/e418", "list", "parties"], deps);
   assert.equal(code, 1);
-  // ...but still sent: the request URL keeps the userinfo (Node turns it into Basic auth).
-  assert.equal(mt.last().url, "http://user:secret@127.0.0.1:18101/e418/api/v2/parties");
-  assert.equal(cap.err.join("\n"), "Error: HTTP 418 for GET http://***@127.0.0.1:18101/e418/api/v2/parties");
+  // ...but still sent: as the Authorization header, never in the URL the transport sees.
+  assert.equal(mt.last().url, "http://127.0.0.1:18101/e418/api/v2/parties");
+  assert.equal(mt.last().headers?.["Authorization"], `Basic ${Buffer.from("user:secret").toString("base64")}`);
+  assert.equal(cap.err.join("\n"), "Error: HTTP 418 for GET http://127.0.0.1:18101/e418/api/v2/parties");
 });
 
 test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {

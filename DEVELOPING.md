@@ -136,8 +136,20 @@ npm start -- --help # run the CLI from source build
   `headers` is dropped before the next hop; only the engine's own `Accept` and
   `User-Agent` go along. So no credential (`Authorization`, `Proxy-Authorization`,
   `Cookie`, `X-API-Key`, `X-Auth-Token`, ...) leaks to an arbitrary host named in
-  `Location`, nor crosses the wire in cleartext. (This API needs no auth, but the
-  guard is unconditional.)
+  `Location`, nor crosses the wire in cleartext. (This API needs no auth; the guard
+  matters for headers added for a proxy or mirror.) It holds as long as the transport
+  leaves redirects to the engine: every request carries `redirect: "manual"`
+  (`HttpRequest.redirect`, which a fetch transport passes on), and a response whose
+  `HttpResponse.url` lies on another origin (a transport that followed a redirect
+  itself) is rejected as an `AwNetworkError`. A custom transport that follows
+  redirects silently and doesn't report `url` is outside the engine's reach.
+- **Base-URL credentials go to their own origin only.** The userinfo of a base URL
+  (`https://user:pw@mirror/`) never reaches the transport in the URL: the engine sends
+  it as an `Authorization: Basic` header per hop (a caller's own `Authorization` header
+  wins). A redirect to the same origin, with a relative or an absolute `Location`, keeps
+  it; one that crosses an origin boundary drops it, and a `401`/`403` from the target
+  then says so ("the server redirected http→https, which dropped the credentials; use an
+  https base URL"). Userinfo in a `Location` is never used.
 - **Transient `429`/`503` are retried** up to `maxRetries` (default 2; the CLI's
   `--max-retries` accepts 0..10). The retry delay honours a `Retry-After` header
   (delta-seconds or an IMF-fixdate HTTP-date, parsed strictly by the exported
