@@ -99,7 +99,7 @@ See [openapi.yaml](openapi.yaml) for every field of every entity.
 ## Global options
 
 `--base-url <url>`, `--timeout <ms>`, `--user-agent <ua>`,
-`--max-retries <n>` (transient 429/503, 0..10), `--max-response-bytes <n>`, `--compact`.
+`--max-retries <n>` (transient 429/503 and reset connections, 0..10), `--max-response-bytes <n>`, `--compact`.
 
 Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mirror; the
 API itself needs none) are sent as HTTP Basic auth and shown as `***` in everything the CLI

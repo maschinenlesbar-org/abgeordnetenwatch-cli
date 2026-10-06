@@ -159,7 +159,23 @@ npm start -- --help # run the CLI from source build
   error surfaces at once. Absent or malformed (`-1`, `1.5`, other date formats), it
   falls back to linear backoff (`retryDelayMs * attempt`,
   default 1 s then 2 s). The live API answers a burst with `429` and no `Retry-After`
-  for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs.
+  for about 1–2 s, so a shorter default (it was 200 ms) failed back-to-back runs. A GET
+  whose connection was reset (`ECONNRESET`, `EPIPE`, `ECONNABORTED`, undici's
+  `UND_ERR_SOCKET`, anywhere in the error's `cause` chain; `isTransientNetworkError`) is
+  retried the same number of times, after `retryDelayMs * attempt`; a refused
+  connection, a DNS failure or a timeout is not.
+- **The transport contract is enforced by the engine.** `timeoutMs` and
+  `maxResponseBytes` hold for every transport, not only the built-in one: the engine
+  runs each transport call under the overall deadline (it passes an `AbortSignal` in
+  `HttpRequest.signal`, which the built-in transport honours and a fetch transport
+  should pass on, and rejects at the deadline either way) and checks the size of the
+  body it gets back (the message names `maxResponseBytes` and `--max-response-bytes`).
+  Response headers are read in any case and from a `Headers` object or a `Map` too, so
+  `Retry-After`, `Location` and `Content-Type` work with a fetch transport; the body may
+  be a `Buffer`, any `ArrayBuffer` view (fetch's `Uint8Array`) or an `ArrayBuffer`.
+  Whatever a transport throws, and a response without a valid status, headers object
+  or body, becomes an `AwNetworkError`. A redirect to a scheme other than
+  `http:`/`https:` is refused before the transport is called.
 - **Numeric engine options are validated.** `timeoutMs` (0..2^31-1), `maxRetries`
   (0..`MAX_RETRIES`, 10), `retryDelayMs` (0..30 000), `maxRedirects` (0..20) and
   `maxResponseBytes` (0..`Number.MAX_SAFE_INTEGER`) must be integers in range; anything

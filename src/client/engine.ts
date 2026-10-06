@@ -2,7 +2,14 @@
 // requests via a Transport, applies retry/backoff for transient statuses
 // (429, 503), and decodes responses.
 
-import { MAX_TIMEOUT_MS, nodeHttpTransport, type HttpResponse, type Transport } from "./http.js";
+import {
+  MAX_TIMEOUT_MS,
+  nodeHttpTransport,
+  sizeLimitMessage,
+  type HttpRequest,
+  type HttpResponse,
+  type Transport,
+} from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import {
   AwApiError,
@@ -64,14 +71,16 @@ export interface EngineOptions {
   headers?: Record<string, string>;
   /**
    * Time limit per request in milliseconds, covering the whole response body, not
-   * only idle gaps (0 disables; at most `MAX_TIMEOUT_MS`, 2^31 - 1 ms).
+   * only idle gaps (0 disables; at most `MAX_TIMEOUT_MS`, 2^31 - 1 ms). Enforced by
+   * the engine for every transport.
    */
   timeoutMs?: number;
   /**
-   * Number of automatic retries for transient (429/503) responses, 0..`MAX_RETRIES`
-   * (10). Each waits the
-   * response's `Retry-After` (up to `MAX_RETRY_AFTER_MS`; a longer one is not
-   * retried), or else `retryDelayMs * attempt`.
+   * Number of automatic retries for transient (429/503) responses and for a GET whose
+   * connection was reset (see {@link isTransientNetworkError}), 0..`MAX_RETRIES` (10).
+   * A 429/503 waits the response's `Retry-After` (up to `MAX_RETRY_AFTER_MS`; a longer
+   * one is not retried), or else `retryDelayMs * attempt`; a reset waits
+   * `retryDelayMs * attempt`.
    */
   maxRetries?: number;
   /**
@@ -90,6 +99,7 @@ export interface EngineOptions {
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
    * from a hostile/buggy endpoint). Defaults to 100 MiB; set to 0 for no limit.
+   * Enforced by the engine for every transport.
    */
   maxResponseBytes?: number;
   /** Injectable sleep, primarily for deterministic tests. */
@@ -139,6 +149,82 @@ function engineHeadersOnly(headers: Record<string, string>): Record<string, stri
  */
 function sanitizeServerText(text: string): string {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+}
+
+/** Why `value` is not a usable HttpResponse, or undefined when it is. */
+function responseProblem(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return "not an object";
+  const r = value as Partial<Record<"status" | "headers" | "body", unknown>>;
+  if (typeof r.status !== "number" || !Number.isInteger(r.status) || r.status < 100 || r.status > 599) {
+    return "status is not an HTTP status code";
+  }
+  if (typeof r.headers !== "object" || r.headers === null || Array.isArray(r.headers)) return "headers is not an object";
+  if (bodyBytes(r.body) === undefined) return "body is not a Buffer, Uint8Array, other ArrayBuffer view or ArrayBuffer";
+  return undefined;
+}
+
+/**
+ * The response body as a Buffer (a view, no copy): a Buffer, any ArrayBuffer view (a
+ * Uint8Array from fetch, a DataView) or an ArrayBuffer/SharedArrayBuffer — checked by internal
+ * slot, not `instanceof`, so a value from another realm (a vm context, a Jest test) counts.
+ * Undefined for anything else.
+ */
+function bodyBytes(value: unknown): Buffer | undefined {
+  if (Buffer.isBuffer(value)) return value;
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  const tag = Object.prototype.toString.call(value);
+  if (tag === "[object ArrayBuffer]" || tag === "[object SharedArrayBuffer]") return Buffer.from(value as ArrayBuffer);
+  return undefined;
+}
+
+/**
+ * The response headers as a plain record with lower-case names. Node's transport
+ * lower-cases them; a custom one may not (`Retry-After`, `Location`, `Content-Type`), and
+ * a fetch transport naturally returns its `Headers` object, which has no plain properties.
+ * Such an object (anything with `get` and `forEach`: `Headers`, a `Map`) is copied.
+ */
+function plainHeaders(headers: object): Record<string, string | string[] | undefined> {
+  const h = headers as { get?: unknown; forEach?: unknown };
+  if (typeof h.get === "function" && typeof h.forEach === "function") {
+    const record: Record<string, string> = {};
+    (h.forEach as (cb: (value: string, name: string) => void) => void).call(headers, (value, name) => {
+      record[String(name).toLowerCase()] = value;
+    });
+    return record;
+  }
+  const record: Record<string, string | string[] | undefined> = {};
+  for (const [name, value] of Object.entries(headers as Record<string, string | string[] | undefined>)) {
+    record[name.toLowerCase()] = value;
+  }
+  return record;
+}
+
+/** The first value of a header (a repeated one arrives as an array). */
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Error codes of a connection that broke off mid-request: Node's (`socket hang up` is
+ * ECONNRESET) and undici's (`fetch failed` with cause UND_ERR_SOCKET, "other side closed").
+ */
+const TRANSIENT_NETWORK_CODES = new Set(["ECONNRESET", "EPIPE", "ECONNABORTED", "UND_ERR_SOCKET"]);
+
+/** True when `err` or an error in its `cause` chain has a transient connection code. */
+function hasTransientCode(err: unknown, depth = 0): boolean {
+  if (typeof err !== "object" || err === null || depth > 4) return false;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === "string" && TRANSIENT_NETWORK_CODES.has(code)) return true;
+  return hasTransientCode((err as { cause?: unknown }).cause, depth + 1);
+}
+
+/**
+ * True for an AwNetworkError caused by a reset or aborted connection, which the engine
+ * retries — whichever transport raised it (a Node error, fetch's TypeError with an undici
+ * cause). A refused connection, a DNS failure or a timeout is not retried.
+ */
+export function isTransientNetworkError(err: unknown): boolean {
+  return err instanceof AwNetworkError && hasTransientCode(err.cause);
 }
 
 const realSleep = (ms: number): Promise<void> =>
@@ -308,6 +394,32 @@ export class RequestEngine {
     return `${this.#baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
   }
 
+  /**
+   * Call the transport under the overall deadline (`timeoutMs`): the request gets an
+   * AbortSignal that fires at the deadline, and the call rejects then whether the transport
+   * stops or not — a custom transport (fetch, a node:http wrapper) that ignores `timeoutMs`
+   * can't hang the caller. A synchronous throw becomes a rejection.
+   */
+  private async callTransport(request: HttpRequest): Promise<HttpResponse> {
+    const call = (signal?: AbortSignal): Promise<HttpResponse> =>
+      Promise.resolve().then(() => this.transport(signal === undefined ? request : { ...request, signal }));
+    if (this.timeoutMs === 0) return call();
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new AwNetworkError(`Request timed out after ${this.timeoutMs}ms`);
+        controller.abort(err);
+        reject(err);
+      }, Math.min(this.timeoutMs, MAX_TIMEOUT_MS));
+    });
+    try {
+      return await Promise.race([call(controller.signal), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Perform a request with Accept negotiation and transient-error retries. */
   async request(
     method: string,
@@ -333,13 +445,16 @@ export class RequestEngine {
     /** Why a redirect dropped the credentials, for a 401/403 message. */
     let dropped: string | undefined;
 
+    // Only an idempotent request is sent again after a reset: request() is public, and a
+    // POST re-sent may be applied twice. The client itself sends GETs only.
+    const idempotent = /^(GET|HEAD)$/i.test(method);
     let attempt = 0;
     let redirects = 0;
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
       let response: HttpResponse;
       try {
-        response = await this.transport({
+        response = await this.callTransport({
           method,
           url,
           headers,
@@ -348,6 +463,14 @@ export class RequestEngine {
           ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
         });
       } catch (cause) {
+        // A connection the server (or a proxy) reset is the network-level twin of a 503:
+        // retry an idempotent request, whichever transport reported it. Timeouts are not
+        // retried — a slow upstream should not be asked again at once.
+        if (idempotent && hasTransientCode(cause) && attempt < this.maxRetries) {
+          attempt += 1;
+          await this.sleep(this.retryDelayMs * attempt);
+          continue;
+        }
         // The default transport rejects with AwNetworkError only; an injected one may
         // throw anything, and its text may carry the request URL with the base URL's
         // password (fetch refuses a URL with credentials and quotes it). Keep the
@@ -361,6 +484,15 @@ export class RequestEngine {
         );
       }
 
+      // An injected transport may resolve with anything; a malformed HttpResponse would
+      // otherwise surface below as a raw TypeError (or, with no status, as success),
+      // outside the AwError contract.
+      const invalid = responseProblem(response);
+      if (invalid !== undefined) {
+        throw new AwNetworkError(
+          `${method} ${redactUrl(url)} failed: the transport returned an invalid response (${invalid}).`,
+        );
+      }
       // A transport must not follow redirects itself (`redirect: "manual"`): one that did
       // (fetch's default) may have carried caller headers to another host, and the answer
       // is not the one asked for. Reject it when it says so (`url`).
@@ -374,11 +506,19 @@ export class RequestEngine {
       }
 
       const status = response.status;
+      const responseHeaders = plainHeaders(response.headers);
+      // fetch gives a Uint8Array; view it as a Buffer (no copy), which the decoders expect.
+      const body = bodyBytes(response.body) as Buffer;
+      // The size cap holds whatever the transport did: the default one aborts early, a custom
+      // one may have read everything.
+      if (this.maxResponseBytes > 0 && body.byteLength > this.maxResponseBytes) {
+        throw new AwNetworkError(`${method} ${redactUrl(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
+      }
       const retryable = status === 429 || status === 503;
       if (retryable && attempt < this.maxRetries) {
         // Honour Retry-After; without a usable one, back off linearly. A Retry-After
         // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
-        const retryAfter = parseRetryAfter(response.headers["retry-after"]);
+        const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
           await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
@@ -389,12 +529,19 @@ export class RequestEngine {
       // Follow redirects, resolving the Location relative to the current URL.
       // abgeordnetenwatch 301-redirects a collection path without its trailing
       // slash (`/api/v2` -> `/api/v2/`), so this matters in practice.
-      const location = response.headers["location"];
+      const location = headerValue(responseHeaders["location"]);
       const nextUrl =
         FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects
           ? resolveLocation(location, url)
           : undefined;
       if (nextUrl !== undefined) {
+        // Only http(s) is followed, checked here and not only by the built-in transport:
+        // a custom transport must never be handed a file:, data: or javascript: URL.
+        if (nextUrl.protocol !== "http:" && nextUrl.protocol !== "https:") {
+          throw new AwNetworkError(
+            `Refusing to follow redirect to unsupported protocol "${nextUrl.protocol}" from ${method} ${redactUrl(url)}`,
+          );
+        }
         // Userinfo in a Location is not used: credentials come from the base URL only,
         // as the Authorization header, never from a server.
         nextUrl.username = "";
@@ -424,19 +571,19 @@ export class RequestEngine {
       // Any other 3xx — not a followed status, no usable Location, or past
       // maxRedirects — falls through and surfaces as an AwApiError naming the target.
 
-      const contentType = String(response.headers["content-type"] ?? "");
+      const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
         throw this.toApiError(
           method,
           url,
           status,
-          response.body,
+          body,
           location,
           status === 401 || status === 403 ? dropped : undefined,
         );
       }
 
-      return { data: response.body, contentType, status };
+      return { data: body, contentType, status };
     }
   }
 
