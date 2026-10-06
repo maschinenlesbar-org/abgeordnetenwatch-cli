@@ -127,6 +127,13 @@ npm start -- --help # run the CLI from source build
   `http.createServer` (redirects, JSON parsing, protocol guard).
 - **`cli.test.ts`** drives `run()` with a stub client and capturing IO, asserting
   on output and exit codes.
+- **`conformance-p*.test.ts`** are the shared checks of the 2026-10-05 fix plan, the
+  same files in every maschinenlesbar.org CLI with only an adapter block at the top:
+  P1 CLI redaction, P2 library redaction, P3 redirect credentials, P4 base-URL
+  validation (its P19 case is skipped: this CLI reads no environment variable), P5 the
+  transport contract, P6 the retry policy, P7 pipes and exit codes (runs the built bin),
+  P8/P9/P13 charset, envelopes and error classes, P10 strict filters and parameters.
+  They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
 
