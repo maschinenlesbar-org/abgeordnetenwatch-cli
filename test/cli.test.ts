@@ -5,6 +5,7 @@ import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwApiError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
+import type { DetailMeta, Entity, ListMeta } from "../src/client/types.js";
 import { jsonResponse, makeMockTransport, rawResponse } from "./helpers.js";
 
 interface Captured {
@@ -12,15 +13,28 @@ interface Captured {
   err: string[];
 }
 
+/**
+ * The client methods a CLI test stubs, typed from the real ones: the arguments the CLI
+ * passes and a result the CLI can print. The envelope's `meta` may stay partial, so test
+ * data keeps to what the test is about. Each stub used to be cast `as unknown as`, which
+ * switched the type checker off and let a stub drift from the client it stands in for.
+ */
+interface ClientStub {
+  list?: (...args: Parameters<AbgeordnetenwatchClient["list"]>) => Promise<{ meta: Partial<ListMeta>; data: Entity[] }>;
+  get?: (...args: Parameters<AbgeordnetenwatchClient["get"]>) => Promise<{ meta: Partial<DetailMeta>; data: Entity }>;
+  count?: (...args: Parameters<AbgeordnetenwatchClient["count"]>) => ReturnType<AbgeordnetenwatchClient["count"]>;
+}
+
 /** Build CliDeps with a stub client and capturing IO. */
-function makeDeps(client: Partial<AbgeordnetenwatchClient>): { deps: CliDeps; cap: Captured } {
+function makeDeps(client: ClientStub): { deps: CliDeps; cap: Captured } {
   const cap: Captured = { out: [], err: [] };
   const deps: CliDeps = {
     io: {
       out: (t) => cap.out.push(t),
       err: (t) => cap.err.push(t),
     },
-    createClient: () => client as AbgeordnetenwatchClient,
+    // The one cast: a stub has only the methods its test calls.
+    createClient: () => client as unknown as AbgeordnetenwatchClient,
   };
   return { deps, cap };
 }
@@ -57,12 +71,12 @@ test("`entities` lists all collections without touching the network", async () =
 
 test("`list` passes entity + params to the client and prints the envelope", async () => {
   let received: unknown;
-  const env = { meta: { result: { total: 1 } }, data: [{ id: 1 }] };
+  const env = { meta: { result: { count: 1, total: 1, range_start: 0, range_end: 5 } }, data: [{ id: 1 }] };
   const { deps, cap } = makeDeps({
-    list: (async (entity: string, params: unknown) => {
+    list: async (entity, params) => {
       received = { entity, params };
       return env;
-    }) as unknown as AbgeordnetenwatchClient["list"],
+    },
   });
 
   const code = await run(
@@ -79,7 +93,7 @@ test("`list` passes entity + params to the client and prints the envelope", asyn
 
 test("`list --data-only` prints just the data array", async () => {
   const env = { meta: {}, data: [{ id: 1 }, { id: 2 }] };
-  const { deps, cap } = makeDeps({ list: (async () => env) as unknown as AbgeordnetenwatchClient["list"] });
+  const { deps, cap } = makeDeps({ list: async () => env });
   const code = await run(["list", "votes", "--data-only", "--compact"], deps);
   assert.equal(code, 0);
   assert.equal(cap.out.join(""), JSON.stringify(env.data));
@@ -87,7 +101,7 @@ test("`list --data-only` prints just the data array", async () => {
 
 test("`count` prints { entity, total }", async () => {
   const { deps, cap } = makeDeps({
-    count: (async () => 9619) as unknown as AbgeordnetenwatchClient["count"],
+    count: async () => 9619,
   });
   const code = await run(["count", "politicians", "sex=f", "--compact"], deps);
   assert.equal(code, 0);
@@ -129,10 +143,10 @@ test("a duplicate filter key is rejected (no silent last-wins)", async () => {
 test("distinct operators on the same field are allowed (not a duplicate)", async () => {
   let received: unknown;
   const { deps } = makeDeps({
-    list: (async (_entity: string, params: { filters?: unknown }) => {
-      received = params.filters;
+    list: async (_entity, params) => {
+      received = params?.filters;
       return { meta: {}, data: [] };
-    }) as unknown as AbgeordnetenwatchClient["list"],
+    },
   });
   const code = await run(
     ["list", "politicians", "year_of_birth[gt]=1980", "year_of_birth[lt]=1990", "--compact"],
@@ -202,7 +216,7 @@ test("an unknown bracket filter operator is rejected client-side", async () => {
 
 test("a 404 from the client maps to exit code 4", async () => {
   const { deps, cap } = makeDeps({
-    get: (async () => {
+    get: async () => {
       throw new AwApiError({
         status: 404,
         url: "u",
@@ -210,7 +224,7 @@ test("a 404 from the client maps to exit code 4", async () => {
         body: "",
         detail: "There is no party entity with id 99999999",
       });
-    }) as unknown as AbgeordnetenwatchClient["get"],
+    },
   });
   const code = await run(["get", "parties", "99999999"], deps);
   assert.equal(code, 4);
@@ -234,10 +248,10 @@ test("get rejects a non-numeric id client-side", async () => {
 test("get forwards a valid numeric id to the client", async () => {
   let received: unknown;
   const { deps } = makeDeps({
-    get: (async (entity: string, id: unknown) => {
+    get: async (entity, id) => {
       received = { entity, id };
       return { meta: {}, data: { id: 42 } };
-    }) as unknown as AbgeordnetenwatchClient["get"],
+    },
   });
   const code = await run(["get", "parties", "42", "--compact"], deps);
   assert.equal(code, 0);
@@ -297,7 +311,7 @@ test("--user-agent that is blank or outside Latin-1 is a usage error, not an 'Un
 
 test("a 429 prints rate-limit guidance and exits 1", async () => {
   const { deps, cap } = makeDeps({
-    list: (async () => {
+    list: async () => {
       throw new AwApiError({
         status: 429,
         url: "u",
@@ -305,7 +319,7 @@ test("a 429 prints rate-limit guidance and exits 1", async () => {
         body: "",
         detail: "Too Many Requests",
       });
-    }) as unknown as AbgeordnetenwatchClient["list"],
+    },
   });
   const code = await run(["list", "politicians"], deps);
   assert.equal(code, 1);
