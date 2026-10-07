@@ -436,8 +436,9 @@ test("a message-less HTTP 500 hints at the filters only when the request had fil
     [["list", "politicians", "year_of_birth[gt]=1990"], true],
     [["count", "politicians", "sex=f"], true],
   ] as const) {
-    const { deps, cap } = makeTransportDeps(() => jsonResponse({}, 500));
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({}, 500));
     assert.equal(await run([...argv], deps), 1, argv.join(" "));
+    assert.equal(mt.calls.length, 1, `${argv.join(" ")}: a 500 is not retried`);
     assert.match(cap.err.join("\n"), /^Error: HTTP 500 for GET /);
     assert.equal(/Hint: .*filter field names/.test(cap.err.join("\n")), hint, argv.join(" "));
     assert.doesNotMatch(cap.err.join("\n"), /filter operator/);

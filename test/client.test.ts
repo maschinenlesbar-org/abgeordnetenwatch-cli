@@ -387,3 +387,47 @@ test("falls back to linear backoff when no Retry-After is present", async () => 
   await client.list("votes");
   assert.deepEqual(delays, [200, 400]);
 });
+
+test("only 429 and 503 are retried: a 500, 502 or 504 is asked once", async () => {
+  // The API answers a missing id and an invalid filter with HTTP 500; retrying it would
+  // repeat every such mistake against the live service and make the user wait for it.
+  for (const [status, body] of [
+    [500, { meta: { status: "error", status_message: "The following parameter(s) are not valid: x" } }],
+    [500, {}],
+    [502, {}],
+    [504, {}],
+  ] as const) {
+    const sleeps: number[] = [];
+    const mt = makeMockTransport(() => jsonResponse(body, status));
+    const client = new AbgeordnetenwatchClient({
+      transport: mt.transport,
+      maxRetries: 2,
+      sleep: async (ms) => void sleeps.push(ms),
+    });
+    await assert.rejects(client.list("votes"), (err) => err instanceof AwApiError && err.status === status, String(status));
+    assert.equal(mt.calls.length, 1, `HTTP ${status} was retried`);
+    assert.deepEqual(sleeps, [], `HTTP ${status} waited`);
+  }
+});
+
+test("a refused connection, a DNS failure and a timeout are not retried", async () => {
+  // Only a reset connection is the network-level twin of a 503 (DEVELOPING.md); asking a
+  // server that refused or a name that does not resolve again only delays the error.
+  for (const [label, thrown] of [
+    ["ECONNREFUSED", Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" })],
+    ["ENOTFOUND", Object.assign(new Error("getaddrinfo ENOTFOUND nowhere.invalid"), { code: "ENOTFOUND" })],
+    ["timeout", new AwNetworkError("Request timed out after 10ms")],
+  ] as const) {
+    let calls = 0;
+    const client = new AbgeordnetenwatchClient({
+      transport: async () => {
+        calls += 1;
+        throw thrown;
+      },
+      maxRetries: 2,
+      sleep: async () => {},
+    });
+    await assert.rejects(client.list("votes"), AwNetworkError, label);
+    assert.equal(calls, 1, `${label} was retried`);
+  }
+});
