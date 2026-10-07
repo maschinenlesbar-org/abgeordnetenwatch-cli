@@ -25,18 +25,24 @@ function makeDeps(client: Partial<AbgeordnetenwatchClient>): { deps: CliDeps; ca
   return { deps, cap };
 }
 
-/** Build CliDeps with a real client over a mock transport and capturing IO. */
+/**
+ * Build CliDeps with a real client over a mock transport and capturing IO. The client's
+ * backoff never waits: with the real `sleep`, a regression that retries made a test wait
+ * out the backoff (or a 120 s Retry-After) instead of failing; `sleeps` records the waits.
+ */
 function makeTransportDeps(responder: (req: HttpRequest) => HttpResponse) {
   const cap: Captured = { out: [], err: [] };
   const mt = makeMockTransport(responder);
+  const sleeps: number[] = [];
   const deps: CliDeps = {
     io: {
       out: (t) => cap.out.push(t),
       err: (t) => cap.err.push(t),
     },
-    createClient: (options) => new AbgeordnetenwatchClient({ ...options, transport: mt.transport }),
+    createClient: (options) =>
+      new AbgeordnetenwatchClient({ ...options, transport: mt.transport, sleep: async (ms) => void sleeps.push(ms) }),
   };
-  return { deps, cap, mt };
+  return { deps, cap, mt, sleeps };
 }
 
 test("`entities` lists all collections without touching the network", async () => {
@@ -308,7 +314,7 @@ test("a 429 prints rate-limit guidance and exits 1", async () => {
 });
 
 test("a Retry-After above 30 s fails at once, names the wait and does not suggest --max-retries", async () => {
-  const { deps, cap, mt } = makeTransportDeps(() => ({
+  const { deps, cap, mt, sleeps } = makeTransportDeps(() => ({
     status: 429,
     headers: { "content-type": "application/json", "retry-after": "120" },
     body: Buffer.from("{}"),
@@ -316,6 +322,7 @@ test("a Retry-After above 30 s fails at once, names the wait and does not sugges
   const code = await run(["--max-retries", "10", "count", "parties"], deps);
   assert.equal(code, 1);
   assert.equal(mt.calls.length, 1, "not retried");
+  assert.deepEqual(sleeps, [], "no wait before the error");
   const err = cap.err.join("\n");
   assert.match(err, /asked to retry after 120 s, longer than the 30 s the client waits; not retried/);
   assert.match(err, /wait 120 s/);
