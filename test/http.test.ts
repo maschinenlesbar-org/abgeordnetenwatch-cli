@@ -124,3 +124,34 @@ test("a header Node cannot send rejects with AwNetworkError, not a raw TypeError
     },
   );
 });
+
+test("maxResponseBytes cuts a body off while it streams, not after it was read", async () => {
+  // The engine checks the size of whatever a transport returns, so the error alone can't
+  // tell whether the built-in transport stopped early: a server that sends far more than
+  // the limit must be cut off long before it finishes, or a huge body is buffered whole.
+  const chunk = Buffer.alloc(64 * 1024, 0x20);
+  const total = 50 * 1024 * 1024;
+  let written = 0;
+  await withServer(
+    (_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      let open = true;
+      res.on("close", () => (open = false));
+      const pump = () => {
+        while (open && written < total) {
+          written += chunk.length;
+          if (!res.write(chunk)) return void res.once("drain", pump);
+        }
+        if (open) res.end();
+      };
+      pump();
+    },
+    async (baseUrl) => {
+      await assert.rejects(
+        () => nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 10_000, maxResponseBytes: 1024 }),
+        (err) => err instanceof AwNetworkError && /size limit of 1024 bytes/.test(err.message),
+      );
+      assert.ok(written < total / 4, `the server wrote ${written} of ${total} bytes before the cut`);
+    },
+  );
+});
