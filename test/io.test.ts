@@ -11,13 +11,14 @@ function epipe(code: string): NodeJS.ErrnoException {
 
 function setup() {
   const stdout = new EventEmitter();
-  const stderr = new EventEmitter();
+  const written: string[] = [];
+  const stderr = Object.assign(new EventEmitter(), { write: (text: string) => written.push(text) > 0 });
   const exits: number[] = [];
   handleOutputErrors(
     { stdout: stdout as unknown as NodeJS.WriteStream, stderr: stderr as unknown as NodeJS.WriteStream },
     (code) => exits.push(code),
   );
-  return { stdout, stderr, exits };
+  return { stdout, stderr, exits, written };
 }
 
 test("EPIPE on stdout (reader closed early, e.g. | head) exits 0 instead of crashing", () => {
@@ -46,4 +47,12 @@ test("ENOTCONN (stdout a socket whose reader has gone) is treated like EPIPE", (
   const err = setup();
   err.stderr.emit("error", epipe("ENOTCONN"));
   assert.deepEqual(err.exits, []);
+});
+
+test("another stdout write error (a full disk) names it on stderr and exits 1", () => {
+  // Only a reader that has gone is a success; ENOSPC or EIO means the output is incomplete.
+  const s = setup();
+  s.stdout.emit("error", epipe("ENOSPC"));
+  assert.deepEqual(s.exits, [1]);
+  assert.deepEqual(s.written, ["Output error: write ENOSPC\n"]);
 });

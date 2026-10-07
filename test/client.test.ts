@@ -431,3 +431,15 @@ test("a refused connection, a DNS failure and a timeout are not retried", async 
     assert.equal(calls, 1, `${label} was retried`);
   }
 });
+
+test("an error message cuts a very long URL in the middle and says how long it was", () => {
+  const url = `https://www.abgeordnetenwatch.de/api/v2/politicians?${"label[cn]=x&".repeat(30)}end=1`;
+  const err = new AwApiError({ status: 500, url, method: "GET", body: "" });
+  assert.equal(
+    err.message,
+    "HTTP 500 for GET https://www.abgeordnetenwatch.de/api/v2/politicians?" +
+      "label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&label[cn]=x&" +
+      "…[417 chars]…=x&label[cn]=x&end=1",
+  );
+  assert.equal(err.url, url, "the full URL stays on the error");
+});

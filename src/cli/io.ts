@@ -18,7 +18,7 @@ export interface CliDeps {
 /** The two process streams, as far as `handleOutputErrors` needs them. */
 export interface OutputStreams {
   stdout: Pick<NodeJS.WriteStream, "on">;
-  stderr: Pick<NodeJS.WriteStream, "on">;
+  stderr: Pick<NodeJS.WriteStream, "on" | "write">;
 }
 
 /**
@@ -41,7 +41,7 @@ export function handleOutputErrors(
 ): void {
   streams.stdout.on("error", (err: NodeJS.ErrnoException) => {
     if (readerGone(err)) return exit(0);
-    process.stderr.write(`Output error: ${err.message}\n`);
+    streams.stderr.write(`Output error: ${err.message}\n`);
     exit(1);
   });
   // stderr's reader going away doesn't make a failed run a success: ignore EPIPE there and
