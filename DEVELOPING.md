@@ -128,6 +128,8 @@ npm start -- --help # run the CLI from source build
   `http.createServer` (redirects, JSON parsing, protocol guard).
 - **`cli.test.ts`** drives `run()` with a stub client and capturing IO, asserting
   on output and exit codes.
+- **`log.test.ts`** tests the record helpers of `src/cli/log.ts` on their own
+  (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
 - **`conformance-p*.test.ts`** are the shared checks of the 2026-10-05 fix plan, the
   same files in every maschinenlesbar.org CLI with only an adapter block at the top:
   P1 CLI redaction, P2 library redaction, P3 redirect credentials, P4 base-URL
@@ -282,7 +284,11 @@ Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp,
 (`ERROR`, `WARN`, `INFO`) and a topic, `abgeordnetenwatch.<area>`. `--log-format text` (the
 default) writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
-and `msg`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
+and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord` over
+the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
+every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
+controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
+forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
 connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
