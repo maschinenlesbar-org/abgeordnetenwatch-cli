@@ -4,10 +4,12 @@
 
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
-import type { CliDeps } from "./io.js";
+import { logOf, type CliDeps } from "./io.js";
+import { createLogger, logFormatFromArgv } from "./log.js";
 import {
   AwApiError,
   AwError,
+  AwNetworkError,
   AwValidationError,
   credentialsIn,
   redactCredentials,
@@ -26,7 +28,15 @@ function configureTree(command: Command, deps: CliDeps): void {
   command.exitOverride();
   command.configureOutput({
     writeOut: (str) => deps.io.out(str.replace(/\n$/, "")),
-    writeErr: (str) => deps.io.err(str.replace(/\n$/, "")),
+    // commander's own messages are log records too: its "error: …" an ERROR, the help it
+    // shows after one an INFO.
+    writeErr: (str) => {
+      const text = str.replace(/\n$/, "");
+      // The blank line commander writes between an error and the help it shows after.
+      if (text === "") return;
+      if (text.startsWith("error: ")) logOf(deps).error("cli", text.slice("error: ".length));
+      else logOf(deps).info("cli", text);
+    },
   });
   for (const child of command.commands) configureTree(child, deps);
 }
@@ -81,6 +91,13 @@ export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliD
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   deps = withRedactedOutput(deps, argv);
+  // Every record goes through the redacted `io.err`, so a secret is kept out of the
+  // log in either format.
+  const redacted = deps;
+  deps = {
+    ...deps,
+    log: createLogger({ format: logFormatFromArgv(argv), write: (line) => redacted.io.err(line), ...(deps.now === undefined ? {} : { now: deps.now }) }),
+  };
   const program = buildProgram(deps);
   configureTree(program, deps);
 
@@ -101,25 +118,27 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // tell a usage mistake from a runtime/network error (1) or a 404 (4).
       return USAGE_ERROR_EXIT_CODE;
     }
+    const log = logOf(deps);
     if (err instanceof AwValidationError) {
       // The library rejected an input before sending anything (a rule the
       // commander parsers do not cover on their own, such as one that spans two
       // options): a usage error, like a rejected option value.
-      deps.io.err(`Error: ${err.message}`);
+      log.error("cli", err.message);
       return USAGE_ERROR_EXIT_CODE;
     }
     if (err instanceof AwApiError) {
       // err.message already includes any human-readable `detail` the API
       // returned (its meta.status_message); surface it as-is.
-      deps.io.err(`Error: ${err.message}`);
+      log.error("api", err.message);
       // The API answers many request problems with a generic HTTP 500. With a
       // message of its own (e.g. "There is no party entity with id X") it is
       // self-explanatory. Without one, and only when the request carried filters,
       // point at them: operators are already checked locally, so the field names
       // and values are what is left. A plain server fault gets no hint.
       if (err.status === 500 && !err.detail && hasFilters(err.url)) {
-        deps.io.err(
-          "Hint: the API rejected the request without a reason. Check the filter " +
+        log.info(
+          "api",
+          "the API rejected the request without a reason. Check the filter " +
             "field names and values.",
         );
       }
@@ -128,14 +147,16 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // (the message names it). Otherwise the automatic retries were exhausted, so point
       // the user at waiting and at the knob that raises the retry count.
       if (err.isRetryable && err.retryAfterMs !== undefined) {
-        deps.io.err(
-          `Hint: the server asked clients to wait ${Math.ceil(err.retryAfterMs / 1000)} s. ` +
+        log.info(
+          "api",
+          `the server asked clients to wait ${Math.ceil(err.retryAfterMs / 1000)} s. ` +
             "Wait that long before trying again; --max-retries cannot help, the client " +
             "never waits longer than 30 s by itself.",
         );
       } else if (err.isRetryable) {
-        deps.io.err(
-          "Hint: the API is rate-limiting or temporarily unavailable. Wait a " +
+        log.info(
+          "api",
+          "the API is rate-limiting or temporarily unavailable. Wait a " +
             "moment and retry; --max-retries raises the number of automatic retries.",
         );
       }
@@ -146,10 +167,10 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 1;
     }
     if (err instanceof AwError) {
-      deps.io.err(`Error: ${err.message}`);
+      log.error(err instanceof AwNetworkError ? "http" : "cli", err.message);
       return 1;
     }
-    deps.io.err(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
+    log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 }

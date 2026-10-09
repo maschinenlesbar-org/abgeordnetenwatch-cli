@@ -16,7 +16,7 @@ import {
 } from "../src/client/validate.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import type { EngineOptions } from "../src/client/engine.js";
-import { makeMockTransport, jsonResponse } from "./helpers.js";
+import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
 import { AwError, AwValidationError } from "../src/client/errors.js";
 import * as library from "../src/index.js";
 import { run } from "../src/cli/run.js";
@@ -45,7 +45,7 @@ test("the validation layer is part of the library's public surface", () => {
   assert.equal(library.assertValid, assertValid);
 });
 
-test("run() maps an AwValidationError from an action to a usage error (exit 2)", async () => {
+test("run() maps an AwValidationError from an action to a usage error (exit 2) and an ERROR record", async () => {
   const out: string[] = [];
   const err: string[] = [];
   const deps: CliDeps = {
@@ -59,7 +59,7 @@ test("run() maps an AwValidationError from an action to a usage error (exit 2)",
   };
   assert.equal(await run(["list", "politicians"], deps), 2);
   assert.deepEqual(out, []);
-  assert.deepEqual(err, ["Error: Invalid sortDirection: needs sortBy."]);
+  assert.deepEqual(err.map(untimed), ["ERROR [abgeordnetenwatch.cli] Invalid sortDirection: needs sortBy."]);
 });
 
 test("entityIdProblem accepts positive integers as numbers or digit strings", () => {

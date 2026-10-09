@@ -102,17 +102,35 @@ See [openapi.yaml](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/
 ## Global options
 
 `--base-url <url>`, `--timeout <ms>`, `--user-agent <ua>`,
-`--max-retries <n>` (transient 429/503 and reset connections, 0..10), `--max-response-bytes <n>`, `--compact`.
+`--max-retries <n>` (transient 429/503 and reset connections, 0..10), `--max-response-bytes <n>`,
+`--log-format <format>` (`text` or `jsonl`, see below), `--compact`.
 
 Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mirror; the
 API itself needs none) are sent as HTTP Basic auth and shown as `***` in everything the CLI
 prints, usage errors included.
 
 A base URL on plain `http:` to a host other than loopback (`localhost`, `127.0.0.0/8`,
-`::1`) works, but the CLI writes one line to stderr before the first request, e.g.
-`warning: requests to mirror.example are sent unencrypted (http:, not https:)`, or
-`warning: the base URL's credentials are sent unencrypted to mirror.example (http:, not https:)`
+`::1`) works, but the CLI writes one warning record to stderr before the first request, e.g.
+`… WARN  [abgeordnetenwatch.http] requests to mirror.example are sent unencrypted (http:, not https:)`, or
+`… WARN  [abgeordnetenwatch.http] the base URL's credentials are sent unencrypted to mirror.example (http:, not https:)`
 when the URL carries userinfo. stdout and the exit code are unchanged.
+
+Every command prints JSON to stdout; errors, warnings and notes go to stderr, so piping
+stdout into `jq` stays clean. Each line on stderr is a **log record**: a timestamp (UTC),
+a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
+(`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
+and their hints, `abgeordnetenwatch.http` for the connection). By default it is written
+log4j style; `--log-format jsonl` writes one JSON object per line instead (`ts`, `level`,
+`topic`, `msg`):
+
+```text
+2026-10-09T14:03:12.481Z WARN  [abgeordnetenwatch.http] requests to mirror.example are sent unencrypted (http:, not https:)
+2026-10-09T14:03:12.902Z ERROR [abgeordnetenwatch.api] HTTP 500 for GET https://www.abgeordnetenwatch.de/api/v2/parties/999999: There is no party entity with id 999999
+```
+
+```bash
+abgeordnetenwatch --log-format jsonl get parties 999999 2>log.jsonl   # {"ts":"…","level":"ERROR","topic":"abgeordnetenwatch.api","msg":"HTTP 500 …"}
+```
 
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically (up to `--max-retries`, default `2`), backing off 1 s, 2 s, … or waiting

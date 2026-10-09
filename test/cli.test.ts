@@ -6,7 +6,7 @@ import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwApiError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import type { DetailMeta, Entity, ListMeta } from "../src/client/types.js";
-import { jsonResponse, makeMockTransport, rawResponse } from "./helpers.js";
+import { jsonResponse, makeMockTransport, rawResponse, untimed } from "./helpers.js";
 
 interface Captured {
   out: string[];
@@ -433,7 +433,7 @@ test("a malformed 2xx envelope exits 1 with a parse error, not an unexpected Typ
     const { deps, cap } = makeTransportDeps(() => jsonResponse(null));
     assert.equal(await run(argv, deps), 1, argv.join(" "));
     assert.deepEqual(cap.out, []);
-    assert.match(cap.err.join("\n"), /^Error: Unexpected response shape from \/api\/v2\/parties/);
+    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.cli\] Unexpected response shape from \/api\/v2\/parties/);
   }
 });
 
@@ -460,8 +460,8 @@ test("a message-less HTTP 500 hints at the filters only when the request had fil
     const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({}, 500));
     assert.equal(await run([...argv], deps), 1, argv.join(" "));
     assert.equal(mt.calls.length, 1, `${argv.join(" ")}: a 500 is not retried`);
-    assert.match(cap.err.join("\n"), /^Error: HTTP 500 for GET /);
-    assert.equal(/Hint: .*filter field names/.test(cap.err.join("\n")), hint, argv.join(" "));
+    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.api\] HTTP 500 for GET /);
+    assert.equal(/^INFO  \[abgeordnetenwatch\.api\] .*filter field names/m.test(untimed(cap.err.join("\n"))), hint, argv.join(" "));
     assert.doesNotMatch(cap.err.join("\n"), /filter operator/);
   }
 });
@@ -473,7 +473,7 @@ test("credentials in --base-url are redacted from error messages", async () => {
   // ...but still sent: as the Authorization header, never in the URL the transport sees.
   assert.equal(mt.last().url, "http://127.0.0.1:18101/e418/api/v2/parties");
   assert.equal(mt.last().headers?.["Authorization"], `Basic ${Buffer.from("user:secret").toString("base64")}`);
-  assert.equal(cap.err.join("\n"), "Error: HTTP 418 for GET http://127.0.0.1:18101/e418/api/v2/parties");
+  assert.equal(untimed(cap.err.join("\n")), "ERROR [abgeordnetenwatch.api] HTTP 418 for GET http://127.0.0.1:18101/e418/api/v2/parties");
 });
 
 test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
@@ -482,14 +482,14 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const pretty = makeTransportDeps(deep);
   assert.equal(await run(["get", "parties", "5"], pretty.deps), 1);
   assert.deepEqual(pretty.cap.out, []);
-  assert.equal(pretty.cap.err.join("\n"), "Error: The response is nested too deeply to pretty-print; try --compact.");
+  assert.equal(untimed(pretty.cap.err.join("\n")), "ERROR [abgeordnetenwatch.cli] The response is nested too deeply to pretty-print; try --compact.");
 
   // Compact serialisation goes much deeper (it prints this one on current Node);
   // should a runtime's stack still be too small, it must fail just as cleanly.
   const compact = makeTransportDeps(deep);
   const code = await run(["--compact", "get", "parties", "5"], compact.deps);
   if (code === 0) assert.ok(compact.cap.out.join("").length > 2 * depth);
-  else assert.equal(compact.cap.err.join("\n"), "Error: The response is nested too deeply to print.");
+  else assert.equal(untimed(compact.cap.err.join("\n")), "ERROR [abgeordnetenwatch.cli] The response is nested too deeply to print.");
 });
 
 test("--help exits 0", async () => {

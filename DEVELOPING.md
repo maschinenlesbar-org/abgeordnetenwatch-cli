@@ -23,7 +23,8 @@ src/
     run.ts       argv → exit code, error→exit-code mapping
     program.ts   commander program assembly (+ global options)
     shared.ts    option parsers, filter parser, global-option resolver, JSON renderer
-    io.ts        injectable IO + deps seam
+    io.ts        injectable IO + deps seam, the logger and the clock
+    log.ts       the stderr log: records with ts, level, topic; --log-format text|jsonl
     commands/
       entities.ts  list / get / count / entities
   index.ts       library root re-export
@@ -56,8 +57,8 @@ Client methods enforce it with `assertValid(name, value, problem)`, which throws
 `AwValidationError` (a subclass of `AwError`) with the message `Invalid <name>: <reason>`;
 methods that return a promise reject with it, and no request is sent. The CLI's
 commander parsers call the same functions and turn the reason into a usage error, and
-`run.ts` maps an `AwValidationError` raised inside an action to exit 2 as well, printed as
-`Error: <message>`. So the CLI and the library reject the same inputs, and
+`run.ts` maps an `AwValidationError` raised inside an action to exit 2 as well, logged as
+an `ERROR` record of `abgeordnetenwatch.cli`. So the CLI and the library reject the same inputs, and
 `test/helpers.ts`'s `parity()` checks that: it runs one input through `run()` and through
 the library on one recording mock transport and returns both outcomes.
 
@@ -136,7 +137,8 @@ npm start -- --help # run the CLI from source build
   P20 the stderr warning for a plain-`http:` base URL (its env-variable and other-secret
   cases are skipped: this CLI reads no environment variable and sends no key), P21 the
   README's relative links (README.md ships to npmjs.com, so a link to a document the
-  `files` allowlist leaves out must be an absolute GitHub URL).
+  `files` allowlist leaves out must be an absolute GitHub URL), P23 the log records on
+  stderr and `--log-format`.
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
@@ -234,7 +236,7 @@ npm start -- --help # run the CLI from source build
   and what travels unencrypted — the base URL's credentials when it carries userinfo — or
   `undefined` for `https:`, an unparseable URL and loopback hosts (`localhost`,
   `127.0.0.0/8`, `::1`). The CLI's `action()` wrapper (`shared.ts`, `warnOnCleartext`)
-  prints it once per run as `warning: <sentence>` on stderr, after the options are parsed
+  logs it once per run as a `WARN` record of `abgeordnetenwatch.http` on stderr, after the options are parsed
   and before the first request; `--help`, `--version` and usage errors never get there.
 
 - **Credentials never reach output.** Userinfo in the base URL
@@ -273,3 +275,20 @@ npm run build                        # the CLI, for the command reference
 cd site && npm ci && bundle install  # once (Node >= 22.12, Ruby 3.4, Bundler)
 npm run serve                        # http://127.0.0.1:4000/abgeordnetenwatch-cli/
 ```
+
+## The log on stderr
+
+Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic, `abgeordnetenwatch.<area>`. `--log-format text` (the
+default) writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
+`--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
+and `msg`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
+`api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
+connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
+diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
+parses it, so commander's own usage errors are records too, and on top of the redacted
+`io.err`, so a secret is kept out of the log in either format. `CliDeps.now` makes the
+timestamps testable. stdout carries data only. Only the bin shim's `Output error: …` line
+(`handleOutputErrors`, a failed write to stdout) stays a plain line: it is written straight
+to `process.stderr`, outside `run()`. Conformance test P23 checks all of this, and its body
+is shared across the *-cli repos.

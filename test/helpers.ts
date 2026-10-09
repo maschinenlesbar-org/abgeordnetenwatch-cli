@@ -82,6 +82,18 @@ export function constantJson(body: unknown, status = 200): MockTransport {
   return makeMockTransport(() => jsonResponse(body, status));
 }
 
+// ---- the log on stderr -------------------------------------------------------
+
+/**
+ * stderr with each text record's timestamp taken off: `ERROR [abgeordnetenwatch.api] HTTP 404 …`.
+ * The format itself — timestamp, level, topic — is the conformance test's
+ * (conformance-p23-log-format); the other tests check what was said, at which level
+ * and under which topic.
+ */
+export function untimed(text: string): string {
+  return text.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z /gm, "");
+}
+
 /** What one input did through the CLI: exit code, output and the requests sent. */
 export interface CliOutcome {
   code: number;
@@ -116,7 +128,7 @@ export async function parity(
     createClient: (options) => new AbgeordnetenwatchClient({ ...options, transport: mt.transport }),
   };
   const code = await run(argv, deps);
-  const cli: CliOutcome = { code, out: out.join("\n"), err: err.join("\n"), requests: [...mt.calls] };
+  const cli: CliOutcome = { code, out: out.join("\n"), err: untimed(err.join("\n")), requests: [...mt.calls] };
 
   const before = mt.calls.length;
   let lib: LibOutcome;
