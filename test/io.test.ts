@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { handleOutputErrors } from "../src/cli/io.js";
+import { createLogger } from "../src/cli/log.js";
 
 function epipe(code: string): NodeJS.ErrnoException {
   const err: NodeJS.ErrnoException = new Error(`write ${code}`);
@@ -14,11 +15,14 @@ function setup() {
   const written: string[] = [];
   const stderr = Object.assign(new EventEmitter(), { write: (text: string) => written.push(text) > 0 });
   const exits: number[] = [];
+  const records: string[] = [];
+  const log = createLogger({ format: "jsonl", write: (line) => records.push(line), now: () => new Date("2026-01-02T03:04:05.678Z") });
   handleOutputErrors(
     { stdout: stdout as unknown as NodeJS.WriteStream, stderr: stderr as unknown as NodeJS.WriteStream },
     (code) => exits.push(code),
+    log,
   );
-  return { stdout, stderr, exits, written };
+  return { stdout, stderr, exits, written, records };
 }
 
 test("EPIPE on stdout (reader closed early, e.g. | head) exits 0 instead of crashing", () => {
@@ -49,10 +53,25 @@ test("ENOTCONN (stdout a socket whose reader has gone) is treated like EPIPE", (
   assert.deepEqual(err.exits, []);
 });
 
-test("another stdout write error (a full disk) names it on stderr and exits 1", () => {
+test("another stdout write error (a full disk) is an ERROR record of abgeordnetenwatch.output, in the run's format, and exits 1", () => {
   // Only a reader that has gone is a success; ENOSPC or EIO means the output is incomplete.
   const s = setup();
   s.stdout.emit("error", epipe("ENOSPC"));
   assert.deepEqual(s.exits, [1]);
-  assert.deepEqual(s.written, ["Output error: write ENOSPC\n"]);
+  assert.deepEqual(s.records.map((line) => JSON.parse(line)), [
+    { ts: "2026-01-02T03:04:05.678Z", level: "ERROR", topic: "abgeordnetenwatch.output", msg: "Could not write to stdout: write ENOSPC" },
+  ]);
+  assert.deepEqual(s.written, []);
+});
+
+test("without a logger, a stdout write error is a text ERROR record on the streams' stderr", () => {
+  const stdout = new EventEmitter();
+  const written: string[] = [];
+  const stderr = Object.assign(new EventEmitter(), { write: (text: string) => written.push(text) > 0 });
+  const exits: number[] = [];
+  handleOutputErrors({ stdout: stdout as unknown as NodeJS.WriteStream, stderr: stderr as unknown as NodeJS.WriteStream }, (code) => exits.push(code));
+  stdout.emit("error", epipe("EBADF"));
+  assert.deepEqual(exits, [1]);
+  assert.equal(written.length, 1);
+  assert.match(written[0] ?? "", /^\S+Z ERROR \[abgeordnetenwatch\.output\] Could not write to stdout: write EBADF\n$/);
 });

@@ -119,7 +119,8 @@ Every command prints JSON to stdout; errors, warnings and notes go to stderr, so
 stdout into `jq` stays clean. Each line on stderr is a **log record**: a timestamp (UTC),
 a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
 (`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
-and their hints, `abgeordnetenwatch.http` for the connection). By default it is written
+and their hints, `abgeordnetenwatch.http` for the connection, `abgeordnetenwatch.output`
+for a failed write to stdout). By default it is written
 log4j style; `--log-format jsonl` writes one JSON object per line instead (`ts`, `level`,
 `topic`, `msg`). A record is always one line: a line break, a control character or a bidi
 control in a message (a server's text, a value you typed) is written as an escape (`\n`,
