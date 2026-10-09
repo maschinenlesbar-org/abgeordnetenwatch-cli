@@ -541,3 +541,22 @@ test("an a:b@c argument (a filter value, a User-Agent) is neither a credential i
   assert.deepEqual(credentialsIn("run:2026-10-09@x"), []);
   assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
 });
+
+test("a repeated --log-format is reported in the format commander kept, the first (L6)", async () => {
+  const { deps, cap } = makeDeps({});
+  assert.equal(await run(["--log-format", "jsonl", "--log-format", "text", "count", "parties"], deps), 2);
+  const first = JSON.parse(cap.err[0] ?? "") as Record<string, unknown>;
+  assert.deepEqual([first["level"], first["topic"]], ["ERROR", "abgeordnetenwatch.cli"]);
+  assert.match(first["msg"] as string, /may be given only once/);
+});
+
+test("an option's value that looks like --log-format sets no format, in a parse error too (Bug 5, L6)", async () => {
+  // commander takes "--log-format" as the User-Agent and then fails on the command "jsonl".
+  const { deps, cap } = makeDeps({});
+  assert.equal(await run(["--user-agent", "--log-format", "jsonl", "get", "parties", "1"], deps), 2);
+  assert.match(cap.err[0] ?? "", /^\S+Z ERROR \[abgeordnetenwatch\.cli\] unknown command 'jsonl'/);
+  // commander takes "--" as the User-Agent and then parses --log-format jsonl.
+  const dashes = makeDeps({});
+  assert.equal(await run(["--user-agent", "--", "--log-format", "jsonl", "get", "parties"], dashes.deps), 2);
+  assert.equal((JSON.parse(dashes.cap.err[0] ?? "") as Record<string, unknown>)["level"], "ERROR");
+});

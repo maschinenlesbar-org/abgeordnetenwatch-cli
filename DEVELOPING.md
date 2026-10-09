@@ -311,7 +311,10 @@ code point and ends in `… (N more characters)`. The areas are `cli` (usage err
 `api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
 connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
-parses it, so commander's own usage errors are records too: its `error: …` an ERROR of `cli` (a
+parses it (`logFormatFromArgv`, used only for the records of a parse error: the first
+`--log-format` counts, and the value of an option that takes one is skipped, as commander
+reads it; a `preAction` hook then sets the format commander parsed, so
+`--user-agent --log-format=jsonl` logs text), so commander's own usage errors are records too: its `error: …` an ERROR of `cli` (a
 `(Did you mean …?)` line joined to it), the help it shows after one an INFO record per
 line, and the program run without a command (or `help <unknown name>`) an ERROR
 "missing command: `abgeordnetenwatch <subcommand>`" before that help, so every failed run
