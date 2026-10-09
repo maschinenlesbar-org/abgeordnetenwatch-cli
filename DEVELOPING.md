@@ -253,13 +253,15 @@ npm start -- --help # run the CLI from source build
   [`errors.ts`](src/client/errors.ts)) shows it as `***@` in every error message and in
   `AwApiError.url`, and library messages quote a rejected value through it. The CLI also
   redacts on output: `run.ts` (`redactionFor`, `withRedactedOutput`) takes the exact
-  userinfo of every argument (`credentialsIn`, exported) and replaces it with `***` in
-  everything it prints. The log replaces it in each record's *message*, before the record
-  is cut and escaped, and writes to the raw stderr: the frame (time, level, topic) is never
-  touched, and a password with DEL, C1 or bidi characters is matched in its raw form
-  — commander's usage errors, which echo rejected values, an unknown command, a stray
-  argument — so a password with spaces, quotes, `#`, `?` or `/` is caught as well as an
-  ordinary one. `redactUrl` falls back to the same text-based cut (`redactCredentials`,
+  userinfo of every URL argument (`credentialsIn`, exported) and replaces it with `***` in
+  everything it prints — commander's usage errors, which echo rejected values, an unknown
+  command, a stray argument — so a password with spaces, quotes, `#`, `?` or `/` is caught
+  as well as an ordinary one. Only a value that starts with a scheme counts (a bare `a:b@c`
+  is a filter value, a search text or a User-Agent as often as a credential), except as
+  the `--base-url` value, where a `user:password@host` typed without its scheme is still a
+  credential. The log replaces it in each record's *message*, before the record is cut and
+  escaped, and writes to the raw stderr: the frame (time, level, topic) is never touched,
+  and a password with DEL, C1 or bidi characters is matched in its raw form. `redactUrl` falls back to the same text-based cut (`redactCredentials`,
   exported) for a value that doesn't parse as a URL. The engine keeps the base URL and
   the caller's `headers` in real `#private` fields, so `console.log(client)`,
   `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's

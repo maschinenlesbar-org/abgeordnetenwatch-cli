@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "../src/client/client.js";
-import { AwApiError } from "../src/client/errors.js";
+import { AwApiError, credentialsIn } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import type { DetailMeta, Entity, ListMeta } from "../src/client/types.js";
 import { jsonResponse, makeMockTransport, rawResponse, untimed } from "./helpers.js";
@@ -529,4 +529,15 @@ test("a rejected value is quoted at most 200 characters long in the CLI's own me
     assert.match(own, /^(Invalid|Unknown) (id|entity|filter)[^…]{0,230}…/, own.slice(0, 300));
     assert.ok(own.length < 600, `${own.length}: ${own.slice(0, 300)}`);
   }
+});
+
+test("an a:b@c argument (a filter value, a User-Agent) is neither a credential in the log nor rewritten in the JSON on stdout (L14)", async () => {
+  const { deps, cap } = makeTransportDeps(() => jsonResponse({ meta: { result: { count: 1, total: 1 } }, data: [{ id: 1, label: "run:2026-10-09@x" }] }));
+  assert.equal(await run(["--user-agent", "run:2026-10-09@x", "list", "politicians", "label[cn]=run:2026-10-09@x"], deps), 0);
+  assert.match(cap.out.join("\n"), /"label": "run:2026-10-09@x"/);
+  const typed = makeDeps({});
+  assert.equal(await run(["--timeout", "run:2026-10-09@x", "count", "parties"], typed.deps), 2);
+  assert.ok(typed.cap.err.some((line) => line.includes("'run:2026-10-09@x'")), typed.cap.err.join("\n"));
+  assert.deepEqual(credentialsIn("run:2026-10-09@x"), []);
+  assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
 });
