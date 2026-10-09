@@ -252,8 +252,11 @@ npm start -- --help # run the CLI from source build
   (`https://user:secret@mirror/`) is allowed, but `redactUrl` (exported from
   [`errors.ts`](src/client/errors.ts)) shows it as `***@` in every error message and in
   `AwApiError.url`, and library messages quote a rejected value through it. The CLI also
-  redacts on output: `run.ts` (`withRedactedOutput`) takes the exact userinfo of every
-  argument (`credentialsIn`, exported) and replaces it with `***` in everything it prints
+  redacts on output: `run.ts` (`redactionFor`, `withRedactedOutput`) takes the exact
+  userinfo of every argument (`credentialsIn`, exported) and replaces it with `***` in
+  everything it prints. The log replaces it in each record's *message*, before the record
+  is cut and escaped, and writes to the raw stderr: the frame (time, level, topic) is never
+  touched, and a password with DEL, C1 or bidi characters is matched in its raw form
   — commander's usage errors, which echo rejected values, an unknown command, a stray
   argument — so a password with spaces, quotes, `#`, `?` or `/` is caught as well as an
   ordinary one. `redactUrl` falls back to the same text-based cut (`redactCredentials`,
@@ -302,8 +305,9 @@ code point and ends in `… (N more characters)`. The areas are `cli` (usage err
 `api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
 connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
-parses it, so commander's own usage errors are records too, and on top of the redacted
-`io.err`, so a secret is kept out of the log in either format. `CliDeps.now` makes the
+parses it, so commander's own usage errors are records too, and with the run's redaction
+(`withRedactedOutput`), which replaces a secret in the message only, before it is
+escaped: the frame is never touched, and a secret is kept out of the log in either format. `CliDeps.now` makes the
 timestamps testable. stdout carries data only. Only the bin shim's `Output error: …` line
 (`handleOutputErrors`, a failed write to stdout) stays a plain line: it is written straight
 to `process.stderr`, outside `run()`. Conformance test P23 checks all of this, and its body
