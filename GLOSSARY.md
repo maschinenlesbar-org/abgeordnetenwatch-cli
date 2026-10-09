@@ -230,14 +230,16 @@ collection path).
 
 **HTTP 500.** The API answers a missing id, a parameter it doesn't accept and an unsortable
 field with HTTP 500, not 404 or 400; the CLI prints the reason and exits `1`. HTTP 429 and
-503 are retried automatically (`--max-retries`, default 2, at most 10).
+503 are retried automatically (`--max-retries`, default 2, at most 10); each retry is a WARN
+record of `abgeordnetenwatch.http` (`HTTP 503 from host: retry 1 of 3 in 2 s`), offered by the
+library as `onRetry`.
 
 **Log record.** Every diagnostic line the CLI writes to stderr: a timestamp, a level
 (`ERROR`, `WARN`, `INFO`) and a topic `abgeordnetenwatch.<area>`, as text (log4j style) or
 with `--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
 commander's messages, unexpected errors), `api` (the API's answers: an error status and its
 hints, and a malformed answer — bad JSON, the wrong shape or content type), `http` (the
-connection, the cleartext warning) and `output` (a failed write to stdout). A record is
+connection, the cleartext warning, and one WARN per retry before it waits) and `output` (a failed write to stdout). A record is
 always one line; control characters in it are escaped.
 
 > **Library & internals.** The TypeScript client, request engine, retries, redirects and

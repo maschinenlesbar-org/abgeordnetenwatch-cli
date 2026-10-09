@@ -102,7 +102,7 @@ See [openapi.yaml](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/
 ## Global options
 
 `--base-url <url>`, `--timeout <ms>`, `--user-agent <ua>`,
-`--max-retries <n>` (transient 429/503 and reset connections, 0..10), `--max-response-bytes <n>`,
+`--max-retries <n>` (transient 429/503 and reset connections, 0..10; each retry logs one WARN record of `abgeordnetenwatch.http` before it waits, `HTTP 503 from host: retry 1 of 3 in 2 s`), `--max-response-bytes <n>`,
 `--log-format <format>` (`text` or `jsonl`, see below), `--compact`.
 
 Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mirror; the
@@ -119,7 +119,7 @@ Every command prints JSON to stdout; errors, warnings and notes go to stderr, so
 stdout into `jq` stays clean. Each line on stderr is a **log record**: a timestamp (UTC),
 a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
 (`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
-and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection, `abgeordnetenwatch.output`
+and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection (the cleartext warning, and one WARN per retry), `abgeordnetenwatch.output`
 for a failed write to stdout). By default it is written
 log4j style; `--log-format jsonl` writes one JSON object per line instead (`ts`, `level`,
 `topic`, `msg`). A record is always one line: a line break, a control character or a bidi

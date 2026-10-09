@@ -242,7 +242,8 @@ falsche ID) · `4` HTTP 404 (unbekannter Sammlungspfad).
 **HTTP 500.** Eine fehlende ID, einen nicht akzeptierten Parameter und ein nicht sortierbares
 Feld beantwortet die API mit HTTP 500, nicht mit 404 oder 400; die CLI gibt den Grund aus und
 endet mit `1`. HTTP 429 und 503 werden automatisch wiederholt (`--max-retries`, Standard 2,
-höchstens 10).
+höchstens 10); jede Wiederholung ist ein Log-Eintrag `WARN` von `abgeordnetenwatch.http`
+(`HTTP 503 from host: retry 1 of 3 in 2 s`), die Bibliothek bietet sie als `onRetry` an.
 
 **Log-Eintrag (log record).** Jede Diagnosezeile, die die CLI nach stderr schreibt: ein
 Zeitstempel, eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `abgeordnetenwatch.<Bereich>`,
@@ -250,7 +251,7 @@ als Text (im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt p
 Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
 Antworten der API: ein Fehlerstatus mit seinen Hinweisen und eine fehlerhafte Antwort —
 ungültiges JSON, die falsche Form oder der falsche Inhaltstyp), `http` (die Verbindung, die
-Klartext-Warnung) und `output` (ein Schreibfehler auf stdout). Ein Eintrag ist immer eine
+Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten) und `output` (ein Schreibfehler auf stdout). Ein Eintrag ist immer eine
 Zeile; Steuerzeichen darin werden maskiert.
 
 > **Bibliothek & Interna.** Den TypeScript-Client, die Request-Engine, Retries,

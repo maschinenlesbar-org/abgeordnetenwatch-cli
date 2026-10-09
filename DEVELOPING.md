@@ -201,6 +201,12 @@ npm start -- --help # run the CLI from source build
   `UND_ERR_SOCKET`, anywhere in the error's `cause` chain; `isTransientNetworkError`) is
   retried the same number of times, after `retryDelayMs * attempt`; a refused
   connection, a DNS failure or a timeout is not.
+  Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
+  `{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
+  redacted) `}`) is called once per retry right before the sleep, never when there is none, and
+  a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
+  `abgeordnetenwatch.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host
+  only, whole seconds, ms under 1 s). Tests: `test/retry-hook.test.ts`, `test/retry-log.test.ts`.
 - **The transport contract is enforced by the engine.** `timeoutMs` and
   `maxResponseBytes` hold for every transport, not only the built-in one: the engine
   runs each transport call under the overall deadline (it passes an `AbortSignal` in
