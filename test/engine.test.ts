@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine } from "../src/client/engine.js";
+import { AbgeordnetenwatchClient } from "../src/client/client.js";
 import { AwApiError, cutText, toWellFormed } from "../src/client/errors.js";
 import {
   makeMockTransport,
@@ -266,4 +267,20 @@ test("a long URL cut in an error message never leaves half a character", () => {
     assert.equal(toWellFormed(err.message), err.message, url.length.toString());
     assert.match(err.message, /…\[\d+ chars\]…/);
   }
+});
+
+test("own messages quote a server or user value at most 200 characters long (L3)", async () => {
+  const long = "x".repeat(5000);
+  const redirect = new RequestEngine({ maxRedirects: 0, maxRetries: 0, transport: async () => ({ status: 302, headers: { location: `https://other.example/${long}` }, body: Buffer.alloc(0) }) });
+  await assert.rejects(redirect.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /redirect to https:\/\/other\.example\/x+… not followed/.test(err.message));
+  const html = new RequestEngine({ maxRetries: 0, transport: async () => ({ status: 200, headers: { "content-type": `text/${long}` }, body: Buffer.from("{}") }) });
+  await assert.rejects(html.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /Unexpected content type "text\/x+…"/.test(err.message));
+  const charset = new RequestEngine({ maxRetries: 0, transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=${long}` }, body: Buffer.from("{}") }) });
+  await assert.rejects(charset.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /charset "x+…"/.test(err.message));
+  const client = new AbgeordnetenwatchClient({ transport: async () => ({ status: 200, headers: {}, body: Buffer.from("{}") }) });
+  await assert.rejects(client.get("parties", long), (err: Error) => err.message.length < 600 && /x+…/.test(err.message));
+  await assert.rejects(client.list("parties", { filters: { [`f[${long}]`]: "1" } }), (err: Error) => err.message.length < 1000 && /x+…/.test(err.message));
+  await assert.rejects(client.list("parties", { filters: { [`${long}`]: "1", [`${long}[gt]`]: "2" } }), (err: Error) => err.message.length < 1200 && /x+…/.test(err.message));
+  await assert.rejects(client.list("parties", { [long]: 1 } as never), (err: Error) => err.message.length < 600 && /x+…/.test(err.message));
+  await assert.rejects(client.list(long as never), (err: Error) => err.message.length < 800 && /x+…/.test(err.message));
 });

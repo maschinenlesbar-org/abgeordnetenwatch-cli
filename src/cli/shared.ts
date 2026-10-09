@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "./io.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type EngineOptions } from "../client/engine.js";
-import { AwError } from "../client/errors.js";
+import { AwError, quoteValue } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem, nonBlankProblem } from "../client/validate.js";
 
 /**
@@ -91,7 +91,7 @@ export function parseFilters(args: string[]): Record<string, string> {
     const eq = arg.indexOf("=");
     if (eq <= 0) {
       throw new InvalidArgumentError(
-        `Invalid filter "${arg}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
+        `Invalid filter "${quoteValue(arg)}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
       );
     }
     filters[arg.slice(0, eq)] = arg.slice(eq + 1);

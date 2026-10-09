@@ -5,7 +5,7 @@
 // sends a request, and the CLI's filter parser calls the same rules.
 
 import { FILTER_OPERATORS, type FilterValue } from "./types.js";
-import { AwValidationError } from "./errors.js";
+import { AwValidationError, quoteValue } from "./errors.js";
 import { assertValid, describeValue, type Problem } from "./validate.js";
 
 /** A filter key: a field name, optionally followed by one `[op]` suffix. */
@@ -73,7 +73,7 @@ export const reservedFilterProblem: Problem<string> = (key) => {
 export const filterOperatorProblem: Problem<string> = (key) => {
   const op = FILTER_KEY.exec(key)?.[2];
   if (op === undefined || (FILTER_OPERATORS as readonly string[]).includes(op)) return undefined;
-  return `Unknown filter operator "[${op}]" in ${describeValue(key)}. Valid operators: ${FILTER_OPERATORS.join(", ")}.`;
+  return `Unknown filter operator "[${quoteValue(op)}]" in ${describeValue(key)}. Valid operators: ${FILTER_OPERATORS.join(", ")}.`;
 };
 
 /**
@@ -91,8 +91,8 @@ export const filterClashProblem: Problem<readonly string[]> = (keys) => {
       .find((prev) => filterField(prev) === field && (prev === field || key === field));
     if (clash !== undefined) {
       return (
-        `Conflicting filters "${clash}" and "${key}": the API keeps only one of a plain and a ` +
-        `bracket filter on the same field. Use operators only, e.g. '${field}[eq]=…'.`
+        `Conflicting filters "${quoteValue(clash)}" and "${quoteValue(key)}": the API keeps only one of a plain and a ` +
+        `bracket filter on the same field. Use operators only, e.g. '${quoteValue(field)}[eq]=…'.`
       );
     }
   }

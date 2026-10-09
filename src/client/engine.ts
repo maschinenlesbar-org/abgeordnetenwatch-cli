@@ -19,6 +19,8 @@ import {
   AwParseError,
   AwValidationError,
   credentialsIn,
+  cutForMessage,
+  MAX_QUOTED_LENGTH,
   redactCredentials,
   redactUrl,
 } from "./errors.js";
@@ -231,17 +233,8 @@ export function isTransientNetworkError(err: unknown): boolean {
   return err instanceof AwNetworkError && hasTransientCode(err.cause);
 }
 
-/**
- * Longest server text (in characters) an error message shows; `AwApiError.body` keeps
- * the whole body. A proxy's 200 kB error page would otherwise flood the terminal.
- */
-export const MAX_MESSAGE_TEXT = 500;
-
-/** `text` cut to {@link MAX_MESSAGE_TEXT} characters, marked with "…" when cut. */
-export function cutForMessage(text: string): string {
-  const chars = [...text];
-  return chars.length <= MAX_MESSAGE_TEXT ? text : `${chars.slice(0, MAX_MESSAGE_TEXT).join("")}…`;
-}
+/** Re-exported from errors.ts, where the error classes use them too. */
+export { MAX_MESSAGE_TEXT, cutForMessage } from "./errors.js";
 
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -664,7 +657,7 @@ export class RequestEngine {
     const mediaType = (res.contentType.split(";", 1)[0] ?? "").trim().toLowerCase();
     if (mediaType && mediaType !== "application/json" && !mediaType.endsWith("+json")) {
       throw new AwParseError(
-        `Unexpected content type "${sanitizeServerText(res.contentType)}" from ${path} (expected JSON).`,
+        `Unexpected content type "${cutForMessage(sanitizeServerText(res.contentType), MAX_QUOTED_LENGTH)}" from ${path} (expected JSON).`,
       );
     }
     const text = decodeBody(res.data, res.contentType, path);
@@ -738,7 +731,7 @@ function decodeBody(body: Buffer, contentType: string, path: string): string {
     decoder = new TextDecoder(charset);
   } catch {
     throw new AwParseError(
-      `Unsupported response charset "${sanitizeServerText(charset)}" from ${path}.`,
+      `Unsupported response charset "${cutForMessage(sanitizeServerText(charset), MAX_QUOTED_LENGTH)}" from ${path}.`,
     );
   }
   return decoder.decode(body);

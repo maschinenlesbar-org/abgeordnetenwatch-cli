@@ -4,7 +4,7 @@
 // a request; the CLI's commander parsers call the same Problem functions, so a
 // rule is written once and both layers reject exactly the same inputs.
 
-import { AwValidationError, redactUrl } from "./errors.js";
+import { AwValidationError, quoteValue } from "./errors.js";
 import { SORT_DIRECTIONS, type ListParams } from "./types.js";
 
 /**
@@ -64,7 +64,7 @@ export const nonBlankProblem: Problem<unknown> = (value) =>
  * message.
  */
 export function describeValue(value: unknown): string {
-  return typeof value === "string" ? JSON.stringify(redactUrl(value)) : String(value);
+  return typeof value === "string" ? JSON.stringify(quoteValue(value)) : String(value);
 }
 
 /**

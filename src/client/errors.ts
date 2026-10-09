@@ -78,6 +78,40 @@ export function cutText(text: string, max: number): string {
   return text.slice(0, end);
 }
 
+/**
+ * Longest server text (in characters) an error message shows; `AwApiError.body` keeps
+ * the whole body. A proxy's 200 kB error page would otherwise flood the terminal.
+ */
+export const MAX_MESSAGE_TEXT = 500;
+
+/**
+ * The longest value (in characters) an own message quotes from a server answer or from
+ * the user's input: an id, a filter key, a Content-Type, a redirect target. A longer one
+ * is cut and ends in "…", so a library caller's `err.message` stays bounded too.
+ */
+export const MAX_QUOTED_LENGTH = 200;
+
+/**
+ * `text` cut to `max` characters (code points, so never inside a surrogate pair; default
+ * {@link MAX_MESSAGE_TEXT}), marked with "…" when cut.
+ */
+export function cutForMessage(text: string, max: number = MAX_MESSAGE_TEXT): string {
+  let units = 0;
+  for (let chars = 0; units < text.length && chars < max; chars++) {
+    units += (text.codePointAt(units) as number) > 0xffff ? 2 : 1;
+  }
+  return units >= text.length ? text : `${text.slice(0, units)}…`;
+}
+
+/**
+ * A value an own message quotes from the user's input: its userinfo redacted
+ * ({@link redactUrl}) before it is cut at {@link MAX_QUOTED_LENGTH}, so the cut can't
+ * leave part of a password behind without the `@` that marks it.
+ */
+export function quoteValue(value: string): string {
+  return cutForMessage(redactUrl(value), MAX_QUOTED_LENGTH);
+}
+
 function isHighSurrogate(c: number): boolean {
   return c >= 0xd800 && c <= 0xdbff;
 }
@@ -154,7 +188,7 @@ export class AwApiError extends AwError {
     if (args.status >= 300 && args.status < 400) {
       parts.push(
         args.location
-          ? `redirect to ${args.location} not followed`
+          ? `redirect to ${cutForMessage(args.location, MAX_QUOTED_LENGTH)} not followed`
           : "redirect not followed (no Location header)",
       );
     }

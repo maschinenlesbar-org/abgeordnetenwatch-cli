@@ -511,3 +511,22 @@ test("the help subcommand exits 0; a bare invocation is a usage error", async ()
     assert.ok(cap.out.length + cap.err.length > 0, argv.join(" ") || "(bare)");
   }
 });
+
+test("a rejected value is quoted at most 200 characters long in the CLI's own messages (L3)", async () => {
+  // commander echoes a rejected value whole first (the record's cap bounds that, so the
+  // values stay short enough for the own message to fit in the record); the
+  // CLI's own messages quote the value cut.
+  for (const argv of [
+    ["get", "parties", `1x${"9".repeat(1500)}`],
+    ["get", `p${"x".repeat(1500)}`, "1"],
+    ["list", "parties", `${"f".repeat(1500)}[zz]=1`],
+    ["list", "parties", `x${"9".repeat(1500)}`],
+  ]) {
+    const { deps, cap } = makeDeps({});
+    assert.equal(await run(argv, deps), 2, argv.join(" ").slice(0, 40));
+    const record = cap.err[0] ?? "";
+    const own = record.slice(record.search(/(Invalid|Unknown) (id|entity|filter)/));
+    assert.match(own, /^(Invalid|Unknown) (id|entity|filter)[^…]{0,230}…/, own.slice(0, 300));
+    assert.ok(own.length < 600, `${own.length}: ${own.slice(0, 300)}`);
+  }
+});

@@ -224,7 +224,12 @@ npm start -- --help # run the CLI from source build
   `detail` or `message` of the body) is cut at 500 characters (`MAX_MESSAGE_TEXT`,
   `cutForMessage`, which counts code points) in the message; `AwApiError.body` keeps the
   whole body. A long URL in a message is cut in the middle, never inside a surrogate pair
-  (`cutText`), so the message stays well-formed.
+  (`cutText`), so the message stays well-formed. Any other value an own message quotes
+  from a server answer or the user's input (a redirect target, a Content-Type or charset,
+  an id, an entity name, a filter key, operator or value, a parameter name) is cut at
+  `MAX_QUOTED_LENGTH` (200, `cutForMessage`; `quoteValue` redacts a value's userinfo
+  before the cut), so `err.message` stays bounded for a library caller. `cutForMessage`
+  and `MAX_MESSAGE_TEXT` live in `errors.ts` and are re-exported from `engine.ts`.
 - **Only `http:`/`https:` base URLs are accepted** — one rule, `baseUrlProblem`, checked
   by `--base-url` at parse time (a usage error) and by the engine constructor on the raw
   value, before it strips trailing slashes (the exported `assertValidBaseUrl`); the
@@ -291,8 +296,9 @@ the message (text) or the whole JSON object (jsonl), which writes CR and LF as `
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
 forge another one or steer the terminal. Before that a lone surrogate (half a
-character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
-The areas are `cli` (usage errors, commander's messages, unexpected errors),
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`),
+and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
+code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
 connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander

@@ -11,7 +11,7 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwParseError, AwValidationError, redactUrl } from "./errors.js";
+import { AwParseError, AwValidationError, quoteValue } from "./errors.js";
 import { assertParams, normalizeEntityId, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
@@ -38,7 +38,7 @@ export function assertKnownListParams(params: object): void {
   for (const key of Object.keys(params)) {
     if (!(LIST_PARAM_KEYS as readonly string[]).includes(key)) {
       throw new AwValidationError(
-        `Invalid params: unknown parameter ${JSON.stringify(redactUrl(key))}. Valid parameters: ${LIST_PARAM_KEYS.join(", ")}; filters go in "filters".`,
+        `Invalid params: unknown parameter ${JSON.stringify(quoteValue(key))}. Valid parameters: ${LIST_PARAM_KEYS.join(", ")}; filters go in "filters".`,
       );
     }
   }
@@ -137,7 +137,7 @@ export class AbgeordnetenwatchClient {
 function checkCollection(collection: string): string {
   if (!isEntityCollection(collection)) {
     throw new AwValidationError(
-      `Unknown collection ${JSON.stringify(redactUrl(String(collection)))}. Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
+      `Unknown collection ${JSON.stringify(quoteValue(String(collection)))}. Valid collections: ${ENTITY_COLLECTIONS.join(", ")}.`,
     );
   }
   return collection;
