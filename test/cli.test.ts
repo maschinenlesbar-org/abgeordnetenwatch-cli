@@ -560,3 +560,11 @@ test("an option's value that looks like --log-format sets no format, in a parse 
   assert.equal(await run(["--user-agent", "--", "--log-format", "jsonl", "get", "parties"], dashes.deps), 2);
   assert.equal((JSON.parse(dashes.cap.err[0] ?? "") as Record<string, unknown>)["level"], "ERROR");
 });
+
+test("a subcommand's value option does not swallow the program's --log-format, in a parse error too (L6)", async () => {
+  // commander takes the program's --log-format out of argv first; --sort-by is left without its value.
+  const { deps, cap } = makeDeps({});
+  assert.equal(await run(["list", "politicians", "--sort-by", "--log-format", "jsonl"], deps), 2);
+  assert.ok(cap.err.length > 0 && cap.err.every((line) => line.startsWith("{")), cap.err.join("\n"));
+  assert.match((JSON.parse(cap.err[0] ?? "") as Record<string, unknown>)["msg"] as string, /--sort-by <field>' argument missing/);
+});
