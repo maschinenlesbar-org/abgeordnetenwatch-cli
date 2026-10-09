@@ -66,6 +66,30 @@ export function redactCredentials(text: string, credentials: readonly string[]):
   return out;
 }
 
+/**
+ * `text` cut to at most `max` UTF-16 units, never inside a surrogate pair: when the cut
+ * would land after a high surrogate it is made one unit earlier, so a message that holds
+ * the cut text is well-formed (a lone `\ud83d` makes jq reject a whole JSON stream).
+ * Text no longer than `max` is returned as it is; the caller marks a cut.
+ */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const end = max > 0 && isHighSurrogate(text.charCodeAt(max - 1)) ? max - 1 : max;
+  return text.slice(0, end);
+}
+
+function isHighSurrogate(c: number): boolean {
+  return c >= 0xd800 && c <= 0xdbff;
+}
+
+/**
+ * `text` with every lone surrogate (half of a character) replaced by U+FFFD, like
+ * `String.prototype.toWellFormed` (ES2024, so not in this package's `lib`).
+ */
+export function toWellFormed(text: string): string {
+  return text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
+}
+
 /** Base class for every error originating from this client. */
 export class AwError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -77,11 +101,15 @@ export class AwError extends Error {
 /** Maximum URL length echoed into a human-readable error message. */
 const MAX_URL_IN_MESSAGE = 200;
 
-/** Shorten an overly long URL for display, keeping head and tail context. */
+/**
+ * Shorten an overly long URL for display, keeping head and tail context. Neither cut
+ * lands inside a surrogate pair (a URL that doesn't parse is shown as given).
+ */
 function truncateUrl(url: string): string {
   if (url.length <= MAX_URL_IN_MESSAGE) return url;
-  const head = url.slice(0, MAX_URL_IN_MESSAGE - 40);
-  const tail = url.slice(-20);
+  const head = cutText(url, MAX_URL_IN_MESSAGE - 40);
+  const from = url.length - 20;
+  const tail = url.slice(isHighSurrogate(url.charCodeAt(from - 1)) ? from + 1 : from);
   return `${head}…[${url.length} chars]…${tail}`;
 }
 

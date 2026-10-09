@@ -222,7 +222,9 @@ npm start -- --help # run the CLI from source build
   is not a function, and `headers` that are not a plain object.
 - **Server text in messages is cut.** An API error's `detail` (`meta.status_message`,
   `detail` or `message` of the body) is cut at 500 characters (`MAX_MESSAGE_TEXT`,
-  `cutForMessage`) in the message; `AwApiError.body` keeps the whole body.
+  `cutForMessage`, which counts code points) in the message; `AwApiError.body` keeps the
+  whole body. A long URL in a message is cut in the middle, never inside a surrogate pair
+  (`cutText`), so the message stays well-formed.
 - **Only `http:`/`https:` base URLs are accepted** — one rule, `baseUrlProblem`, checked
   by `--base-url` at parse time (a usage error) and by the engine constructor on the raw
   value, before it strips trailing slashes (the exported `assertValidBaseUrl`); the
@@ -288,7 +290,9 @@ and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord`
 the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
-forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, unexpected errors),
+forge another one or steer the terminal. Before that a lone surrogate (half a
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
+The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's error answers, and the hints after them as `INFO`) and `http` (the
 connection, the cleartext warning). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander

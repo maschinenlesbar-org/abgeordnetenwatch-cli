@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine } from "../src/client/engine.js";
-import { AwApiError } from "../src/client/errors.js";
+import { AwApiError, cutText, toWellFormed } from "../src/client/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
@@ -236,4 +236,34 @@ test("server text in an API error message is cut at 500 characters; body keeps i
     assert.ok(e.body.includes(long));
     return true;
   });
+});
+
+test("cutText never cuts inside a surrogate pair; toWellFormed replaces half a character", () => {
+  assert.equal(cutText("ab\u{1f600}cd", 3), "ab");
+  assert.equal(cutText("ab\u{1f600}cd", 4), "ab\u{1f600}");
+  assert.equal(cutText("short", 10), "short");
+  assert.equal(toWellFormed("a\ud83d b\ude00 \u{1f600}"), "a\ufffd b\ufffd \u{1f600}");
+});
+
+test("a server detail cut at 500 characters keeps the message well-formed", async () => {
+  for (const detail of ["\u{1f600}".repeat(600), "a" + "\u{1f600}".repeat(600)]) {
+    const engine = new RequestEngine({
+      transport: async () => ({ status: 500, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ meta: { status_message: detail } })) }),
+      maxRetries: 0,
+    });
+    await assert.rejects(engine.getJson("/api/v2/parties"), (err: Error) => {
+      assert.equal(toWellFormed(err.message), err.message);
+      assert.match(err.message, /…$/);
+      return true;
+    });
+  }
+});
+
+test("a long URL cut in an error message never leaves half a character", () => {
+  // Not a parseable URL, so it is shown as given; both cut points land inside a pair.
+  for (const url of ["x" + "\u{1f600}".repeat(200) + "y", "\u{1f600}".repeat(200) + "yz"]) {
+    const err = new AwApiError({ status: 500, url, method: "GET", body: "" });
+    assert.equal(toWellFormed(err.message), err.message, url.length.toString());
+    assert.match(err.message, /…\[\d+ chars\]…/);
+  }
 });
