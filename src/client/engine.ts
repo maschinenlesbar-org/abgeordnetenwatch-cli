@@ -20,8 +20,10 @@ import {
   AwValidationError,
   credentialsIn,
   cutForMessage,
+  echoedCredentialForms,
   MAX_QUOTED_LENGTH,
   redactCredentials,
+  redactSecrets,
   redactUrl,
 } from "./errors.js";
 import {
@@ -347,6 +349,12 @@ export class RequestEngine {
   readonly #baseUrl: string;
   /** The base URL's userinfo, raw and percent-decoded, for scrubbing server and transport text. */
   readonly #credentials: string[];
+  /**
+   * The forms a server echoes that userinfo back in (the Basic value, the decoded
+   * `user:password`, the password alone), longest first, so a password never leaves half
+   * of the `user:password` around it.
+   */
+  readonly #echoed: string[];
   private readonly transport: Transport;
   private readonly userAgent: string;
   // Caller headers may hold credentials (Authorization for a proxy): private, like the base URL.
@@ -384,6 +392,9 @@ export class RequestEngine {
         return [raw];
       }
     });
+    this.#echoed = credentialsIn(this.#baseUrl)
+      .flatMap(echoedCredentialForms)
+      .sort((a, b) => b.length - a.length);
     this.transport = options.transport ?? nodeHttpTransport;
     // Header names and values are checked here, so a bad one is an AwValidationError
     // at construction rather than a raw TypeError (or an injected header) later.
@@ -416,11 +427,11 @@ export class RequestEngine {
 
   /**
    * `text` without the base URL's credentials: server text (an error body that echoes the
-   * request URL) and transport text (fetch's "Request cannot be constructed from a URL that
+   * request URL, the Authorization header or the decoded `user:password`) and transport text (fetch's "Request cannot be constructed from a URL that
    * includes credentials: <url>") can carry them.
    */
   private scrub(text: string): string {
-    return this.#credentials.length === 0 ? text : redactCredentials(text, this.#credentials);
+    return this.#credentials.length === 0 ? text : redactSecrets(redactCredentials(text, this.#credentials), this.#echoed);
   }
 
   /**

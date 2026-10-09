@@ -263,8 +263,12 @@ npm start -- --help # run the CLI from source build
   exported) for a value that doesn't parse as a URL. The engine keeps the base URL and
   the caller's `headers` in real `#private` fields, so `console.log(client)`,
   `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
-  userinfo (raw and percent-decoded) from error bodies and details, a redirect `Location`,
-  a custom transport's error text and the `cause` chain. Whatever a custom transport
+  userinfo (raw and percent-decoded), and the forms a server echoes it back in (the
+  `Basic` value, the decoded `user:password`, the password alone from 4 characters:
+  `echoedCredentialForms`), from error bodies and details, a redirect `Location`, a
+  custom transport's error text and the `cause` chain. The CLI replaces the same forms:
+  the `Basic` value and the pair on stdout and stderr, the password alone on stderr only,
+  since it may well occur in the data. Whatever a custom transport
   throws reaches the caller as an `AwNetworkError` (`GET <url> failed: <reason>`, the
   original as `cause`).
 

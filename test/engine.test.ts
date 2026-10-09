@@ -284,3 +284,19 @@ test("own messages quote a server or user value at most 200 characters long (L3)
   await assert.rejects(client.list("parties", { [long]: 1 } as never), (err: Error) => err.message.length < 600 && /x+…/.test(err.message));
   await assert.rejects(client.list(long as never), (err: Error) => err.message.length < 800 && /x+…/.test(err.message));
 });
+
+test("credentials a server echoes are scrubbed from the error: Basic, user:password, password (L13)", async () => {
+  // The engine sends the pair UTF-8 encoded (basicAuthorization), so that is the form a server echoes.
+  const basic = Buffer.from("alice:pa ss-pw", "utf8").toString("base64");
+  const body = JSON.stringify({ meta: { status: "error", status_message: `no: Basic ${basic} / alice:pa ss-pw / pa ss-pw` } });
+  const engine = new RequestEngine({
+    baseUrl: "https://alice:pa%20ss-pw@mirror.example",
+    maxRetries: 0,
+    transport: async () => ({ status: 401, headers: { "content-type": "application/json" }, body: Buffer.from(body) }),
+  });
+  await assert.rejects(engine.getJson("/api/v2/parties"), (err: AwApiError) => {
+    for (const form of [basic, "alice:pa ss-pw", "pa ss-pw"]) assert.ok(!err.message.includes(form), err.message);
+    assert.match(err.message, /no: Basic \*\*\* \/ \*\*\* \/ \*\*\*/);
+    return true;
+  });
+});
