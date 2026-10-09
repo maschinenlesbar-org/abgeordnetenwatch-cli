@@ -308,7 +308,8 @@ forge another one or steer the terminal. Before that a lone surrogate (half a
 character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`),
 and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
-`api` (the API's error answers, and the hints after them as `INFO`), `http` (the
+`api` (the API's answers: an error status, and the hints after it as `INFO`, and a
+malformed answer, an `AwParseError`: bad JSON, the wrong shape or content type), `http` (the
 connection, the cleartext warning) and `output` (a failed write to stdout). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
 parses it (`logFormatFromArgv`, used only for the records of a parse error: the first

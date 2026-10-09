@@ -433,7 +433,7 @@ test("a malformed 2xx envelope exits 1 with a parse error, not an unexpected Typ
     const { deps, cap } = makeTransportDeps(() => jsonResponse(null));
     assert.equal(await run(argv, deps), 1, argv.join(" "));
     assert.deepEqual(cap.out, []);
-    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.cli\] Unexpected response shape from \/api\/v2\/parties/);
+    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.api\] Unexpected response shape from \/api\/v2\/parties/);
   }
 });
 

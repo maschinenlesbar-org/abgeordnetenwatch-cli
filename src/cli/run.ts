@@ -10,6 +10,7 @@ import {
   AwApiError,
   AwError,
   AwNetworkError,
+  AwParseError,
   AwValidationError,
   credentialsIn,
   echoedCredentialForms,
@@ -200,6 +201,17 @@ export function processLogger(argv: readonly string[]): Logger {
   });
 }
 
+/**
+ * The log area of an `AwError` that is neither an API error nor a usage error: the
+ * connection (`http`), a malformed answer (`api`: bad JSON, the wrong shape or content
+ * type, an unknown charset — the API's answer as much as an error status is), else `cli`.
+ */
+function areaOf(err: AwError): string {
+  if (err instanceof AwNetworkError) return "http";
+  if (err instanceof AwParseError) return "api";
+  return "cli";
+}
+
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   // The log replaces the secrets of the run in every message, in either format.
   deps = withRedactedOutput(deps, argv);
@@ -284,7 +296,7 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 1;
     }
     if (err instanceof AwError) {
-      log.error(err instanceof AwNetworkError ? "http" : "cli", err.message);
+      log.error(areaOf(err), err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

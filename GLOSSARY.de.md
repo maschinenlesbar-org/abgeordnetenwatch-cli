@@ -244,5 +244,14 @@ Feld beantwortet die API mit HTTP 500, nicht mit 404 oder 400; die CLI gibt den 
 endet mit `1`. HTTP 429 und 503 werden automatisch wiederholt (`--max-retries`, Standard 2,
 höchstens 10).
 
+**Log-Eintrag (log record).** Jede Diagnosezeile, die die CLI nach stderr schreibt: ein
+Zeitstempel, eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `abgeordnetenwatch.<Bereich>`,
+als Text (im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt pro Zeile. Die
+Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
+Antworten der API: ein Fehlerstatus mit seinen Hinweisen und eine fehlerhafte Antwort —
+ungültiges JSON, die falsche Form oder der falsche Inhaltstyp), `http` (die Verbindung, die
+Klartext-Warnung) und `output` (ein Schreibfehler auf stdout). Ein Eintrag ist immer eine
+Zeile; Steuerzeichen darin werden maskiert.
+
 > **Bibliothek & Interna.** Den TypeScript-Client, die Request-Engine, Retries,
 > Weiterleitungen und Fehlertypen beschreibt **[DEVELOPING.md](DEVELOPING.md)**.
