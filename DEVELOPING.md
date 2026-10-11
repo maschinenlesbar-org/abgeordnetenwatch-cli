@@ -7,9 +7,47 @@ JSON) is built on Node's standard library.
 
 ## Layout
 
+The repository is an **npm workspace** with two folders: `apps/` holds the programs it
+publishes, `packages/` the libraries they are built from.
+
 ```
-src/
-  client/
+package.json         private workspace manifest: no version, never packed
+apps/cli/            @maschinenlesbar.org/abgeordnetenwatch-cli — the published package
+  package.json       its version, bin, files, bundleDependencies
+  src/index.ts       library entry: re-exports @maschinenlesbar.org/abgeordnetenwatch-client
+  src/cli/           the CLI (below)
+  test/              CLI tests and every conformance-*.test.ts
+packages/client/     @maschinenlesbar.org/abgeordnetenwatch-client — private, bundled into the CLI
+  src/               the API client (below)
+  test/              tests that only touch the client, + the transport helpers
+tools/pack/          prepack/postpack: bundle the client and commander into the tarball
+tools/bump.mjs       version bump + commit + tag (npm run bump)
+tsconfig.docs.json   TypeDoc only: the package entry, with the client read from its sources
+openapi.yaml         full OpenAPI 3.0.3 description of the upstream API
+```
+
+- **The client is its own package** so a later MCP app can share it with the CLI. It is
+  never published on its own: `apps/cli`'s `prepack` copies it (and commander) into the
+  app's `node_modules`, and `bundleDependencies` ships it inside the tarball. The library
+  entry re-exports the client's `"."`, so `import { AbgeordnetenwatchClient } from
+  "@maschinenlesbar.org/abgeordnetenwatch-cli"` is unchanged.
+- **The client's exports:** `"."` is the public library surface (`src/index.ts`);
+  `"./internal/*"` maps to any module (`…/abgeordnetenwatch-client/internal/engine`) for
+  what the CLI needs beyond that; `"./test/*"` reaches the client's test helpers from the
+  CLI's tests (not bundled). Only `"."` is part of the library.
+- **Dependencies point one way:** the app depends on the client, the client on nothing
+  in the workspace.
+- **The version lives in `apps/cli/package.json`.** The root has none; a plain
+  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
+  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+- **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
+  `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
+  `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
+
+The client (`packages/client/src/`) and the CLI (`apps/cli/src/`):
+
+```
+packages/client/src/
     http.ts      Node http/https transport (swappable for tests)
     engine.ts    request engine: URL building, retries (429/503), redirects, JSON decode
     query.ts     dependency-free query-string builder
@@ -17,8 +55,8 @@ src/
     validate.ts  Problem rules + assertValid (input checks shared with the CLI)
     types.ts     envelope + entity types, the ENTITY_COLLECTIONS list
     client.ts    AbgeordnetenwatchClient — generic list/get/count over a collection
-    index.ts     public library surface
-  cli/
+    index.ts     the client's public surface (the library entry re-exports it)
+apps/cli/src/cli/
     index.ts     #! bin shim → run()
     run.ts       argv → exit code, error→exit-code mapping
     program.ts   commander program assembly (+ global options)
@@ -27,9 +65,6 @@ src/
     log.ts       the stderr log: records with ts, level, topic; --log-format text|jsonl
     commands/
       entities.ts  list / get / count / entities
-  index.ts       library root re-export
-test/            node:test suites (no network in unit tests; a local server in http.test)
-openapi.yaml     full OpenAPI 3.0.3 description of the upstream API
 ```
 
 ## The client is generic
@@ -39,7 +74,7 @@ collection supporting list + detail with the same `range_*` / `sort_*` / field
 filter parameters. So the client exposes `list(collection, params)`,
 `get(collection, id)` and `count(collection, params)` rather than 18
 near-identical method pairs. The authoritative collection list is
-`ENTITY_COLLECTIONS` in `client/types.ts`; the CLI validates the `<entity>`
+`ENTITY_COLLECTIONS` in `packages/client/src/types.ts`; the CLI validates the `<entity>`
 argument against it.
 
 The client checks the envelope of every 2xx response: an object with a `meta`
@@ -51,7 +86,7 @@ are passed through unchecked.
 ## Input validation
 
 The library owns every rule about what a request may contain, and checks it before
-sending anything. A rule is a pure `Problem` function in `client/validate.ts` (or next
+sending anything. A rule is a pure `Problem` function in `packages/client/src/validate.ts` (or next
 to the parameter it checks): it returns the reason a value is invalid, or `undefined`.
 Client methods enforce it with `assertValid(name, value, problem)`, which throws
 `AwValidationError` (a subclass of `AwError`) with the message `Invalid <name>: <reason>`;
@@ -59,7 +94,7 @@ methods that return a promise reject with it, and no request is sent. The CLI's
 commander parsers call the same functions and turn the reason into a usage error, and
 `run.ts` maps an `AwValidationError` raised inside an action to exit 2 as well, logged as
 an `ERROR` record of `abgeordnetenwatch.cli`. So the CLI and the library reject the same inputs, and
-`test/helpers.ts`'s `parity()` checks that: it runs one input through `run()` and through
+`apps/cli/test/helpers.ts`'s `parity()` checks that: it runs one input through `run()` and through
 the library on one recording mock transport and returns both outcomes.
 
 What the library rejects with `AwValidationError`:
@@ -71,7 +106,7 @@ What the library rejects with `AwValidationError`:
   ASCII digits (`entityIdProblem`). `0` and `""` would fetch the whole collection, and
   `" 2 "`, `"abc"`, `-1` or `1.5` a generic HTTP 500. `normalizeEntityId` drops leading
   zeros, because the API looks the id up as a string (`0002` was "no such entity").
-- **Filters** (`list`, `count`; `client/filters.ts`, `validateFilters`): a blank key or
+- **Filters** (`list`, `count`; `packages/client/src/filters.ts`, `validateFilters`): a blank key or
   value, a key that is not a field name with at most one bracket operator (`FILTER_KEY`),
   an operator outside `FILTER_OPERATORS`, a paging or sorting name
   (`RESERVED_FILTER_FIELDS`: `range_start`, `range_end`, `sort_by`, `sort_direction`)
@@ -111,24 +146,35 @@ What the library rejects with `AwValidationError`:
 ## Scripts
 
 Node.js 22.12 or later (`engines`; commander 15 needs it). CI (`ci.yml`) type-checks, builds
-and tests on Node 22/24.
+and tests on Node 22/24, then packs the real tarball, checks the pack left nothing behind,
+installs it globally with the registry out of reach and runs the bin. `release.yml` (on a
+`v*` tag, made by `npm run bump`) verifies the tag against `apps/cli/package.json`, writes
+the SBOMs (scoped to the `apps/cli` workspace) and runs `npm pack --workspace apps/cli`;
+`publish.yml` runs `npm publish --workspace apps/cli`.
 
 ```bash
-npm run build       # tsc → dist/
-npm test            # build, then run node:test suites against dist/
-npm run typecheck   # tsc --noEmit
+npm run build       # compiles every workspace (tsc -b) to its dist/
+npm test            # build, then run node:test over each workspace's dist/test
+npm run coverage    # the same tests in one run, with a coverage report
+npm run typecheck   # tsc -b over every workspace, as build
 npm run docs        # typedoc → out/ (first: npm ci --prefix tools/docs)
-npm start -- --help # run the CLI from source build
+npm start -- --help # run the CLI from source build (node apps/cli/dist/src/cli/index.js)
+npm run bump -- <patch|minor|major>  # bump apps/cli, commit, tag vX.Y.Z
+node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
 
 ## Tests
 
-- **Unit tests** inject a mock transport (`test/helpers.ts`) — no network.
+The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `engine`,
+`retry-hook`, `client`), everything that drives the CLI is in `apps/cli/test/`.
+
+- **Unit tests** inject a mock transport (`packages/client/test/helpers.ts`, which
+  `apps/cli/test/helpers.ts` re-exports next to the CLI's own helpers) — no network.
 - **`http.test.ts`** exercises the real transport against an ephemeral local
   `http.createServer` (redirects, JSON parsing, protocol guard).
 - **`cli.test.ts`** drives `run()` with a stub client and capturing IO, asserting
   on output and exit codes.
-- **`log.test.ts`** tests the record helpers of `src/cli/log.ts` on their own
+- **`log.test.ts`** tests the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
 - **`conformance-p*.test.ts`** are the shared checks of the 2026-10-05 fix plan, the
   same files in every maschinenlesbar.org CLI with only an adapter block at the top:
@@ -206,7 +252,7 @@ npm start -- --help # run the CLI from source build
   redacted) `}`) is called once per retry right before the sleep, never when there is none, and
   a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
   `abgeordnetenwatch.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host
-  only, whole seconds, ms under 1 s). Tests: `test/retry-hook.test.ts`, `test/retry-log.test.ts`.
+  only, whole seconds, ms under 1 s). Tests: `packages/client/test/retry-hook.test.ts`, `apps/cli/test/retry-log.test.ts`.
 - **The transport contract is enforced by the engine.** `timeoutMs` and
   `maxResponseBytes` hold for every transport, not only the built-in one: the engine
   runs each transport call under the overall deadline (it passes an `AbortSignal` in
@@ -256,7 +302,7 @@ npm start -- --help # run the CLI from source build
 
 - **Credentials never reach output.** Userinfo in the base URL
   (`https://user:secret@mirror/`) is allowed, but `redactUrl` (exported from
-  [`errors.ts`](src/client/errors.ts)) shows it as `***@` in every error message and in
+  [`errors.ts`](packages/client/src/errors.ts)) shows it as `***@` in every error message and in
   `AwApiError.url`, and library messages quote a rejected value through it. The CLI also
   redacts on output: `run.ts` (`redactionFor`, `withRedactedOutput`) takes the exact
   userinfo of every URL argument (`credentialsIn`, exported) and replaces it with `***` in
@@ -290,7 +336,9 @@ TypeDoc API reference under `/api/`. Its content comes from this repository: the
 and quick start, the command tree of the built CLI (`site/scripts/cli-reference.mjs`),
 `Usage.md`, `GLOSSARY.md` and its German version `GLOSSARY.de.md`, the skills, and the skill
 examples in `EXAMPLE.md` and `EXAMPLE.de.md`. The only repo-specific files are
-`site/_config.yml` and `site/_data/project.yml` (the German intro and the access requirements);
+`site/_config.yml` (which also says where the published manifest and the built program are:
+`manifest: apps/cli/package.json`, `program: apps/cli/dist/src/cli/program.js`) and
+`site/_data/project.yml` (the German intro and the access requirements);
 the rest of `site/` is identical in every maschinenlesbar.org CLI, so change it in all of them
 together. When the README intro changes, update the German intro in `site/_data/project.yml`.
 
@@ -302,7 +350,7 @@ npm run serve                        # http://127.0.0.1:4000/abgeordnetenwatch-c
 
 ## The log on stderr
 
-Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+Every diagnostic line on stderr is a log record (`apps/cli/src/cli/log.ts`): a timestamp, a level
 (`ERROR`, `WARN`, `INFO`) and a topic, `abgeordnetenwatch.<area>`. `--log-format text` (the
 default) writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
