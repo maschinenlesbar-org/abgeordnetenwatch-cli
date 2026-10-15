@@ -575,6 +575,17 @@ export class RequestEngine {
           await this.backOff(attempt, this.retryDelayMs * attempt, url);
           continue;
         }
+        // A reset names only itself ("socket hang up"): say which request it broke off and,
+        // like an exhausted 429/503, how many retries ran. The original stays the cause, so
+        // isTransientNetworkError still recognises it.
+        if (hasTransientCode(cause)) {
+          const reason = cause instanceof Error ? cause.message : String(cause);
+          const retries = attempt === 0 ? "" : ` (after ${attempt} ${attempt === 1 ? "retry" : "retries"})`;
+          throw new AwNetworkError(
+            `${method} ${redactUrl(url)} failed: ${sanitizeServerText(this.scrub(reason))}${retries}`,
+            { cause: this.scrubCause(cause) },
+          );
+        }
         // The default transport rejects with AwNetworkError only; an injected one may
         // throw anything, and its text may carry the request URL with the base URL's
         // password (fetch refuses a URL with credentials and quotes it). Keep the

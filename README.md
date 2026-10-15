@@ -139,7 +139,7 @@ abgeordnetenwatch --log-format jsonl get parties 999999 2>log.jsonl   # {"ts":"â
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically (up to `--max-retries`, default `2`), backing off 1 s, 2 s, â€¦ or waiting
 the server's `Retry-After` when that is longer, up to 30 s. The error ends
-`(after N retries)` when they ran out. When the server asks for a longer wait the CLI
+`(after N retries)` when they ran out (a reset connection too: `GET <url> failed: socket hang up (after 2 retries)`). When the server asks for a longer wait the CLI
 does not retry at all and says so (`the server asked to retry after 120 s, longer than
 the 30 s the client waits; not retried`): wait that long before trying again. Sending a
 descriptive `--user-agent` is appreciated by the provider.

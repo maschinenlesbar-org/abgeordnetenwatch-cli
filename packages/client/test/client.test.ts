@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client.js";
-import { MAX_RETRY_AFTER_MS, parseRetryAfter } from "../src/engine.js";
+import { MAX_RETRY_AFTER_MS, isTransientNetworkError, parseRetryAfter } from "../src/engine.js";
 import {
   AwApiError,
   AwError,
@@ -442,4 +442,30 @@ test("an error message cuts a very long URL in the middle and says how long it w
       "…[417 chars]…=x&label[cn]=x&end=1",
   );
   assert.equal(err.url, url, "the full URL stays on the error");
+});
+
+test("a reset connection that outlasts the retries names the request and the retries", async () => {
+  // The default transport rejects a reset with a bare "socket hang up" (the Node error is its
+  // cause). Rethrown as it was, the final error named neither the host nor the retries, unlike
+  // a 429/503 (exploratory 2026-10-15, bug 4).
+  const reset = () => new AwNetworkError("socket hang up", { cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }) });
+  for (const [maxRetries, suffix] of [[0, ""], [1, " (after 1 retry)"], [2, " (after 2 retries)"]] as const) {
+    let calls = 0;
+    const client = new AbgeordnetenwatchClient({
+      baseUrl: "http://127.0.0.1:9",
+      transport: async () => {
+        calls += 1;
+        throw reset();
+      },
+      maxRetries,
+      sleep: async () => {},
+    });
+    await assert.rejects(client.list("votes", { filters: { poll: 1 } }), (err) => {
+      assert.ok(err instanceof AwNetworkError);
+      assert.equal(err.message, `GET http://127.0.0.1:9/api/v2/votes?poll=1 failed: socket hang up${suffix}`);
+      assert.ok(isTransientNetworkError(err), "still recognisable as a reset");
+      return true;
+    });
+    assert.equal(calls, maxRetries + 1);
+  }
 });

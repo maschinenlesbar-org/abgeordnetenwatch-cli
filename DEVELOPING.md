@@ -249,7 +249,9 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   whose connection was reset (`ECONNRESET`, `EPIPE`, `ECONNABORTED`, undici's
   `UND_ERR_SOCKET`, anywhere in the error's `cause` chain; `isTransientNetworkError`) is
   retried the same number of times, after `retryDelayMs * attempt`; a refused
-  connection, a DNS failure or a timeout is not.
+  connection, a DNS failure or a timeout is not. When a reset ends the request, the
+  `AwNetworkError` names it like an API error does (`GET <url> failed: socket hang up (after 2
+  retries)`), with the transport's error as its `cause`.
   Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
   `{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
   redacted) `}`) is called once per retry right before the sleep, never when there is none, and
