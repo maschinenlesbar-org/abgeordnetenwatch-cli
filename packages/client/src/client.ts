@@ -9,9 +9,9 @@
 // so the client is generic over the collection name rather than exposing 18
 // near-identical method pairs. See openapi.yaml for the full entity reference.
 
-import { RequestEngine, type EngineOptions } from "./engine.js";
+import { RequestEngine, sanitizeServerText, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwParseError, AwValidationError, quoteValue } from "./errors.js";
+import { AwParseError, AwValidationError, cutForMessage, MAX_QUOTED_LENGTH, quoteValue } from "./errors.js";
 import { assertParams, normalizeEntityId, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
@@ -80,7 +80,7 @@ export class AbgeordnetenwatchClient {
 
   /**
    * List a collection; returns the full envelope (meta + data array). A 2xx body
-   * that is not such an envelope raises AwParseError.
+   * that is not such an envelope, or whose `meta.status` is not `ok`, raises AwParseError.
    */
   async list<T = Entity>(
     collection: EntityCollection,
@@ -95,7 +95,7 @@ export class AbgeordnetenwatchClient {
 
   /**
    * Fetch a single entity by id; returns the full envelope (meta + data object). A
-   * 2xx body that is not such an envelope raises AwParseError.
+   * 2xx body that is not such an envelope (or says `meta.status` other than `ok`) raises AwParseError.
    *
    * The id must be a positive integer, as a number or a string of digits; leading
    * zeros are dropped (`"0002"` fetches entity 2). Anything else (`0`, `""`, `" 2 "`,
@@ -164,5 +164,16 @@ function shapeError(path: string, expected: string): AwParseError {
 function assertEnvelope(body: unknown, path: string): asserts body is Record<string, unknown> {
   if (!isObject(body) || !isObject(body["meta"])) {
     throw shapeError(path, "a JSON object with meta and data");
+  }
+  // An envelope that says it failed is no answer, whatever the HTTP status: printed as data,
+  // its empty `data` read as "none found" (count 0, exit 0). The API sends `ok` on success.
+  const status = body["meta"]["status"];
+  if (status !== undefined && status !== "ok") {
+    const message = body["meta"]["status_message"];
+    const reason =
+      typeof message === "string" && message.trim() !== ""
+        ? cutForMessage(sanitizeServerText(message))
+        : `meta.status ${cutForMessage(sanitizeServerText(JSON.stringify(status)), MAX_QUOTED_LENGTH)}`;
+    throw new AwParseError(`Error envelope in a 2xx answer from ${path}: ${reason}`);
   }
 }

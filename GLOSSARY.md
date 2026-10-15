@@ -207,7 +207,9 @@ on one line. `count` prints `{ entity, total }`, `entities` prints `{ entities: 
 `range_start`, `range_end`. For `get`: `entity_id` (the id as a string) and `entity_type`.
 
 **`meta.status` / `meta.status_message`.** `ok` and an empty message on success. On an error
-the CLI prints the message, e.g. `There is no party entity with id 99999999`.
+the CLI prints the message, e.g. `There is no party entity with id 99999999`. The API
+sends errors with HTTP 500; an error envelope with a success status (from a proxy or mirror) is
+an error too (exit 1), never an empty result.
 
 **`meta.abgeordnetenwatch_api`.** The same block on every response: `version` (`2.9.0`),
 `changelog`, `licence` (`CC0 1.0`), `licence_link` and `documentation`.

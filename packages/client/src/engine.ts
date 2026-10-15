@@ -174,7 +174,7 @@ function engineHeadersOnly(headers: Record<string, string>): Record<string, stri
  * `cli/shared.ts`: `JSON.stringify` alone leaves DEL and the C1 range raw), so
  * this only needs to cover text that flows into an error message.
  */
-function sanitizeServerText(text: string): string {
+export function sanitizeServerText(text: string): string {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 }
 

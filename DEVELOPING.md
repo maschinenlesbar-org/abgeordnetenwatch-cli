@@ -83,8 +83,10 @@ argument against it.
 The client checks the envelope of every 2xx response: an object with a `meta`
 object, `data` an array (`list`) or an object (`get`), and for `count` a
 non-negative integer `meta.result.total`. Anything else raises `AwParseError`
-(`Unexpected response shape from <path>: expected ...`). The records themselves
-are passed through unchecked.
+(`Unexpected response shape from <path>: expected ...`). So does an envelope whose
+`meta.status` is present and not `ok`, whatever the HTTP status (`Error envelope in a 2xx
+answer from <path>: <meta.status_message>`): printed, its empty `data` read as "none found"
+(`count` 0, exit 0). The records themselves are passed through unchecked.
 
 ## Input validation
 

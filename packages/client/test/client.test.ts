@@ -481,3 +481,29 @@ test("a filter value in decomposed Unicode is sent composed (NFC)", async () => 
   assert.equal(query.get("last_name[eq]"), "Müller");
   assert.equal(query.get("year_of_birth"), "1980");
 });
+
+test("an HTTP 200 envelope with meta.status other than ok rejects with its message (bug 2, 2026-10-15)", async () => {
+  // count() resolved to 0 and list() to [] for an answer that said it had failed.
+  const errorMeta = { status: "error", status_message: "Database \u001b[31munavailable", result: { count: 0, total: 0, range_start: 0, range_end: 1 } };
+  const mt = makeMockTransport((req) =>
+    jsonResponse({ meta: errorMeta, data: new URL(req.url).pathname.endsWith("/5") ? {} : [] }),
+  );
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  for (const [label, call, path] of [
+    ["count", () => client.count("politicians"), "/api/v2/politicians"],
+    ["list", () => client.list("politicians"), "/api/v2/politicians"],
+    ["get", () => client.get("parties", 5), "/api/v2/parties/5"],
+  ] as const) {
+    await assert.rejects(call(), (err) => {
+      assert.ok(err instanceof AwParseError, label);
+      // The server's text is cleaned of control characters, like an error status's detail.
+      assert.equal(err.message, `Error envelope in a 2xx answer from ${path}: Database [31munavailable`, label);
+      return true;
+    });
+  }
+  // Without a message the status itself is named; an envelope without a status is still data.
+  const bare = makeMockTransport(() => jsonResponse({ meta: { status: "failed" }, data: [] }));
+  await assert.rejects(new AbgeordnetenwatchClient({ transport: bare.transport }).list("parties"), /Error envelope in a 2xx answer from \/api\/v2\/parties: meta\.status "failed"$/);
+  const noStatus = makeMockTransport(() => jsonResponse({ meta: {}, data: [] }));
+  assert.deepEqual((await new AbgeordnetenwatchClient({ transport: noStatus.transport }).list("parties")).data, []);
+});

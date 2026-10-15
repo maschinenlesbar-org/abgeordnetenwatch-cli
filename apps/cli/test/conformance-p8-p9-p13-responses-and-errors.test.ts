@@ -20,7 +20,7 @@ const textCall = (client: Client): Promise<unknown> => client.get("parties", 1);
 const textBody = (text: string): unknown => ({ meta: { status: "ok" }, data: { id: 1, label: text } });
 const readText = (result: unknown): string => (result as { data: { label: string } }).data.label;
 /** 2xx bodies the call must reject (error envelopes, empty or wrong shapes). */
-const malformedBodies: unknown[] = [null, {}, [], "text", 42, { meta: null, data: {} }, { error: "boom" }, { meta: {}, data: [] }, { meta: {} }];
+const malformedBodies: unknown[] = [null, {}, [], "text", 42, { meta: null, data: {} }, { error: "boom" }, { meta: {}, data: [] }, { meta: {} }, { meta: { status: "error", status_message: "boom" }, data: { id: 1, label: "x" } }];
 /**
  * A client whose transport never touches the network: a call that should reject before any
  * request but doesn't fails here (as a NetworkError) instead of reaching the live API.

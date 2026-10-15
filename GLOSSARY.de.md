@@ -218,7 +218,9 @@ Zeile. `count` gibt `{ entity, total }` aus, `entities` `{ entities: [...] }`.
 `range_start`, `range_end`. Bei `get`: `entity_id` (die ID als String) und `entity_type`.
 
 **`meta.status` / `meta.status_message`.** Bei Erfolg `ok` und eine leere Meldung. Bei einem
-Fehler gibt die CLI die Meldung aus, z. B. `There is no party entity with id 99999999`.
+Fehler gibt die CLI die Meldung aus, z. B. `There is no party entity with id 99999999`. Die API
+sendet Fehler mit HTTP 500; ein Fehler-Envelope mit Erfolgsstatus (von einem Proxy oder Mirror)
+ist ebenfalls ein Fehler (Exit 1), nie ein leeres Ergebnis.
 
 **`meta.abgeordnetenwatch_api`.** Derselbe Block in jeder Antwort: `version` (`2.9.0`),
 `changelog`, `licence` (`CC0 1.0`), `licence_link` und `documentation`.

@@ -568,3 +568,20 @@ test("a subcommand's value option does not swallow the program's --log-format, i
   assert.ok(cap.err.length > 0 && cap.err.every((line) => line.startsWith("{")), cap.err.join("\n"));
   assert.match((JSON.parse(cap.err[0] ?? "") as Record<string, unknown>)["msg"] as string, /--sort-by <field>' argument missing/);
 });
+
+test("an HTTP 200 whose envelope says status error exits 1 with its message, never as data (bug 2, 2026-10-15)", async () => {
+  const meta = (result: object) => ({ status: "error", status_message: "Database unavailable", result });
+  for (const [argv, data] of [
+    [["count", "politicians", "sex=f"], []],
+    [["list", "politicians", "sex=f", "--data-only"], []],
+    [["get", "parties", "5"], {}],
+  ] as const) {
+    const { deps, cap } = makeTransportDeps(() => jsonResponse({ meta: meta({ count: 0, total: 0, range_start: 0, range_end: 1 }), data }));
+    assert.equal(await run([...argv], deps), 1, argv.join(" "));
+    assert.deepEqual(cap.out, [], argv.join(" "));
+    assert.match(
+      untimed(cap.err.join("\n")),
+      /^ERROR \[abgeordnetenwatch\.api\] Error envelope in a 2xx answer from \/api\/v2\/(politicians|parties\/5): Database unavailable$/,
+    );
+  }
+});
