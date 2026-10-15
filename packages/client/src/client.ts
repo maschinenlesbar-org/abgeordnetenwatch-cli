@@ -65,7 +65,11 @@ export class AbgeordnetenwatchClient {
     const query: QueryParams = Object.create(null) as QueryParams;
     if (params.filters !== undefined && params.filters !== null) {
       validateFilters(params.filters);
-      for (const [key, value] of Object.entries(params.filters)) query[key] = value;
+      // The API matches composed text only: a decomposed "Müller" (u + U+0308, as pasted
+      // from a macOS file name) matched nothing. Send every text value as NFC.
+      for (const [key, value] of Object.entries(params.filters)) {
+        query[key] = typeof value === "string" ? value.normalize("NFC") : value;
+      }
     }
     if (params.rangeStart !== undefined) query["range_start"] = params.rangeStart;
     if (params.rangeEnd !== undefined) query["range_end"] = params.rangeEnd;

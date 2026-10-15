@@ -170,7 +170,9 @@ gesendet werden (`sex=f`). Einen Parameter, den die Sammlung nicht akzeptiert, b
 API mit HTTP 500, z. B. `The following parameter(s) are not valid: mandate` bei `sidejobs`.
 Die Namen für Seiten und Sortierung (`range_start`, `range_end`, `sort_by`, `sort_direction`)
 sind keine Filter: Die CLI weist sie ab und nennt die passende Option, und die Bibliothek
-weist sie ebenfalls ab.
+weist sie ebenfalls ab. Ein Textwert
+wird in zusammengesetztem Unicode (NFC) gesendet: Die API findet nur diese Form, ein zerlegtes
+`Müller` (`u` plus kombinierendes Trema, etwa aus einem macOS-Dateinamen kopiert) fände nichts.
 
 **Operator (`field[op]=value`).** Ein Suffix in eckigen Klammern am Schlüssel: `eq` (gleich),
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`

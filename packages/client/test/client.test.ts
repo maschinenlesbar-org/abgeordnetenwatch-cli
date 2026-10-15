@@ -469,3 +469,15 @@ test("a reset connection that outlasts the retries names the request and the ret
     assert.equal(calls, maxRetries + 1);
   }
 });
+
+test("a filter value in decomposed Unicode is sent composed (NFC)", async () => {
+  // The API matches composed text only: "Müller" with U+0308 counted 0 politicians where the
+  // composed form counted 280 (exploratory 2026-10-15, bug 1). Text pasted from macOS file
+  // names or some PDFs arrives decomposed.
+  const mt = makeMockTransport(() => jsonResponse(listEnvelope([], 280)));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  assert.equal(await client.count("politicians", { filters: { "last_name[eq]": "Müller", year_of_birth: 1980 } }), 280);
+  const query = new URL(mt.last().url).searchParams;
+  assert.equal(query.get("last_name[eq]"), "Müller");
+  assert.equal(query.get("year_of_birth"), "1980");
+});
