@@ -585,3 +585,15 @@ test("an HTTP 200 whose envelope says status error exits 1 with its message, nev
     );
   }
 });
+
+test("a number beyond what JSON.parse carries exactly exits 1, not a rounded value on stdout (bug 3, 2026-10-15)", async () => {
+  const { deps, cap } = makeTransportDeps(() =>
+    rawResponse('{"meta":{"status":"ok","result":{"count":1,"total":1}},"data":[{"id":12345678901234567890}]}', "application/json"),
+  );
+  assert.equal(await run(["list", "parties", "--data-only"], deps), 1);
+  assert.deepEqual(cap.out, []);
+  assert.equal(
+    untimed(cap.err.join("\n")),
+    "ERROR [abgeordnetenwatch.api] Unexpected response from /api/v2/parties: the number 12345678901234567890 cannot be represented exactly.",
+  );
+});

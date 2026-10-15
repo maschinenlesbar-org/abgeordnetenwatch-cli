@@ -507,3 +507,23 @@ test("an HTTP 200 envelope with meta.status other than ok rejects with its messa
   const noStatus = makeMockTransport(() => jsonResponse({ meta: {}, data: [] }));
   assert.deepEqual((await new AbgeordnetenwatchClient({ transport: noStatus.transport }).list("parties")).data, []);
 });
+
+test("a number the answer's JSON cannot carry exactly is a parse error, never a changed value (bug 3, 2026-10-15)", async () => {
+  // JSON.parse rounded 12345678901234567890 to 12345678901234567000 and turned 1e400 into
+  // Infinity, which printed as null, with exit 0.
+  const body = (n: string) => `{"meta":{"status":"ok","result":{"entity_id":"1"}},"data":{"id":1,"amount":${n}}}`;
+  for (const n of ["12345678901234567890", "-9007199254740993", "1e400", "-1e400"]) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1), (err) => {
+      assert.ok(err instanceof AwParseError, n);
+      assert.equal(err.message, `Unexpected response from /api/v2/parties/1: the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+  }
+  // What a double carries exactly (or as JSON means it) passes unchanged.
+  for (const [n, value] of [["9007199254740991", 9007199254740991], ["-9007199254740992", -9007199254740992], ["1.10", 1.1], ["0.1", 0.1], ["1e21", 1e21], ["-0", -0]] as const) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    const res = await new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1);
+    assert.equal(res.data["amount"], value, n);
+  }
+});

@@ -720,11 +720,19 @@ export class RequestEngine {
       );
     }
     const text = decodeBody(res.data, res.contentType, path);
+    let parsed: T;
     try {
-      return JSON.parse(text) as T;
+      parsed = JSON.parse(text) as T;
     } catch (cause) {
       throw new AwParseError(`Failed to parse JSON response from ${path}`, { cause });
     }
+    const lossy = firstInexactNumber(text);
+    if (lossy !== undefined) {
+      throw new AwParseError(
+        `Unexpected response from ${path}: the number ${cutForMessage(lossy, MAX_QUOTED_LENGTH)} cannot be represented exactly.`,
+      );
+    }
+    return parsed;
   }
 
   private toApiError(
@@ -794,6 +802,40 @@ function decodeBody(body: Buffer, contentType: string, path: string): string {
     );
   }
   return decoder.decode(body);
+}
+
+/** A JSON number token, matched at a given position (sticky). */
+const JSON_NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+
+/**
+ * The first number literal in `json` (valid JSON) that JSON.parse cannot carry exactly, or
+ * undefined. JSON.parse turns a literal out of a double's range into Infinity (`1e400`,
+ * printed as `null`) and rounds an integer beyond 2^53 (`12345678901234567890` became
+ * `12345678901234567000`), silently. A decimal fraction keeps a double's usual precision, as
+ * JSON means it. A linear scan of the text, skipping strings: a reviver would recurse per
+ * nesting level and overflow on deep data that JSON.parse itself reads.
+ */
+function firstInexactNumber(json: string): string | undefined {
+  for (let i = 0; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    if (c === 0x22) {
+      // a string: skip to its closing quote, past escapes
+      for (i++; i < json.length; i++) {
+        const d = json.charCodeAt(i);
+        if (d === 0x5c) i++;
+        else if (d === 0x22) break;
+      }
+    } else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) {
+      JSON_NUMBER.lastIndex = i;
+      const literal = JSON_NUMBER.exec(json)?.[0];
+      if (literal === undefined) continue;
+      const value = Number(literal);
+      if (!Number.isFinite(value)) return literal;
+      if (!Number.isSafeInteger(value) && /^-?\d+$/.test(literal) && BigInt(literal) !== BigInt(value)) return literal;
+      i += literal.length - 1;
+    }
+  }
+  return undefined;
 }
 
 /** `url` without its userinfo (the engine sends that as an Authorization header). */
