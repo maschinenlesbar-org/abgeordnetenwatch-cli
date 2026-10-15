@@ -85,8 +85,8 @@ object, `data` an array (`list`) or an object (`get`), and for `count` a
 non-negative integer `meta.result.total`. Anything else raises `AwParseError`
 (`Unexpected response shape from <path>: expected ...`). So does an envelope whose
 `meta.status` is present and not `ok`, whatever the HTTP status (`Error envelope in a 2xx
-answer from <path>: <meta.status_message>`): printed, its empty `data` read as "none found"
-(`count` 0, exit 0). The records themselves are passed through unchecked, with one
+answer from <path>: <meta.status_message>`); printed as data, its empty `data` used to read as
+"none found" (`count` 0, exit 0). The records themselves are passed through unchecked, with one
 exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null`, or an
 integer literal beyond 2^53 that it rounds, `12345678901234567890`) raises `AwParseError`
 (`Unexpected response from <path>: the number … cannot be represented exactly.`) rather
