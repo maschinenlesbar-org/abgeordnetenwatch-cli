@@ -5,6 +5,71 @@ API client plus a [commander](https://github.com/tj/commander.js)-based CLI.
 The only runtime dependency is `commander`; everything else (HTTP, retries,
 JSON) is built on Node's standard library.
 
+## Library usage
+
+The CLI package is also the library: its entry re-exports the API client. It is ESM only
+(`import`, not `require`), and its types need `@types/node`.
+
+```ts
+import {
+  AbgeordnetenwatchClient,
+  AwApiError,
+  AwNetworkError,
+  AwValidationError,
+} from "@maschinenlesbar.org/abgeordnetenwatch-cli";
+
+const client = new AbgeordnetenwatchClient({
+  userAgent: "my-app/1.0 (contact@example.org)", // appreciated by the provider
+  timeoutMs: 15_000,
+});
+
+// A page of a collection: filters (with an optional [operator]), sorting, paging.
+const page = await client.list("politicians", {
+  filters: { "last_name[cn]": "Scholz", first_name: "Olaf" },
+  sortBy: "last_name",
+  sortDirection: "asc",
+  rangeEnd: 10, // page size, honoured up to 1000
+});
+console.log(page.meta.result.total, page.data.map((p) => p.label));
+
+// One record, and the true number of matches.
+const party = await client.get("parties", 2);
+const women = await client.count("politicians", { filters: { sex: "f" } });
+console.log(party.data.label, women);
+
+try {
+  await client.get("parties", 999999);
+} catch (err) {
+  if (err instanceof AwApiError) console.error(err.status, err.detail); // the API answers 500 for a missing id
+  else if (err instanceof AwNetworkError) console.error(err.message); // timeout, refused, DNS, size cap
+  else if (err instanceof AwValidationError) console.error(err.message); // rejected before any request
+  else throw err;
+}
+```
+
+`list()` returns the `{ meta, data }` envelope (`data` an array), `get()` the envelope of one
+record (`data` an object), `count()` the number of matches. The collection names are
+`ENTITY_COLLECTIONS`; the filters, operators and paging rules are the CLI's (see the README and
+[Input validation](#input-validation)), and every input is checked before any request. Every
+option may be omitted or given as `undefined`, which means the same (the default).
+
+### Client options
+
+```ts
+new AbgeordnetenwatchClient({
+  baseUrl: "https://www.abgeordnetenwatch.de", // a mirror; userinfo goes out as Basic auth
+  timeoutMs: 30_000, // the whole exchange; 0 disables
+  maxRetries: 2, // 429/503 and reset connections, 0..10
+  retryDelayMs: 1_000, // linear backoff step, or the server's Retry-After when longer
+  maxRedirects: 5,
+  maxResponseBytes: 100 * 1024 * 1024, // 0 = unlimited
+  userAgent: "my-app/1.0",
+  headers: { "X-Request-Id": "abc" },
+  onRetry: (event) => console.warn(event), // once per retry, before the wait
+  transport: customTransport, // (HttpRequest) => Promise<HttpResponse>
+});
+```
+
 ## Layout
 
 The repository is an **npm workspace** with two folders: `apps/` holds the programs it
