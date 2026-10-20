@@ -590,13 +590,17 @@ export class RequestEngine {
         // throw anything, and its text may carry the request URL with the base URL's
         // password (fetch refuses a URL with credentials and quotes it). Keep the
         // library's error contract — every failure is an AwError — and scrub that text.
+        // The transport's own errors (a timeout, the size cap, a refused connection) and the
+        // engine's deadline name no request: say which one failed, as for a reset, with the
+        // original as the cause.
         if (cause instanceof AwError && !(cause instanceof AwNetworkError)) throw cause;
-        if (cause instanceof AwNetworkError && this.scrub(cause.message) === cause.message) throw cause;
+        const prefix = `${method} ${redactUrl(url)} failed: `;
         const reason = cause instanceof Error ? cause.message : String(cause);
-        throw new AwNetworkError(
-          `${method} ${redactUrl(url)} failed: ${sanitizeServerText(this.scrub(reason))}`,
-          { cause: this.scrubCause(cause) },
-        );
+        if (cause instanceof AwNetworkError && reason.startsWith(prefix) && this.scrub(reason) === reason) throw cause;
+        const text = sanitizeServerText(this.scrub(reason));
+        throw new AwNetworkError(text.startsWith(prefix) ? text : `${prefix}${text}`, {
+          cause: this.scrubCause(cause),
+        });
       }
 
       // An injected transport may resolve with anything; a malformed HttpResponse would

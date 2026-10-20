@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AbgeordnetenwatchClient } from "../src/client.js";
 import { MAX_RETRY_AFTER_MS, isTransientNetworkError, parseRetryAfter } from "../src/engine.js";
+import type { HttpResponse } from "../src/http.js";
 import {
   AwApiError,
   AwError,
@@ -430,6 +431,30 @@ test("a refused connection, a DNS failure and a timeout are not retried", async 
     await assert.rejects(client.list("votes"), AwNetworkError, label);
     assert.equal(calls, 1, `${label} was retried`);
   }
+});
+
+test("a timeout, the size cap and a refused connection name the request (bug 3, 2026-10-20)", async () => {
+  // They said only "Request timed out after 500ms", "Response exceeded the size limit of 10
+  // bytes (…)" and "connect ECONNREFUSED 127.0.0.1:1", where a reset says "GET <url> failed: …".
+  const url = "http://127.0.0.1:9/api/v2/parties/1";
+  const cases: Array<[string, ConstructorParameters<typeof AbgeordnetenwatchClient>[0], RegExp]> = [
+    ["engine deadline", { transport: () => new Promise<HttpResponse>(() => {}), timeoutMs: 20 }, /^Request timed out after 20ms$/],
+    ["transport's own timeout", { transport: async () => { throw new AwNetworkError("Request timed out after 500ms"); } }, /^Request timed out after 500ms$/],
+    ["transport's size cap", { transport: async () => { throw new AwNetworkError("Response exceeded the size limit of 10 bytes (maxResponseBytes; --max-response-bytes on the CLI)"); } }, /^Response exceeded the size limit of 10 bytes/],
+    ["refused", { transport: async () => { throw new AwNetworkError("connect ECONNREFUSED 127.0.0.1:9"); } }, /^connect ECONNREFUSED 127\.0\.0\.1:9$/],
+  ];
+  for (const [name, options, reason] of cases) {
+    const client = new AbgeordnetenwatchClient({ baseUrl: "http://127.0.0.1:9", maxRetries: 0, ...options });
+    await assert.rejects(client.get("parties", 1), (err) => {
+      assert.ok(err instanceof AwNetworkError, name);
+      assert.ok(err.message.startsWith(`GET ${url} failed: `), `${name}: ${err.message}`);
+      assert.match(err.message.slice(`GET ${url} failed: `.length), reason, name);
+      return true;
+    });
+  }
+  // A message that names the request already is not prefixed twice.
+  const named = new AbgeordnetenwatchClient({ baseUrl: "http://127.0.0.1:9", transport: async () => { throw new AwNetworkError(`GET ${url} failed: x`); } });
+  await assert.rejects(named.get("parties", 1), { message: `GET ${url} failed: x` });
 });
 
 test("an error message cuts a very long URL in the middle and says how long it was", () => {
