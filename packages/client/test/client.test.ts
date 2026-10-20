@@ -527,3 +527,26 @@ test("a number the answer's JSON cannot carry exactly is a parse error, never a 
     assert.equal(res.data["amount"], value, n);
   }
 });
+
+test("a big number written as a decimal or an exponent, a fraction past 2^53 and an underflow are parse errors too (bug 1, 2026-10-20)", async () => {
+  // These passed the check and printed 12345678901234567000, 9007199254740992 and 0, exit 0.
+  const body = (n: string) => `{"meta":{"status":"ok","result":{"entity_id":"1"}},"data":{"id":1,"amount":${n}}}`;
+  for (const n of ["12345678901234567890.0", "9007199254740993e0", "90071992547409930E-1", "9007199254740992.5", "-9007199254740992.5", "1e-400", "-0.0001e-399", "1e23"]) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1), (err) => {
+      assert.ok(err instanceof AwParseError, n);
+      assert.equal(err.message, `Unexpected response from /api/v2/parties/1: the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+  }
+  // The same values in other forms, zero in any form, and a decimal fraction below 2^53 pass.
+  const ok: Array<[string, number]> = [
+    ["9007199254740992.0", 2 ** 53], ["9007199254740992e0", 2 ** 53], ["90071992547409920E-1", 2 ** 53], ["1.2e21", 1.2e21],
+    ["0", 0], ["0.0e-500", 0], ["0e5", 0], ["1.00000000000000001", 1], ["5e-324", 5e-324], ["1e2", 100],
+  ];
+  for (const [n, value] of ok) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    const res = await new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1);
+    assert.equal(res.data["amount"], value, n);
+  }
+});

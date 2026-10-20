@@ -87,10 +87,12 @@ non-negative integer `meta.result.total`. Anything else raises `AwParseError`
 `meta.status` is present and not `ok`, whatever the HTTP status (`Error envelope in a 2xx
 answer from <path>: <meta.status_message>`); printed as data, its empty `data` used to read as
 "none found" (`count` 0, exit 0). The records themselves are passed through unchecked, with one
-exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null`, or an
-integer literal beyond 2^53 that it rounds, `12345678901234567890`) raises `AwParseError`
+exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null`; one past
+2^53 that it rounds, in any form: `12345678901234567890`, `12345678901234567890.0`,
+`9007199254740993e0`, `9007199254740992.5`; or a non-zero one too small for a double, `1e-400`,
+which became `0`) raises `AwParseError`
 (`Unexpected response from <path>: the number … cannot be represented exactly.`) rather
-than print a changed value; a decimal fraction keeps a double's usual precision.
+than print a changed value; below 2^53 a decimal fraction keeps a double's usual precision.
 
 ## Input validation
 
