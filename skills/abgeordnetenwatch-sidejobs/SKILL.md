@@ -39,6 +39,11 @@ abgeordnetenwatch list candidacies-mandates politician=<POLITICIAN_ID> current_o
   | jq -c '.[] | select(.type=="mandate") | {mandate_id: .id, period: .parliament_period.label}'
 ```
 
+> **A full page is not all the matches.** The name search holds at most `--range-end` rows, in
+> the API's default order (newest ids first), not by relevance. When it comes back full, run
+> `abgeordnetenwatch count politicians 'last_name[cn]=<surname>'` and narrow with the first name
+> (`first_name=…`) instead of choosing from a partial page.
+
 > **Keep `current_on=all`.** Without it the API returns only the mandate current today, so a
 > member's earlier periods never show up. Side jobs are disclosed per mandate: pick the period
 > the user means (default: the most recent, listed first) and offer the others.

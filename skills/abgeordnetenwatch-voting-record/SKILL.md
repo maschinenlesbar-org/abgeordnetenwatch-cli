@@ -43,6 +43,12 @@ abgeordnetenwatch list politicians 'last_name[cn]=Scholz' --range-end 10 --data-
 > (try `first_name`/`last_name` separately if needed). A common name returns many rows —
 > disambiguate by `party.label` and `year_of_birth`, and if still ambiguous ask the user
 > which one.
+>
+> **A full page is not all the matches.** The list holds at most `--range-end` rows, in the
+> API's default order (newest ids first), not by relevance: `last_name[cn]=Scholz` returns 10
+> of 37 rows, and Olaf Scholz is not among them. When the page comes back full, run
+> `abgeordnetenwatch count politicians 'last_name[cn]=Scholz'` and narrow with the first name
+> (`first_name=Olaf`, or `'first_name[sw]=Ol'`) instead of choosing from a partial page.
 
 ## Step 2 — Find the mandate(s)
 
