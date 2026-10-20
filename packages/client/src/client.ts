@@ -66,9 +66,11 @@ export class AbgeordnetenwatchClient {
     if (params.filters !== undefined && params.filters !== null) {
       validateFilters(params.filters);
       // The API matches composed text only: a decomposed "Müller" (u + U+0308, as pasted
-      // from a macOS file name) matched nothing. Send every text value as NFC.
+      // from a macOS file name) matched nothing. Nor does it trim: "Scholz " (a trailing
+      // space from a spreadsheet or a shell variable) matched nothing either. Send every
+      // text value as NFC, without surrounding whitespace.
       for (const [key, value] of Object.entries(params.filters)) {
-        query[key] = typeof value === "string" ? value.normalize("NFC") : value;
+        query[key] = typeof value === "string" ? value.trim().normalize("NFC") : value;
       }
     }
     if (params.rangeStart !== undefined) query["range_start"] = params.rangeStart;

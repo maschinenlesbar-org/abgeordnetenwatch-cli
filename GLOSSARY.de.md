@@ -172,7 +172,8 @@ Die Namen für Seiten und Sortierung (`range_start`, `range_end`, `sort_by`, `so
 sind keine Filter: Die CLI weist sie ab und nennt die passende Option, und die Bibliothek
 weist sie ebenfalls ab. Ein Textwert
 wird in zusammengesetztem Unicode (NFC) gesendet: Die API findet nur diese Form, ein zerlegtes
-`Müller` (`u` plus kombinierendes Trema, etwa aus einem macOS-Dateinamen kopiert) fände nichts.
+`Müller` (`u` plus kombinierendes Trema, etwa aus einem macOS-Dateinamen kopiert) fände nichts. Er
+wird auch ohne umgebende Leerzeichen gesendet, die die API nicht entfernt: `Scholz ` fände nichts.
 
 **Operator (`field[op]=value`).** Ein Suffix in eckigen Klammern am Schlüssel: `eq` (gleich),
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`

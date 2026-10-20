@@ -507,6 +507,21 @@ test("a filter value in decomposed Unicode is sent composed (NFC)", async () => 
   assert.equal(query.get("year_of_birth"), "1980");
 });
 
+test("a filter value is sent without surrounding whitespace (bug 7, 2026-10-20)", async () => {
+  // The API does not trim: "last_name=Scholz " counted 0 where "Scholz" counted 31, and
+  // "first_name=Olaf " found nobody, with exit 0. A value pasted from a spreadsheet or a shell
+  // variable often carries a trailing space.
+  const mt = makeMockTransport(() => jsonResponse(listEnvelope([], 31)));
+  const client = new AbgeordnetenwatchClient({ transport: mt.transport });
+  await client.count("politicians", { filters: { last_name: "  Scholz  ", first_name: "Olaf\t", "label[cn]": "\u00a0Olaf Scholz\n", "field_title[sw]": " Mu\u0308 ", year_of_birth: 1958 } });
+  const query = new URL(mt.last().url).searchParams;
+  assert.equal(query.get("last_name"), "Scholz");
+  assert.equal(query.get("first_name"), "Olaf");
+  assert.equal(query.get("label[cn]"), "Olaf Scholz", "inner spaces stay");
+  assert.equal(query.get("field_title[sw]"), "Mü", "trimmed and composed");
+  assert.equal(query.get("year_of_birth"), "1958");
+});
+
 test("an HTTP 200 envelope with meta.status other than ok rejects with its message (bug 2, 2026-10-15)", async () => {
   // count() resolved to 0 and list() to [] for an answer that said it had failed.
   const errorMeta = { status: "error", status_message: "Database \u001b[31munavailable", result: { count: 0, total: 0, range_start: 0, range_end: 1 } };

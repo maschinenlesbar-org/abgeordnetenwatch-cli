@@ -164,7 +164,8 @@ record with `get` and the reference's `id`.
 names (`range_start`, `range_end`, `sort_by`, `sort_direction`) are not filters: the CLI
 rejects them and points to the matching option, and the library rejects them too. A text value
 is sent in composed Unicode (NFC): the API matches only that form, so a decomposed `Müller`
-(`u` plus a combining umlaut, as pasted from a macOS file name) would match nothing.
+(`u` plus a combining umlaut, as pasted from a macOS file name) would match nothing. It is sent
+without surrounding whitespace too, which the API doesn't trim: `Scholz ` would match nothing.
 
 **Operator (`field[op]=value`).** A bracket suffix on the key: `eq` (equal), `ne` (not equal),
 `gt`, `gte`, `lt`, `lte` (greater or less than, or equal), `cn` (contains, ignoring case:

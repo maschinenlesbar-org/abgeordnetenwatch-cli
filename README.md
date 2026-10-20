@@ -83,7 +83,9 @@ Add filters as `key=value` arguments after the entity:
 Each filter key may appear once, and every option takes one value: giving one twice
 (`sex=f sex=m`, `--range-end 5 --range-end 500`) is a usage error, never "the last one wins".
 Text values are sent in composed Unicode (NFC), the only form the API matches: a `Müller`
-pasted with a combining umlaut finds the same records as one typed on the keyboard.
+pasted with a combining umlaut finds the same records as one typed on the keyboard. Surrounding
+whitespace is dropped, since the API doesn't trim it: `last_name='Scholz '` (a trailing space from a
+spreadsheet) finds the same records as `last_name=Scholz`, so a value can't start or end with a space.
 
 ### Paging
 

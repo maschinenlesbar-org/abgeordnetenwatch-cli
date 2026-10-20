@@ -102,7 +102,7 @@ export interface ListParams {
    * Field filters, sent as query parameters. Keys may use the bracket-operator
    * form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`. Pass a related entity's
    * id directly, e.g. `{ politician: 184945 }`. String values are sent in composed Unicode (NFC), the
-   * only form the API matches. Checked before any request (see
+   * only form the API matches, and without surrounding whitespace, which the API doesn't trim. Checked before any request (see
    * `validateFilters`): a blank key or value, a key that is not a field name with at
    * most one operator, an operator outside `FILTER_OPERATORS`, a paging or sorting
    * name (`range_end`, ...) and a plain key next to a bracket key on the same field
