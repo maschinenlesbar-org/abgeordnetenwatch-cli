@@ -87,17 +87,17 @@ export type SortDirection = (typeof SORT_DIRECTIONS)[number];
  */
 export interface ListParams {
   /** 0-based offset of the first item to return; a non-negative safe integer. */
-  rangeStart?: number;
+  rangeStart?: number | undefined;
   /**
    * Page size — number of items to return. The API honours this up to 1000; a
    * value above 1000 is ignored and it falls back to its default page size (100).
    * A non-negative safe integer.
    */
-  rangeEnd?: number;
+  rangeEnd?: number | undefined;
   /** Field name to sort by (e.g. `last_name`, `id`); not blank. Alone, the API sorts descending. */
-  sortBy?: string;
+  sortBy?: string | undefined;
   /** Sort order, `asc` or `desc`; only together with `sortBy` (the API rejects it alone). */
-  sortDirection?: SortDirection;
+  sortDirection?: SortDirection | undefined;
   /**
    * Field filters, sent as query parameters. Keys may use the bracket-operator
    * form, e.g. `{ "year_of_birth[gt]": 1990, sex: "f" }`. Pass a related entity's
@@ -108,7 +108,7 @@ export interface ListParams {
    * name (`range_end`, ...) and a plain key next to a bracket key on the same field
    * reject with AwValidationError, because the API would silently drop the filter.
    */
-  filters?: Record<string, FilterValue>;
+  filters?: Record<string, FilterValue> | undefined;
 }
 
 /**

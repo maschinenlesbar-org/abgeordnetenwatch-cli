@@ -55,15 +55,15 @@ export interface EngineOptions {
    * absolute http(s) URL without a query, fragment or surrounding whitespace
    * (baseUrlProblem); anything else throws at construction.
    */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
-  transport?: Transport;
+  transport?: Transport | undefined;
   /**
    * Value of the User-Agent header. Must not be blank, nor contain control
    * characters (tab aside) or characters above U+00FF; such a value throws
    * AwValidationError at construction.
    */
-  userAgent?: string;
+  userAgent?: string | undefined;
   /**
    * Extra headers sent on every request to the configured origin. When a redirect
    * the engine follows crosses to a different origin, all of them are dropped (only
@@ -75,13 +75,13 @@ export interface EngineOptions {
    * be HTTP tokens and values follow the `userAgent` rule; anything else throws
    * AwValidationError at construction.
    */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /**
    * Time limit per request in milliseconds, covering the whole response body, not
    * only idle gaps (0 disables; at most `MAX_TIMEOUT_MS`, 2^31 - 1 ms). Enforced by
    * the engine for every transport.
    */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
   /**
    * Number of automatic retries for transient (429/503) responses and for a GET whose
    * connection was reset (see {@link isTransientNetworkError}), 0..`MAX_RETRIES` (10).
@@ -89,7 +89,7 @@ export interface EngineOptions {
    * longer (up to `MAX_RETRY_AFTER_MS`; a longer one is not retried, and the AwApiError
    * says so and carries it as `retryAfterMs`).
    */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
   /**
    * Base backoff between retries in milliseconds (grows linearly: 1 s, 2 s, ... by
    * default). The upstream rate limiter answers a burst with 429s and no
@@ -97,26 +97,26 @@ export interface EngineOptions {
    * `MAX_RETRY_AFTER_MS`. It is also the floor under a `Retry-After`: the header can
    * lengthen a wait, never shorten it.
    */
-  retryDelayMs?: number;
+  retryDelayMs?: number | undefined;
   /**
    * Number of HTTP redirects (301/302/303/307/308) to follow, 0..20. Defaults to 5. Any
    * other 3xx, one with a missing or malformed Location, and one past this limit
    * surface as an AwApiError naming the target.
    */
-  maxRedirects?: number;
+  maxRedirects?: number | undefined;
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
    * from a hostile/buggy endpoint). Defaults to 100 MiB; set to 0 for no limit.
    * Enforced by the engine for every transport.
    */
-  maxResponseBytes?: number;
+  maxResponseBytes?: number | undefined;
   /** Injectable sleep, primarily for deterministic tests. */
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: ((ms: number) => Promise<void>) | undefined;
   /**
    * Called once per retry, right before the backoff sleep, for each retried 429/503
    * and reset connection; never when there is no retry. A throw is swallowed.
    */
-  onRetry?: (event: RetryEvent) => void;
+  onRetry?: ((event: RetryEvent) => void) | undefined;
 }
 
 /** What `EngineOptions.onRetry` is told about one retry. */

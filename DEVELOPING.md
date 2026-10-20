@@ -177,12 +177,15 @@ node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ## Tests
 
 The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `engine`,
-`retry-hook`, `client`), everything that drives the CLI is in `apps/cli/test/`.
+`retry-hook`, `client`, `types`), everything that drives the CLI is in `apps/cli/test/`.
 
 - **Unit tests** inject a mock transport (`packages/client/test/helpers.ts`, which
   `apps/cli/test/helpers.ts` re-exports next to the CLI's own helpers) — no network.
 - **`http.test.ts`** exercises the real transport against an ephemeral local
   `http.createServer` (redirects, JSON parsing, protocol guard).
+- **`types.test.ts`** compiles a consumer file with `exactOptionalPropertyTypes` against the
+  built declarations (it starts `tsc`, so it gets 30 s): every option field takes `undefined`,
+  which the runtime treats as omitted.
 - **`cli.test.ts`** drives `run()` with a stub client and capturing IO, asserting
   on output and exit codes.
 - **`log.test.ts`** tests the record helpers of `apps/cli/src/cli/log.ts` on their own
