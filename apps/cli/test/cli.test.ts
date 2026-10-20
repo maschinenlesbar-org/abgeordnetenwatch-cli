@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
+import { renderJson } from "../src/cli/shared.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/client";
 import { AwApiError, credentialsIn } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
@@ -490,6 +491,27 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const code = await run(["--compact", "get", "parties", "5"], compact.deps);
   if (code === 0) assert.ok(compact.cap.out.join("").length > 2 * depth);
   else assert.equal(untimed(compact.cap.err.join("\n")), "ERROR [abgeordnetenwatch.cli] The response is nested too deeply to print.");
+});
+
+test("--compact takes the gap path for an answer with a huge string, the fast path otherwise (bug 5, 2026-10-20)", async (t) => {
+  // On Node 26 a 300 MB string from JSON.parse aborted V8's fast stringifier ("Zone Allocation
+  // failed", exit 134, a native dump on stderr) where the gap path prints it; but only the
+  // fast path is iterative there and prints 20,000 levels of nesting, which the gap path
+  // refuses at ~7,000. So the choice is pinned per answer, not by the runtime.
+  const { deps, cap } = makeDeps({});
+  const stringify = t.mock.method(JSON, "stringify", () => '"stub"');
+  const huge = { id: 1, text: "x".repeat(64 * 1024 * 1024) };
+  const deep = { id: 1, x: [[[["Rede"]]]], label: "x".repeat(64 * 1024 * 1024 - 1) };
+  const hugeKey = { ["k".repeat(64 * 1024 * 1024)]: 1 };
+  renderJson(deps, { compact: true }, huge);
+  renderJson(deps, { compact: true }, deep);
+  renderJson(deps, { compact: true }, hugeKey);
+  renderJson(deps, { compact: false }, deep);
+  const calls = stringify.mock.calls.map((call) => call.arguments);
+  stringify.mock.restore();
+  const gaps = calls.map((args) => (args.length >= 3 ? args[2] : "none"));
+  assert.deepEqual(gaps, ["", "none", "", 2]);
+  assert.deepEqual(cap.out, ['"stub"', '"stub"', '"stub"', '"stub"']);
 });
 
 test("--help exits 0", async () => {
