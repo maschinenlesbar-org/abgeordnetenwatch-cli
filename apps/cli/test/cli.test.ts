@@ -364,6 +364,21 @@ test("DEL and C1 control characters in server data are escaped in the JSON outpu
   }
 });
 
+test("bidi controls in server data are escaped in the JSON output", async () => {
+  // A U+202E in a label reordered what the terminal showed after it ("Trojan Source").
+  const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202e, 0x2066, 0x2069].map((c) => String.fromCharCode(c)).join("");
+  const served = { meta: { status: "ok" }, data: { id: 42, label: `CDU${String.fromCharCode(0x202e)}evil`, all: bidi } };
+  for (const format of [[], ["--compact"]]) {
+    const { deps, cap } = makeTransportDeps(() => jsonResponse(served));
+    assert.equal(await run(["get", "parties", "42", ...format], deps), 0);
+    const text = cap.out.join("\n");
+    assert.match(text, /CDU\\u202eevil/, format.join(" "));
+    assert.match(text, /\\u061c\\u200e\\u200f\\u202a\\u202e\\u2066\\u2069/, format.join(" "));
+    assert.doesNotMatch(text, /[؜‎‏‪-‮⁦-⁩]/, format.join(" "));
+    assert.deepEqual(JSON.parse(text), served);
+  }
+});
+
 test("--timeout accepts up to the largest timer Node supports", async () => {
   const served = { meta: { status: "ok" }, data: { id: 42 } };
   const ok = makeTransportDeps(() => jsonResponse(served));
