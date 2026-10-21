@@ -124,8 +124,8 @@ stdout into `jq` stays clean. Each line on stderr is a **log record**: a timesta
 a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
 (`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
 and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection (the cleartext warning, and one WARN per retry), `abgeordnetenwatch.output`
-for output that fails: an answer nested too deeply or too large to print, a failed write to
-stdout). Text in an answer is never changed silently: bytes that are not valid in its charset
+for output that fails: an answer nested too deeply or too large to print, a failed or cut-short
+write to stdout). Text in an answer is never changed silently: bytes that are not valid in its charset
 and half characters (lone surrogates) are replaced with U+FFFD, so the output stays readable
 for `jq`, and a `WARN` record of `abgeordnetenwatch.api` says how many. An answer too deep or too large to pretty-print says which of the two it is, and
 suggests `--compact` only when `--compact` prints that answer. By default it is written

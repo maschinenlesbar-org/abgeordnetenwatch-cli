@@ -289,7 +289,9 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   NFC or is refused, an entity id canonical or refused, the same on the CLI and in the
   library), P25 the response corpus (a number a double can't carry exactly, and an empty
   answer, are errors), P27 big and odd answers (printed, or refused in one ERROR record, within
-memory; lone surrogates and invalid bytes replaced, with a WARN). P26 (`-o` integrity) is not here: this CLI has no `-o`.
+memory; lone surrogates and invalid bytes replaced, with a WARN), and P26 output integrity in
+its stdout case only (stdout redirected to a file and cut short by a file-size limit is exit 1
+with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no `-o`).
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
@@ -481,7 +483,9 @@ connection, the cleartext warning) and `output` (an `OutputError`: an answer nes
 or too large to print, which `stringifyJson` tells apart and to which it adds "try --compact"
 only when the compact form of that answer prints; an answer whose escaped form (`escapeControlChars`
 writes DEL, C1 and the bidi controls as `\uXXXX`, six characters each, built in 64 Ki chunks)
-would pass V8's longest string; and a failed write to stdout). Code logs through `logOf(deps)` and never writes
+would pass V8's longest string; and a failed or cut-short write to stdout: when stdout is a
+regular file, `stdoutWriter` writes every byte with `writeSync` in a loop and turns EFBIG or
+ENOSPC into stdout's `error`, which `handleOutputErrors` logs). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
 parses it (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format` counts, and the value of one of the program's own value options is

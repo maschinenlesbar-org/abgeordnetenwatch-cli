@@ -260,7 +260,7 @@ als Text (im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt p
 Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
 Antworten der API: ein Fehlerstatus mit seinen Hinweisen und eine fehlerhafte Antwort —
 ungültiges JSON, die falsche Form oder der falsche Inhaltstyp), `http` (die Verbindung, die
-Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten) und `output` (eine Antwort, die zu tief verschachtelt oder zu groß zum Ausgeben ist, ein Schreibfehler auf stdout). Ein Eintrag ist immer eine
+Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten) und `output` (eine Antwort, die zu tief verschachtelt oder zu groß zum Ausgeben ist, ein fehlgeschlagener oder abgeschnittener Schreibvorgang auf stdout). Ein Eintrag ist immer eine
 Zeile; Steuerzeichen darin werden maskiert.
 
 > **Bibliothek & Interna.** Den TypeScript-Client, die Request-Engine, Retries,
