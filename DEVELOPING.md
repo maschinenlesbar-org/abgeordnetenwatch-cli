@@ -158,6 +158,10 @@ exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null
 which became `0`) raises `AwParseError`
 (`Unexpected response from <path>: the number … cannot be represented exactly.`) rather
 than print a changed value; below 2^53 a decimal fraction keeps a double's usual precision.
+Past 2^53 the check compares the number as printed (`String(value)`, the shortest decimal that
+reads back as the same double) with the number as written: `12345678901234567890` prints as
+`12345678901234567000` and is refused, while `1e23` or `1.7976931348623157E308` (a double a
+server printed in its own shortest form) print as the same number and pass.
 
 ## Input validation
 
