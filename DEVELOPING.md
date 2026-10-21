@@ -472,7 +472,9 @@ code point and ends in `… (N more characters)`. The areas are `cli` (usage err
 malformed answer, an `AwParseError`: bad JSON, the wrong shape or content type), `http` (the
 connection, the cleartext warning) and `output` (an `OutputError`: an answer nested too deeply
 or too large to print, which `stringifyJson` tells apart and to which it adds "try --compact"
-only when the compact form of that answer prints; and a failed write to stdout). Code logs through `logOf(deps)` and never writes
+only when the compact form of that answer prints; an answer whose escaped form (`escapeControlChars`
+writes DEL, C1 and the bidi controls as `\uXXXX`, six characters each, built in 64 Ki chunks)
+would pass V8's longest string; and a failed write to stdout). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
 parses it (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format` counts, and the value of one of the program's own value options is

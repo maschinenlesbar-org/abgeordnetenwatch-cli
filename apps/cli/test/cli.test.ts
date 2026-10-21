@@ -551,6 +551,21 @@ test("an output error is an ERROR record of the output area, exit 1 (bug 4, 2026
   assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.output\] The answer is too large \(more than \d+ characters of JSON\) to pretty-print; try --compact\.$/);
 });
 
+test("terminal controls are escaped in chunks: the same text as one pass, across chunk edges (bug 3, 2026-10-21)", () => {
+  // One `+=` per escaped character made a rope of 100 M pieces on 100 MB of DEL, and the heap ran out.
+  const DEL = String.fromCharCode(0x7f);
+  const C1 = String.fromCharCode(0x9b);
+  const RLO = String.fromCharCode(0x202e);
+  // Controls right before, at and after the 64 Ki edges, and a run of them.
+  const text = ["a".repeat(65535), DEL, C1, "b".repeat(65534), RLO, DEL.repeat(70000), "ü😀", C1].join("");
+  const { deps, cap } = makeDeps({});
+  renderJson(deps, { compact: true }, { text });
+  const expected = JSON.stringify({ text }).replace(/[\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  assert.equal(cap.out[0], expected);
+  assert.deepEqual(JSON.parse(cap.out[0]!), { text });
+});
+
 test("--compact takes the gap path for an answer with a huge string, the fast path otherwise (bug 5, 2026-10-20)", async (t) => {
   // On Node 26 a 300 MB string from JSON.parse aborted V8's fast stringifier ("Zone Allocation
   // failed", exit 134, a native dump on stderr) where the gap path prints it; but only the
