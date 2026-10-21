@@ -222,7 +222,7 @@ What the library rejects with `AwValidationError`:
 ## Scripts
 
 Node.js 22.12 or later (`engines`; commander 15 needs it). CI (`ci.yml`) type-checks, builds
-and tests on Node 22/24, then packs the real tarball, checks the pack left nothing behind,
+and tests on Node 22/24/26, then packs the real tarball, checks the pack left nothing behind,
 installs it globally with the registry out of reach and runs the bin. `release.yml` (on a
 `v*` tag, made by `npm run bump`) verifies the tag against `apps/cli/package.json`, writes
 the SBOMs (scoped to the `apps/cli` workspace) and runs `npm pack --workspace apps/cli`;
