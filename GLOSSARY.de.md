@@ -174,6 +174,9 @@ weist sie ebenfalls ab. Ein Textwert
 wird in zusammengesetztem Unicode (NFC) gesendet: Die API findet nur diese Form, ein zerlegtes
 `Müller` (`u` plus kombinierendes Trema, etwa aus einem macOS-Dateinamen kopiert) fände nichts. Er
 wird auch ohne umgebende Leerzeichen gesendet, die die API nicht entfernt: `Scholz ` fände nichts.
+Ein Wert mit einem Steuerzeichen oder einem unsichtbaren Zeichen (ein Leerzeichen ohne Breite,
+ein weiches Trennzeichen, ein Bidi-Steuerzeichen) oder nur aus solchen Zeichen wird abgewiesen:
+Er fände nichts oder wirkte wie kein Filter.
 
 **Operator (`field[op]=value`).** Ein Suffix in eckigen Klammern am Schlüssel: `eq` (gleich),
 `ne` (ungleich), `gt`, `gte`, `lt`, `lte` (größer bzw. kleiner als, oder gleich), `cn`
@@ -198,8 +201,10 @@ ist sie ein Aufruffehler.
 **Sortieren (`--sort-by`, `--sort-direction`).** Gesendet als `sort_by` und `sort_direction`
 (`asc` oder `desc`). Mit `--sort-by` allein sortiert die API **absteigend**; `--sort-direction`
 ohne `--sort-by` ist ein Aufruffehler (die API lehnt es ab), und die Bibliothek weist
-`sortDirection` ohne `sortBy`, ein leeres `sortBy` und jede andere Richtung mit
-`AwValidationError` ab. Nicht jedes Feld ist sortierbar: Abstimmungen lehnen `id` ab, akzeptieren aber `field_poll_date`. Ohne
+`sortDirection` ohne `sortBy`, ein `sortBy`, das kein Feldname ist (Buchstaben, Ziffern und `_`;
+`last_name[gt]`, `last name`, ein unsichtbares Zeichen), und jede andere Richtung mit
+`AwValidationError` ab. Das Feld wird ohne umgebende Leerzeichen gesendet (`'last_name '`
+sortiert nach `last_name`). Nicht jedes Feld ist sortierbar: Abstimmungen lehnen `id` ab, akzeptieren aber `field_poll_date`. Ohne
 `--sort-by` hängt die Reihenfolge von der Sammlung ab (`parliaments` höchste ID zuerst,
 `topics` nach Label).
 

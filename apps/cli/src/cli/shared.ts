@@ -7,7 +7,7 @@ import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "./io.js";
 import { cleartextProblem, DEFAULT_BASE_URL, isBidiControl, type EngineOptions, type RetryEvent } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/engine";
 import { AwError } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
-import { baseUrlProblem, describeValue, headerValueProblem, nonBlankProblem } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
+import { baseUrlProblem, describeValue, headerValueProblem } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
 
 /**
  * commander value-parser: a non-negative decimal integer.
@@ -42,16 +42,6 @@ export function parseBoundedInt(min: number, max: number): (value: string) => nu
     }
     return n;
   };
-}
-
-/**
- * commander value-parser: a value that is not blank. A blank filter would
- * otherwise be dropped and the command would silently run unfiltered.
- */
-export function parseNonEmpty(value: string): string {
-  const reason = nonBlankProblem(value);
-  if (reason !== undefined) throw new InvalidArgumentError(reason);
-  return value;
 }
 
 /**

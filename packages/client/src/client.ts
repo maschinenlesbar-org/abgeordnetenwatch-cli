@@ -12,7 +12,7 @@
 import { RequestEngine, sanitizeServerText, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import { AwParseError, AwValidationError, cutForMessage, MAX_QUOTED_LENGTH } from "./errors.js";
-import { assertParams, describeValue, normalizeEntityId, validateListParams } from "./validate.js";
+import { assertParams, describeValue, normalizeEntityId, normalizeText, normalizeToken, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
   ENTITY_COLLECTIONS,
@@ -70,12 +70,13 @@ export class AbgeordnetenwatchClient {
       // space from a spreadsheet or a shell variable) matched nothing either. Send every
       // text value as NFC, without surrounding whitespace.
       for (const [key, value] of Object.entries(params.filters)) {
-        query[key] = typeof value === "string" ? value.trim().normalize("NFC") : value;
+        query[key] = typeof value === "string" ? normalizeText(value) : value;
       }
     }
     if (params.rangeStart !== undefined) query["range_start"] = params.rangeStart;
     if (params.rangeEnd !== undefined) query["range_end"] = params.rangeEnd;
-    if (params.sortBy !== undefined) query["sort_by"] = params.sortBy;
+    // A field name, trimmed: "last_name " was an HTTP 500 that hid the space.
+    if (params.sortBy !== undefined) query["sort_by"] = normalizeToken(params.sortBy);
     if (params.sortDirection !== undefined) query["sort_direction"] = params.sortDirection;
     return query;
   }

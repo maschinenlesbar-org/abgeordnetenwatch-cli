@@ -34,6 +34,7 @@ export {
   normalizeEntityId,
   nonBlankProblem,
   rangeProblem,
+  sortByProblem,
   sortDirectionProblem,
   sortPairProblem,
   validateListParams,
@@ -42,6 +43,12 @@ export {
   baseUrlProblem,
   describeValue,
   assertParams,
+  textProblem,
+  normalizeText,
+  tokenProblem,
+  normalizeToken,
+  splitList,
+  listProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 export {
@@ -50,6 +57,7 @@ export {
   FORBIDDEN_FILTER_FIELDS,
   filterValueProblem,
   filterBlankProblem,
+  filterTextProblem,
   filterKeyProblem,
   reservedFilterProblem,
   filterOperatorProblem,

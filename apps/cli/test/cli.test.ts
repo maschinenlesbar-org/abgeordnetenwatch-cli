@@ -280,7 +280,7 @@ test("an invalid --sort-direction is rejected client-side", async () => {
   const { deps, cap } = makeDeps({});
   const code = await run(["list", "politicians", "--sort-direction", "sideways"], deps);
   assert.equal(code, 2);
-  assert.match(cap.err.join("\n"), /Invalid sort direction "sideways"/);
+  assert.match(cap.err.join("\n"), /Invalid sort direction: "sideways" is not a sort direction; use "asc" or "desc"\./);
 });
 
 test("a --user-agent with CR/LF is rejected, not an unexpected crash", async () => {
@@ -691,4 +691,16 @@ test("a number beyond what JSON.parse carries exactly exits 1, not a rounded val
     untimed(cap.err.join("\n")),
     "ERROR [abgeordnetenwatch.api] GET https://www.abgeordnetenwatch.de/api/v2/parties: the number 12345678901234567890 cannot be represented exactly.",
   );
+});
+
+test("--sort-by is sent trimmed, and a value that is no field name is a usage error before any request (bug 1, 2026-10-21)", async () => {
+  const ok = makeTransportDeps(() => jsonResponse({ meta: { status: "ok", result: { count: 0, total: 0 } }, data: [] }));
+  assert.equal(await run(["list", "politicians", "--sort-by", "last_name ", "--data-only"], ok.deps), 0);
+  assert.equal(new URL(ok.mt.last().url).searchParams.get("sort_by"), "last_name");
+  for (const bad of ["last_name[gt]", "last name", "last_name\u200b"]) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({}));
+    assert.equal(await run(["list", "politicians", "--sort-by", bad], deps), 2, bad);
+    assert.equal(mt.calls.length, 0, bad);
+    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.cli\] .*--sort-by/, bad);
+  }
 });

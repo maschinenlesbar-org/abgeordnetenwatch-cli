@@ -166,6 +166,9 @@ rejects them and points to the matching option, and the library rejects them too
 is sent in composed Unicode (NFC): the API matches only that form, so a decomposed `Müller`
 (`u` plus a combining umlaut, as pasted from a macOS file name) would match nothing. It is sent
 without surrounding whitespace too, which the API doesn't trim: `Scholz ` would match nothing.
+A value with a control character or an invisible one (a zero-width space, a soft hyphen, a bidi
+control), or with nothing but such characters, is refused: it would match nothing, or read as
+no filter.
 
 **Operator (`field[op]=value`).** A bracket suffix on the key: `eq` (equal), `ne` (not equal),
 `gt`, `gte`, `lt`, `lte` (greater or less than, or equal), `cn` (contains, ignoring case:
@@ -187,7 +190,9 @@ option takes one value: giving one twice (`--range-end 5 --range-end 500`) is a 
 **Sorting (`--sort-by`, `--sort-direction`).** Sent as `sort_by` and `sort_direction` (`asc`
 or `desc`). With `--sort-by` alone the API sorts **descending**; `--sort-direction` without
 `--sort-by` is a usage error (the API rejects it), and the library rejects `sortDirection`
-without `sortBy`, a blank `sortBy` and any other direction with `AwValidationError`. Not every
+without `sortBy`, a `sortBy` that is not a field name (letters, digits and `_`; `last_name[gt]`,
+`last name`, an invisible character) and any other direction with `AwValidationError`. The
+field is sent without surrounding whitespace (`'last_name '` sorts by `last_name`). Not every
 field is sortable:
 polls reject `id` but accept `field_poll_date`. Without `--sort-by` the order depends on the
 collection (`parliaments` highest id first, `topics` by label).

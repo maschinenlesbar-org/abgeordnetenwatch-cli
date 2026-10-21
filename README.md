@@ -86,6 +86,11 @@ Text values are sent in composed Unicode (NFC), the only form the API matches: a
 pasted with a combining umlaut finds the same records as one typed on the keyboard. Surrounding
 whitespace is dropped, since the API doesn't trim it: `last_name='Scholz '` (a trailing space from a
 spreadsheet) finds the same records as `last_name=Scholz`, so a value can't start or end with a space.
+A value that holds a control character or an invisible one a paste brings along (a zero-width
+space, a soft hyphen, a bidi control), or nothing but such characters, is a usage error rather
+than a search that finds nothing; the error shows the character as an escape (`"\u200bScholz"`).
+`--sort-by` takes a field name (letters, digits and `_`), sent without surrounding whitespace:
+`--sort-by 'last_name '` sorts by `last_name`, and `--sort-by 'last_name[gt]'` is a usage error.
 
 ### Paging
 

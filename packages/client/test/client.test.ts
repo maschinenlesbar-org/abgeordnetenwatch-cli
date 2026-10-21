@@ -624,3 +624,17 @@ test("a wrong shape and an error envelope name the request: method and full URL 
   await assert.rejects(new AbgeordnetenwatchClient({ transport: total.transport }).count("votes", { filters: { poll: 6569 } }), (err: unknown) =>
     err instanceof AwParseError && err.message === "GET https://www.abgeordnetenwatch.de/api/v2/votes?poll=6569&range_end=1: unexpected response shape: expected a numeric meta.result.total.");
 });
+
+test("sortBy is a field name, sent trimmed; anything else is refused before any request (bug 1, 2026-10-21)", async () => {
+  // "last_name " went out as sort_by=last_name%20 and the API answered HTTP 500.
+  for (const [given, sent] of [["last_name ", "last_name"], [" field_poll_date", "field_poll_date"], ["id", "id"]] as const) {
+    const mt = makeMockTransport(() => jsonResponse(listEnvelope([])));
+    await new AbgeordnetenwatchClient({ transport: mt.transport }).list("politicians", { sortBy: given });
+    assert.equal(new URL(mt.last().url).searchParams.get("sort_by"), sent, given);
+  }
+  for (const bad of ["last_name[gt]", "last name", "last_name\u200b", "\u200b", "na\u0308me", "a.b", "1st", ""]) {
+    const mt = makeMockTransport(() => jsonResponse(listEnvelope([])));
+    await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).list("politicians", { sortBy: bad }), AwValidationError, JSON.stringify(bad));
+    assert.equal(mt.calls.length, 0, JSON.stringify(bad));
+  }
+});

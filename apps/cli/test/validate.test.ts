@@ -112,7 +112,7 @@ test("sortDirectionProblem and sortPairProblem", () => {
   assert.equal(sortDirectionProblem("asc"), undefined);
   assert.equal(sortDirectionProblem("desc"), undefined);
   for (const value of ["ASC", "", "up", undefined]) {
-    assert.equal(sortDirectionProblem(value), 'Use "asc" or "desc".', String(value));
+    assert.equal(sortDirectionProblem(value), `${value === undefined ? "undefined" : JSON.stringify(value)} is not a sort direction; use "asc" or "desc".`, String(value));
   }
   assert.equal(sortPairProblem({ sortDirection: "asc" }), "sortDirection needs sortBy (the API rejects it on its own).");
   assert.equal(sortPairProblem({ sortBy: "id", sortDirection: "asc" }), undefined);

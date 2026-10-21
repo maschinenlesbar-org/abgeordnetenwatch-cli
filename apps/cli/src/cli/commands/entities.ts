@@ -1,6 +1,6 @@
 import { InvalidArgumentError, type Command } from "commander";
 import type { CliDeps } from "../io.js";
-import { action, parseFilters, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
+import { action, parseFilters, parseIntArg, renderJson } from "../shared.js";
 import {
   ENTITY_COLLECTIONS,
   isEntityCollection,
@@ -12,6 +12,7 @@ import {
   describeValue,
   entityIdProblem,
   normalizeEntityId,
+  sortByProblem,
   sortDirectionProblem,
   sortPairProblem,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
@@ -22,6 +23,7 @@ import {
   filterField,
   filterKeyProblem,
   filterOperatorProblem,
+  filterTextProblem,
   reservedFilterProblem,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/filters";
 
@@ -58,8 +60,18 @@ function idArg(value: string): string {
  */
 function sortDirectionArg(value: string): SortDirection {
   const reason = sortDirectionProblem(value);
-  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort direction ${describeValue(value)}. ${reason}`);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort direction: ${reason}`);
   return value as SortDirection;
+}
+
+/**
+ * commander value-parser for `--sort-by`: the library's rule (sortByProblem: a field name, no
+ * invisible character) as a usage error (exit 2). The library sends it trimmed.
+ */
+function sortByArg(value: string): string {
+  const reason = sortByProblem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort field: ${reason}`);
+  return value;
 }
 
 /** The `list` option that owns each reserved filter name, for the usage hint. */
@@ -96,6 +108,8 @@ function filterArg(value: string, previous: string[] = []): string[] {
   const key = value.slice(0, eq);
   const blank = filterBlankProblem([key, value.slice(eq + 1)]);
   if (blank !== undefined) throw new InvalidArgumentError(`Invalid filter ${describeValue(value)}. ${blank}`);
+  const text = filterTextProblem(value.slice(eq + 1));
+  if (text !== undefined) throw new InvalidArgumentError(`Invalid filter ${describeValue(key)}: ${text}`);
   const shape = filterKeyProblem(key);
   if (shape !== undefined) throw new InvalidArgumentError(`Invalid filter key ${describeValue(key)}. ${shape}`);
   const reserved = reservedFilterProblem(key);
@@ -146,7 +160,7 @@ export function registerEntityCommands(program: Command, deps: CliDeps): void {
       "page size (number of items; API honours up to 1000, else falls back to 100)",
       parseIntArg,
     )
-    .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)", parseNonEmpty)
+    .option("--sort-by <field>", "field name to sort by (e.g. last_name, id)", sortByArg)
     .option(
       "--sort-direction <dir>",
       "asc or desc; needs --sort-by, which alone sorts desc",

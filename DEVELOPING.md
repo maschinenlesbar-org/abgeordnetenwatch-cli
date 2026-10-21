@@ -202,6 +202,10 @@ What the library rejects with `AwValidationError`:
 - **Arguments of the wrong type**: a collection outside `ENTITY_COLLECTIONS` (`list`,
   `get`, `count`), a `params` that is not an object (`assertParams`; `count("parties",
   5)` used to send a request) and `filters` that are not an object.
+- **The kit's value rules** (`validate.ts`, exported): `textProblem`/`normalizeText` for free
+  text, `tokenProblem`/`normalizeToken` for ids, codes, enums and sort keys, and
+  `splitList`/`listProblem` for comma lists (this CLI has none). A value that holds nothing but
+  whitespace, control and format characters and combining marks is blank.
 - **Entity ids** (`get`): anything but a positive integer, as a number or a string of
   ASCII digits (`entityIdProblem`). `0` and `""` would fetch the whole collection, and
   `" 2 "`, `"abc"`, `-1` or `1.5` a generic HTTP 500. `normalizeEntityId` drops leading
@@ -216,7 +220,11 @@ What the library rejects with `AwValidationError`:
   `__proto__` to a plain object set the prototype, so the filter vanished from the
   request), and a value that is not one string, finite number or boolean
   (`filterValueProblem`: an array went out as repeated keys, of which the API keeps
-  one, `NaN` and objects as text). An ordinary unknown field is sent: the API rejects it
+  one, `NaN` and objects as text). A text value goes through `textProblem` (`filterTextProblem`)
+  and is sent as `normalizeText` (trimmed, NFC): refused when it is blank or holds only
+  invisible characters and combining marks, a lone surrogate, a control character other than
+  TAB/LF/CR or a format character other than ZWNJ/ZWJ (a zero-width space before a name
+  matched nothing, with exit 0). An ordinary unknown field is sent: the API rejects it
   itself with HTTP 500 ("The following parameter(s) are not valid: …").
 - **Parameter keys** (`list`, `count`; `assertKnownListParams`): a key outside
   `LIST_PARAM_KEYS` (`filters`, `rangeStart`, `rangeEnd`, `sortBy`, `sortDirection`). A
@@ -225,8 +233,10 @@ What the library rejects with `AwValidationError`:
   keeps only what argv needs on top: the split at the first `=` and the check for an
   exact repeated key.
 - **Paging and sorting** (`list`, `count`; `validateListParams`): `rangeStart` and
-  `rangeEnd` that are not non-negative safe integers (`rangeProblem`), a blank `sortBy`
-  (`nonBlankProblem`), a `sortDirection` other than `asc`/`desc` (`SORT_DIRECTIONS`,
+  `rangeEnd` that are not non-negative safe integers (`rangeProblem`), a `sortBy` that is no
+  token (`tokenProblem`: blank, invisible, control or half characters) or, trimmed, no field
+  name (`sortByProblem`; it is sent as `normalizeToken`, so `"last_name "` sorts by `last_name`
+  where it used to be an HTTP 500 that hid the space), a `sortDirection` other than `asc`/`desc` (`SORT_DIRECTIONS`,
   `sortDirectionProblem`) and a `sortDirection` without `sortBy` (`sortPairProblem`; the
   API answers it with HTTP 500). The CLI keeps the argv-to-number parsing
   (`parseIntArg`) and words the pair rule with its flag names.
@@ -290,8 +300,9 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   README's relative links (README.md ships to npmjs.com, so a link to a document the
   `files` allowlist leaves out must be an absolute GitHub URL), P23 the log records on
   stderr and `--log-format`, P24 the input corpus (a text filter value goes out trimmed and
-  NFC or is refused, an entity id canonical or refused, the same on the CLI and in the
-  library), P25 the response corpus (a number a double can't carry exactly, and an empty
+  NFC or is refused, an entity id, the sort key and the sort direction canonical or refused,
+  blank, invisible, control and half characters refused and shown escaped, the same on the CLI
+  and in the library), P25 the response corpus (a number a double can't carry exactly, and an empty
   answer, are errors), P27 big and odd answers (printed, or refused in one ERROR record, within
 memory; lone surrogates and invalid bytes replaced, with a WARN), and P26 output integrity in
 its stdout case only (stdout redirected to a file and cut short by a file-size limit is exit 1

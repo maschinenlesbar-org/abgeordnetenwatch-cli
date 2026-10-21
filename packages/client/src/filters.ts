@@ -6,7 +6,7 @@
 
 import { FILTER_OPERATORS, type FilterValue } from "./types.js";
 import { AwValidationError } from "./errors.js";
-import { assertValid, describeValue, type Problem } from "./validate.js";
+import { assertValid, describeValue, textProblem, type Problem } from "./validate.js";
 
 /** A filter key: a field name, optionally followed by one `[op]` suffix. */
 export const FILTER_KEY = /^([A-Za-z_][A-Za-z0-9_]*)(?:\[([^\]]*)\])?$/;
@@ -46,6 +46,14 @@ export const filterBlankProblem: Problem<readonly [string, FilterValue]> = ([key
   key.trim() === "" || String(value).trim() === ""
     ? "Both key and value must be non-empty, e.g. sex=f."
     : undefined;
+
+/**
+ * Rule for a text value (a string; a number or boolean is sent as its decimal text): the
+ * library's {@link textProblem} — not blank, not only invisible characters or combining marks,
+ * no lone surrogate, no control or format character (ZWNJ/ZWJ aside). A zero-width space before
+ * a name made the filter match nothing, with exit 0.
+ */
+export const filterTextProblem: Problem<unknown> = (value) => (typeof value === "string" ? textProblem(value) : undefined);
 
 /**
  * Rule: the key is a field name with at most one bracket operator. The API ignores
@@ -124,6 +132,7 @@ export function validateFilters(filters: Readonly<Record<string, FilterValue | n
     const name = `filter ${describeValue(key)}`;
     assertValid(name, value, filterValueProblem);
     assertValid(name, [key, value] as const, filterBlankProblem);
+    assertValid(name, value, filterTextProblem);
     assertValid(name, key, filterKeyProblem);
     assertValid(name, key, reservedFilterProblem);
     assertValid(name, key, filterOperatorProblem);
