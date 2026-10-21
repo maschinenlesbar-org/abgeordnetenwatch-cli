@@ -124,7 +124,9 @@ stdout into `jq` stays clean. Each line on stderr is a **log record**: a timesta
 a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
 (`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
 and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection (the cleartext warning, and one WARN per retry), `abgeordnetenwatch.output`
-for a failed write to stdout). By default it is written
+for output that fails: an answer nested too deeply or too large to print, a failed write to
+stdout). An answer too deep or too large to pretty-print says which of the two it is, and
+suggests `--compact` only when `--compact` prints that answer. By default it is written
 log4j style; `--log-format jsonl` writes one JSON object per line instead (`ts`, `level`,
 `topic`, `msg`). A record is always one line: a line break, a control character or a bidi
 control in a message (a server's text, a value you typed) is written as an escape (`\n`,

@@ -18,6 +18,7 @@ import {
   redactSecrets,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 import { RESERVED_FILTER_FIELDS } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/filters";
+import { OutputError } from "./shared.js";
 
 /** Conventional CLI exit code for a usage error (bad/unknown option, no command). */
 const USAGE_ERROR_EXIT_CODE = 2;
@@ -209,10 +210,12 @@ export function processLogger(argv: readonly string[]): Logger {
 /**
  * The log area of an `AwError` that is neither an API error nor a usage error: the
  * connection (`http`), a malformed answer (`api`: bad JSON, the wrong shape or content
- * type, an unknown charset — the API's answer as much as an error status is), else `cli`.
+ * type, an unknown charset — the API's answer as much as an error status is), the output
+ * (`output`: an answer too deep or too large to print), else `cli`.
  */
 function areaOf(err: AwError): string {
   if (err instanceof AwNetworkError) return "http";
+  if (err instanceof OutputError) return "output";
   if (err instanceof AwParseError) return "api";
   return "cli";
 }

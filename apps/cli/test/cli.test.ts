@@ -492,20 +492,63 @@ test("credentials in --base-url are redacted from error messages", async () => {
   assert.equal(untimed(cap.err.join("\n")), "ERROR [abgeordnetenwatch.api] HTTP 418 for GET http://127.0.0.1:18101/e418/api/v2/parties");
 });
 
-test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
+test("an answer nested too deeply is a clean error; it suggests --compact only where --compact prints it (D7, 2026-10-21)", async () => {
+  // A hostile or broken answer: JSON.parse reads it, the pretty printer's recursion can't. Whether
+  // the compact printer can depends on the Node version (iterative from Node 26) and the stack:
+  // probed here, never assumed.
   const depth = 200_000;
-  const deep = () => rawResponse(`{"meta":{},"data":{"x":${"[".repeat(depth)}${"]".repeat(depth)}}}`, "application/json");
+  const body = `{"meta":{},"data":{"x":${"[".repeat(depth)}${"]".repeat(depth)}}}`;
+  let compactPrints = true;
+  try {
+    JSON.stringify(JSON.parse(body));
+  } catch {
+    compactPrints = false;
+  }
+  const deep = () => rawResponse(body, "application/json");
   const pretty = makeTransportDeps(deep);
   assert.equal(await run(["get", "parties", "5"], pretty.deps), 1);
   assert.deepEqual(pretty.cap.out, []);
-  assert.equal(untimed(pretty.cap.err.join("\n")), "ERROR [abgeordnetenwatch.cli] The response is nested too deeply to pretty-print; try --compact.");
-
-  // Compact serialisation goes much deeper (it prints this one on current Node);
-  // should a runtime's stack still be too small, it must fail just as cleanly.
+  assert.equal(
+    untimed(pretty.cap.err.join("\n")),
+    `ERROR [abgeordnetenwatch.output] The answer is nested too deeply to pretty-print${compactPrints ? "; try --compact" : ""}.`,
+  );
   const compact = makeTransportDeps(deep);
-  const code = await run(["--compact", "get", "parties", "5"], compact.deps);
-  if (code === 0) assert.ok(compact.cap.out.join("").length > 2 * depth);
-  else assert.equal(untimed(compact.cap.err.join("\n")), "ERROR [abgeordnetenwatch.cli] The response is nested too deeply to print.");
+  assert.equal(await run(["--compact", "get", "parties", "5"], compact.deps), compactPrints ? 0 : 1);
+  if (compactPrints) assert.ok(compact.cap.out.join("").length > 2 * depth);
+  else assert.equal(untimed(compact.cap.err.join("\n")), "ERROR [abgeordnetenwatch.output] The answer is nested too deeply to print.");
+});
+
+test("an answer too large to print is called too large, not too deep; the hint only where --compact prints (bug 4, 2026-10-21)", (t) => {
+  // 80 MB of numbers nested five levels was "nested too deeply to pretty-print": every RangeError
+  // was read as depth, though the cause was V8's longest string.
+  const { deps } = makeDeps({});
+  const real = JSON.stringify;
+  // V8's own error for a text past its longest string, stood in for: a real one needs 512 MB.
+  const tooLarge = (gap: unknown): boolean => gap === 2 || gap === "big";
+  t.mock.method(JSON, "stringify", (value: unknown, replacer: never, gap: unknown) => {
+    if (tooLarge(gap) || (gap === undefined && (value as { all?: boolean }).all === true)) throw new RangeError("Invalid string length");
+    return real(value, replacer, gap as number);
+  });
+  assert.throws(() => renderJson(deps, {}, { id: 1 }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to pretty-print; try --compact\.$/.test(err.message));
+  assert.throws(() => renderJson(deps, {}, { all: true }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to pretty-print\.$/.test(err.message));
+  assert.throws(() => renderJson(deps, { compact: true }, { all: true }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to print\.$/.test(err.message));
+});
+
+test("an output error is an ERROR record of the output area, exit 1 (bug 4, 2026-10-21)", async (t) => {
+  // Only the pretty-print of the answer fails (the log and the probe for --compact still work).
+  const real = JSON.stringify;
+  t.mock.method(JSON, "stringify", (value: unknown, replacer: never, gap: unknown) => {
+    if (gap === 2) throw new RangeError("Invalid string length");
+    return real(value, replacer, gap as number);
+  });
+  const { deps, cap } = makeDeps({ get: async () => ({ meta: {}, data: { id: 1 } }) });
+  const code = await run(["get", "parties", "1"], deps);
+  t.mock.restoreAll();
+  assert.equal(code, 1);
+  assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.output\] The answer is too large \(more than \d+ characters of JSON\) to pretty-print; try --compact\.$/);
 });
 
 test("--compact takes the gap path for an answer with a huge string, the fast path otherwise (bug 5, 2026-10-20)", async (t) => {

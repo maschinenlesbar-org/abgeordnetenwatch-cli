@@ -282,7 +282,8 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   stderr and `--log-format`, P24 the input corpus (a text filter value goes out trimmed and
   NFC or is refused, an entity id canonical or refused, the same on the CLI and in the
   library), P25 the response corpus (a number a double can't carry exactly, and an empty
-  answer, are errors). P26 (`-o` integrity) is not here: this CLI has no `-o`.
+  answer, are errors), P27 big and odd answers (printed, or refused in one ERROR record, within
+memory). P26 (`-o` integrity) is not here: this CLI has no `-o`.
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
@@ -469,7 +470,9 @@ and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cu
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's answers: an error status, and the hints after it as `INFO`, and a
 malformed answer, an `AwParseError`: bad JSON, the wrong shape or content type), `http` (the
-connection, the cleartext warning) and `output` (a failed write to stdout). Code logs through `logOf(deps)` and never writes
+connection, the cleartext warning) and `output` (an `OutputError`: an answer nested too deeply
+or too large to print, which `stringifyJson` tells apart and to which it adds "try --compact"
+only when the compact form of that answer prints; and a failed write to stdout). Code logs through `logOf(deps)` and never writes
 diagnostics with `io.err` directly. `run()` builds the logger from argv before commander
 parses it (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format` counts, and the value of one of the program's own value options is
