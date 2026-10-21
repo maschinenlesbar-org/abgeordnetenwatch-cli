@@ -66,6 +66,7 @@ new AbgeordnetenwatchClient({
   userAgent: "my-app/1.0",
   headers: { "X-Request-Id": "abc" },
   onRetry: (event) => console.warn(event), // once per retry, before the wait
+  bigIntegerKeys: new Set(["_version_"]), // members whose numbers arrive as exact strings (none by default)
   transport: customTransport, // (HttpRequest) => Promise<HttpResponse>
 });
 ```
@@ -160,6 +161,9 @@ that does not print as written: `3e-324` became `5e-324`, while `5e-324` and `1e
 (`GET <url>: the number … cannot be represented exactly.`) rather
 than print a changed value; below 2^53 and above the subnormal range a decimal fraction keeps a
 double's usual precision.
+A member named in the engine option `bigIntegerKeys` (none by default: this API sends no number
+past 2^53) is the exception: its number is delivered as its exact literal, as a JSON string,
+whatever its size (`scanNumbers`, one linear pass that also does the check above).
 Every error about an answer names the request, `GET <url>: …`, with the whole URL (query
 included, userinfo redacted, `describeUrl`), like a network error does: a Content-Type other
 than JSON (`unexpected Content-Type "…" (expected JSON)`), an unknown charset, an empty body, a
