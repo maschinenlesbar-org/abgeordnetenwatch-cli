@@ -396,8 +396,12 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   to ...`) at construction, instead of a negative or NaN value silently disabling a
   limit. So does an options value that is not an object, a `transport` or `sleep` that
   is not a function, and `headers` that are not a plain object.
-- **Server text in messages is cut.** An API error's `detail` (`meta.status_message`,
-  `detail` or `message` of the body) is cut at 500 characters (`MAX_MESSAGE_TEXT`,
+- **Server text in messages is cleaned and cut.** Every C0 control but tab and line feed, DEL
+  and C1 are removed from server text before it goes into a message (`sanitizeServerText`: an
+  error `detail`, an error envelope's message, a Content-Type, a charset, a redirect target, a
+  transport's reason), so the record's escaping never shows a server's ESC as `\u001b` either:
+  it is gone. Line feeds and bidi controls left in it are escaped by the log. An API error's
+  `detail` (`meta.status_message`, `detail` or `message` of the body) is cut at 500 characters (`MAX_MESSAGE_TEXT`,
   `cutForMessage`, which counts code points) in the message; `AwApiError.body` keeps the
   whole body. A long URL in a message is cut in the middle, never inside a surrogate pair
   (`cutText`), so the message stays well-formed. Any other value an own message quotes

@@ -128,17 +128,17 @@ Every command prints JSON to stdout; errors, warnings and notes go to stderr, so
 stdout into `jq` stays clean. Each line on stderr is a **log record**: a timestamp (UTC),
 a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area it comes from
 (`abgeordnetenwatch.cli` for usage errors, `abgeordnetenwatch.api` for the API's answers
-and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection (the cleartext warning, and one WARN per retry), `abgeordnetenwatch.output`
-for output that fails: an answer nested too deeply or too large to print, a failed or cut-short
-write to stdout). Text in an answer is never changed silently: bytes that are not valid in its charset
-and half characters (lone surrogates) are replaced with U+FFFD, so the output stays readable
-for `jq`, and a `WARN` record of `abgeordnetenwatch.api` says how many. An answer too deep or too large to pretty-print says which of the two it is, and
-suggests `--compact` only when `--compact` prints that answer. By default it is written
-log4j style; `--log-format jsonl` writes one JSON object per line instead (`ts`, `level`,
-`topic`, `msg`). A record is always one line: a line break, a control character or a bidi
-control in a message (a server's text, a value you typed) is written as an escape (`\n`,
-`\u001b`, `\u202e`), so it can neither split a record nor forge another one, nor steer the
-terminal; a message longer than 4000 characters is cut and ends in `… (N more characters)`:
+and their hints, a malformed one included, `abgeordnetenwatch.http` for the connection (the
+cleartext warning, and one WARN per retry), `abgeordnetenwatch.output` for output that fails:
+an answer nested too deeply or too large to print, a failed or cut-short write to stdout). By
+default it is written log4j style; `--log-format jsonl` writes one JSON object per line instead
+(`ts`, `level`, `topic`, `msg`). A record is always one line: a line break, a control character
+or a bidi control in a message is written as an escape (`\n`, `\u001b`, `\u202e`), so it can
+neither split a record nor forge another one, nor steer the terminal. A value you typed keeps
+every character, escaped; in a server's text (an error message, a Content-Type) the control
+characters other than tab and line break are removed before that, so what a server sends can't
+drive the terminal even inside an escape. A message longer than 4000 characters is cut and
+ends in `… (N more characters)`:
 
 ```text
 2026-10-09T14:03:12.481Z WARN  [abgeordnetenwatch.http] requests to mirror.example are sent unencrypted (http:, not https:)
@@ -148,6 +148,12 @@ terminal; a message longer than 4000 characters is cut and ends in `… (N more 
 ```bash
 abgeordnetenwatch --log-format jsonl get parties 999999 2>log.jsonl   # {"ts":"…","level":"ERROR","topic":"abgeordnetenwatch.api","msg":"HTTP 500 …"}
 ```
+
+Text in an answer is never changed silently: bytes that are not valid in its charset and half
+characters (lone surrogates) are replaced with U+FFFD, so the output stays readable for `jq`,
+and a `WARN` record of `abgeordnetenwatch.api` says how many. An answer too deep or too large
+to pretty-print says which of the two it is, and suggests `--compact` only when `--compact`
+prints that answer.
 
 The service rate-limits bursts with HTTP `429`; the client retries these
 automatically (up to `--max-retries`, default `2`), backing off 1 s, 2 s, … or waiting

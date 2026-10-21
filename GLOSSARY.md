@@ -254,7 +254,8 @@ with `--log-format jsonl` as one JSON object per line. The areas: `cli` (usage e
 commander's messages, unexpected errors), `api` (the API's answers: an error status and its
 hints, and a malformed answer — bad JSON, the wrong shape or content type), `http` (the
 connection, the cleartext warning, and one WARN per retry before it waits) and `output` (an answer too deep or too large to print, a failed or cut-short write to stdout). A record is
-always one line; control characters in it are escaped.
+always one line; control characters in it are escaped (those in a server's text are removed
+before that).
 
 > **Library & internals.** The TypeScript client, request engine, retries, redirects and
 > error types are described in **[DEVELOPING.md](DEVELOPING.md)**.
