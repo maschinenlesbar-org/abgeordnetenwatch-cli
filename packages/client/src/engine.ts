@@ -729,9 +729,23 @@ export class RequestEngine {
     }
   }
 
-  /** Perform a GET expecting JSON and parse it into `T`. */
+  /**
+   * The request URL as error messages show it: absolute (so a message names the host that gave
+   * a bad answer, which matters with a mirror), userinfo redacted and cut at MAX_MESSAGE_TEXT
+   * characters. It never throws: describing a URL for a message does not validate it.
+   */
+  describeUrl(path: string, query?: QueryParams): string {
+    return cutForMessage(redactUrl(this.buildUrl(path, query)));
+  }
+
+  /**
+   * Perform a GET expecting JSON and parse it into `T`. An empty (or whitespace-only) body is an
+   * AwParseError: every endpoint answers with a JSON document. Every error about the answer names
+   * the request (`GET <url>: …`, userinfo redacted).
+   */
   async getJson<T>(path: string, query?: QueryParams): Promise<T> {
     const res = await this.request("GET", path, { query, accept: "application/json" });
+    const request = `GET ${this.describeUrl(path, query)}`;
     // Guard against a 2xx response that is not actually JSON (e.g. a captive
     // portal or a wildcard-DNS host returning an HTML page). The header may carry
     // a charset (e.g. "application/json; charset=utf-8"), so match the media
@@ -739,20 +753,24 @@ export class RequestEngine {
     const mediaType = (res.contentType.split(";", 1)[0] ?? "").trim().toLowerCase();
     if (mediaType && mediaType !== "application/json" && !mediaType.endsWith("+json")) {
       throw new AwParseError(
-        `Unexpected content type "${cutForMessage(sanitizeServerText(res.contentType), MAX_QUOTED_LENGTH)}" from ${path} (expected JSON).`,
+        `${request}: unexpected Content-Type "${cutForMessage(sanitizeServerText(res.contentType), MAX_QUOTED_LENGTH)}" (expected JSON).`,
       );
     }
-    const text = decodeBody(res.data, res.contentType, path);
+    const text = decodeBody(res.data, res.contentType, request);
+    if (text.trim() === "") {
+      // A broken answer, not "no results": it must not read as "nothing found".
+      throw new AwParseError(`${request}: empty response body.`);
+    }
     let parsed: T;
     try {
       parsed = JSON.parse(text) as T;
     } catch (cause) {
-      throw new AwParseError(`Failed to parse JSON response from ${path}`, { cause });
+      throw new AwParseError(`${request}: the answer is not valid JSON.`, { cause });
     }
     const lossy = firstInexactNumber(text);
     if (lossy !== undefined) {
       throw new AwParseError(
-        `Unexpected response from ${path}: the number ${cutForMessage(lossy, MAX_QUOTED_LENGTH)} cannot be represented exactly.`,
+        `${request}: the number ${cutForMessage(lossy, MAX_QUOTED_LENGTH)} cannot be represented exactly.`,
       );
     }
     return parsed;
@@ -812,16 +830,17 @@ export class RequestEngine {
  * Decode a response body by the charset of its Content-Type (UTF-8 when none is
  * given, as JSON requires). A leading byte-order mark is dropped: TextDecoder does
  * that by default, where Buffer#toString kept it and JSON.parse then failed. The
- * upstream sends UTF-8; this matters for proxies and mirrors that re-encode.
+ * upstream sends UTF-8; this matters for proxies and mirrors that re-encode. An unknown charset
+ * label is an AwParseError naming `request`.
  */
-function decodeBody(body: Buffer, contentType: string, path: string): string {
+function decodeBody(body: Buffer, contentType: string, request: string): string {
   const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
   let decoder: TextDecoder;
   try {
     decoder = new TextDecoder(charset);
   } catch {
     throw new AwParseError(
-      `Unsupported response charset "${cutForMessage(sanitizeServerText(charset), MAX_QUOTED_LENGTH)}" from ${path}.`,
+      `${request}: unsupported response charset "${cutForMessage(sanitizeServerText(charset), MAX_QUOTED_LENGTH)}".`,
     );
   }
   return decoder.decode(body);

@@ -80,6 +80,11 @@ export class AbgeordnetenwatchClient {
     return query;
   }
 
+  /** `GET <url>` for an error about the answer to that request (userinfo redacted, cut). */
+  private describe(path: string, query?: QueryParams): string {
+    return `GET ${this.engine.describeUrl(path, query)}`;
+  }
+
   /**
    * List a collection; returns the full envelope (meta + data array). A 2xx body
    * that is not such an envelope, or whose `meta.status` is not `ok`, raises AwParseError.
@@ -89,9 +94,11 @@ export class AbgeordnetenwatchClient {
     params: ListParams = {},
   ): Promise<ListResponse<T>> {
     const path = `${API_PREFIX}/${checkCollection(collection)}`;
-    const body = await this.engine.getJson<unknown>(path, this.toQuery(params));
-    assertEnvelope(body, path);
-    if (!Array.isArray(body["data"])) throw shapeError(path, "a data array");
+    const query = this.toQuery(params);
+    const body = await this.engine.getJson<unknown>(path, query);
+    const request = this.describe(path, query);
+    assertEnvelope(body, request);
+    if (!Array.isArray(body["data"])) throw shapeError(request, "a data array");
     return body as unknown as ListResponse<T>;
   }
 
@@ -109,8 +116,9 @@ export class AbgeordnetenwatchClient {
   ): Promise<DetailResponse<T>> {
     const path = `${API_PREFIX}/${checkCollection(collection)}/${normalizeEntityId(id)}`;
     const body = await this.engine.getJson<unknown>(path);
-    assertEnvelope(body, path);
-    if (!isObject(body["data"])) throw shapeError(path, "a data object");
+    const request = this.describe(path);
+    assertEnvelope(body, request);
+    if (!isObject(body["data"])) throw shapeError(request, "a data object");
     return body as unknown as DetailResponse<T>;
   }
 
@@ -125,10 +133,11 @@ export class AbgeordnetenwatchClient {
     assertParams("params", params);
     assertKnownListParams(params);
     validateListParams(params);
-    const res = await this.list(collection, { ...params, rangeEnd: 1 });
+    const asked: ListParams = { ...params, rangeEnd: 1 };
+    const res = await this.list(collection, asked);
     const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
     if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
-      throw shapeError(`${API_PREFIX}/${collection}`, "a numeric meta.result.total");
+      throw shapeError(this.describe(`${API_PREFIX}/${collection}`, this.toQuery(asked)), "a numeric meta.result.total");
     }
     return total;
   }
@@ -154,8 +163,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function shapeError(path: string, expected: string): AwParseError {
-  return new AwParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+/** A 2xx answer of the wrong shape; `request` is `GET <url>` (D9: an answer error names the request). */
+function shapeError(request: string, expected: string): AwParseError {
+  return new AwParseError(`${request}: unexpected response shape: expected ${expected}.`);
 }
 
 /**
@@ -163,9 +173,9 @@ function shapeError(path: string, expected: string): AwParseError {
  * an array or an object without `meta` would otherwise surface as a raw TypeError
  * ("Cannot read properties of null") or print as if it were data.
  */
-function assertEnvelope(body: unknown, path: string): asserts body is Record<string, unknown> {
+function assertEnvelope(body: unknown, request: string): asserts body is Record<string, unknown> {
   if (!isObject(body) || !isObject(body["meta"])) {
-    throw shapeError(path, "a JSON object with meta and data");
+    throw shapeError(request, "a JSON object with meta and data");
   }
   // An envelope that says it failed is no answer, whatever the HTTP status: printed as data,
   // its empty `data` read as "none found" (count 0, exit 0). The API sends `ok` on success.
@@ -176,6 +186,6 @@ function assertEnvelope(body: unknown, path: string): asserts body is Record<str
       typeof message === "string" && message.trim() !== ""
         ? cutForMessage(sanitizeServerText(message))
         : `meta.status ${cutForMessage(sanitizeServerText(JSON.stringify(status)), MAX_QUOTED_LENGTH)}`;
-    throw new AwParseError(`Error envelope in a 2xx answer from ${path}: ${reason}`);
+    throw new AwParseError(`${request}: error envelope in a 2xx answer: ${reason}`);
   }
 }

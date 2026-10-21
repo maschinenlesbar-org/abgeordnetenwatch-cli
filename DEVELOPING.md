@@ -148,18 +148,22 @@ argument against it.
 The client checks the envelope of every 2xx response: an object with a `meta`
 object, `data` an array (`list`) or an object (`get`), and for `count` a
 non-negative integer `meta.result.total`. Anything else raises `AwParseError`
-(`Unexpected response shape from <path>: expected ...`). So does an envelope whose
-`meta.status` is present and not `ok`, whatever the HTTP status (`Error envelope in a 2xx
-answer from <path>: <meta.status_message>`); printed as data, its empty `data` used to read as
+(`GET <url>: unexpected response shape: expected ...`). So does an envelope whose
+`meta.status` is present and not `ok`, whatever the HTTP status (`GET <url>: error envelope in a
+2xx answer: <meta.status_message>`); printed as data, its empty `data` used to read as
 "none found" (`count` 0, exit 0). The records themselves are passed through unchecked, with one
 exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null`; one past
 2^53 that it rounds, in any form: `12345678901234567890`, `12345678901234567890.0`,
 `9007199254740993e0`, `9007199254740992.5`; a non-zero one too small for a double, `1e-400`,
 which became `0`; or a subnormal one, below the smallest normal double 2.2250738585072014e-308,
 that does not print as written: `3e-324` became `5e-324`, while `5e-324` and `1e-310` pass) raises `AwParseError`
-(`Unexpected response from <path>: the number … cannot be represented exactly.`) rather
+(`GET <url>: the number … cannot be represented exactly.`) rather
 than print a changed value; below 2^53 and above the subnormal range a decimal fraction keeps a
 double's usual precision.
+Every error about an answer names the request, `GET <url>: …`, with the whole URL (query
+included, userinfo redacted, `describeUrl`), like a network error does: a Content-Type other
+than JSON (`unexpected Content-Type "…" (expected JSON)`), an unknown charset, an empty body, a
+body that is not JSON, a lossy number, a wrong shape and an error envelope.
 Past 2^53 the check compares the number as printed (`String(value)`, the shortest decimal that
 reads back as the same double) with the number as written: `12345678901234567890` prints as
 `12345678901234567000` and is refused, while `1e23` or `1.7976931348623157E308` (a double a

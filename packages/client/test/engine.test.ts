@@ -6,10 +6,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine } from "../src/engine.js";
 import { AbgeordnetenwatchClient } from "../src/client.js";
-import { AwApiError, cutText, toWellFormed } from "../src/errors.js";
+import { AwApiError, AwParseError, cutText, toWellFormed } from "../src/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
+  rawResponse,
   redirectResponse,
   redirectWithoutLocation,
 } from "./helpers.js";
@@ -274,7 +275,7 @@ test("own messages quote a server or user value at most 200 characters long (L3)
   const redirect = new RequestEngine({ maxRedirects: 0, maxRetries: 0, transport: async () => ({ status: 302, headers: { location: `https://other.example/${long}` }, body: Buffer.alloc(0) }) });
   await assert.rejects(redirect.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /redirect to https:\/\/other\.example\/x+… not followed/.test(err.message));
   const html = new RequestEngine({ maxRetries: 0, transport: async () => ({ status: 200, headers: { "content-type": `text/${long}` }, body: Buffer.from("{}") }) });
-  await assert.rejects(html.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /Unexpected content type "text\/x+…"/.test(err.message));
+  await assert.rejects(html.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /unexpected Content-Type "text\/x+…"/.test(err.message));
   const charset = new RequestEngine({ maxRetries: 0, transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=${long}` }, body: Buffer.from("{}") }) });
   await assert.rejects(charset.getJson("/api/v2/parties"), (err: Error) => err.message.length < 400 && /charset "x+…"/.test(err.message));
   const client = new AbgeordnetenwatchClient({ transport: async () => ({ status: 200, headers: {}, body: Buffer.from("{}") }) });
@@ -310,4 +311,27 @@ test("a header named __proto__ is an ordinary header, never the prototype of the
   const fetchLike = new Headers([["__proto__", "x"], ["content-type", "application/json"]]);
   const f = new RequestEngine({ transport: async () => ({ status: 200, headers: fetchLike as unknown as Record<string, string>, body: Buffer.from('{"a":1}') }) });
   assert.deepEqual(await f.getJson("/x"), { a: 1 });
+});
+
+test("an answer error names the request: method and URL, userinfo redacted (D9, 2026-10-21)", async () => {
+  const answers: Array<[string, () => HttpResponse]> = [
+    ["unexpected Content-Type", () => rawResponse("<html>", "text/html")],
+    ["not valid JSON", () => rawResponse("{", "application/json")],
+    ["empty response body", () => rawResponse(" ", "application/json")],
+    ["cannot be represented exactly", () => rawResponse('{"n":1e400}', "application/json")],
+    ["unsupported response charset", () => rawResponse("{}", "application/json; charset=x-bogus")],
+  ];
+  const base = new URL("https://www.abgeordnetenwatch.de");
+  base.username = "alice";
+  base.password = "s3cret";
+  for (const [what, respond] of answers) {
+    const e = new RequestEngine({ baseUrl: base.href, transport: makeMockTransport(respond).transport });
+    await assert.rejects(e.getJson("/api/v2/parties", { label: "x" }), (err: unknown) => {
+      assert.ok(err instanceof AwParseError, what);
+      assert.ok(err.message.startsWith(`GET ${base.protocol}//***@${base.host}/api/v2/parties?label=x: `), err.message);
+      assert.ok(err.message.includes(what), err.message);
+      assert.ok(!err.message.includes("s3cret"), err.message);
+      return true;
+    });
+  }
 });

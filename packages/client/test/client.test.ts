@@ -233,7 +233,7 @@ test("the body is decoded by its charset, and a UTF-8 byte-order mark is ignored
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });
   await assert.rejects(
     () => client.get("parties", 1),
-    (e: unknown) => e instanceof AwParseError && /Unsupported response charset "x-nonsense"/.test(e.message),
+    (e: unknown) => e instanceof AwParseError && /^GET https:\/\/www\.abgeordnetenwatch\.de\/api\/v2\/parties\/1: unsupported response charset "x-nonsense"\.$/.test(e.message),
   );
 });
 
@@ -260,7 +260,7 @@ test("a 2xx body that is not a { meta, data } envelope raises AwParseError", asy
     await assert.rejects(
       () => call(client),
       (err: unknown) =>
-        err instanceof AwParseError && /^Unexpected response shape from \/api\/v2\/parties/.test(err.message) &&
+        err instanceof AwParseError && /^GET https:\/\/www\.abgeordnetenwatch\.de\/api\/v2\/parties\S*: unexpected response shape: /.test(err.message) &&
         message.test(err.message),
       name,
     );
@@ -530,20 +530,20 @@ test("an HTTP 200 envelope with meta.status other than ok rejects with its messa
   );
   const client = new AbgeordnetenwatchClient({ transport: mt.transport });
   for (const [label, call, path] of [
-    ["count", () => client.count("politicians"), "/api/v2/politicians"],
+    ["count", () => client.count("politicians"), "/api/v2/politicians?range_end=1"],
     ["list", () => client.list("politicians"), "/api/v2/politicians"],
     ["get", () => client.get("parties", 5), "/api/v2/parties/5"],
   ] as const) {
     await assert.rejects(call(), (err) => {
       assert.ok(err instanceof AwParseError, label);
       // The server's text is cleaned of control characters, like an error status's detail.
-      assert.equal(err.message, `Error envelope in a 2xx answer from ${path}: Database [31munavailable`, label);
+      assert.equal(err.message, `GET https://www.abgeordnetenwatch.de${path}: error envelope in a 2xx answer: Database [31munavailable`, label);
       return true;
     });
   }
   // Without a message the status itself is named; an envelope without a status is still data.
   const bare = makeMockTransport(() => jsonResponse({ meta: { status: "failed" }, data: [] }));
-  await assert.rejects(new AbgeordnetenwatchClient({ transport: bare.transport }).list("parties"), /Error envelope in a 2xx answer from \/api\/v2\/parties: meta\.status "failed"$/);
+  await assert.rejects(new AbgeordnetenwatchClient({ transport: bare.transport }).list("parties"), /: GET https:\/\/www\.abgeordnetenwatch\.de\/api\/v2\/parties: error envelope in a 2xx answer: meta\.status "failed"$/);
   const noStatus = makeMockTransport(() => jsonResponse({ meta: {}, data: [] }));
   assert.deepEqual((await new AbgeordnetenwatchClient({ transport: noStatus.transport }).list("parties")).data, []);
 });
@@ -556,7 +556,7 @@ test("a number the answer's JSON cannot carry exactly is a parse error, never a 
     const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
     await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1), (err) => {
       assert.ok(err instanceof AwParseError, n);
-      assert.equal(err.message, `Unexpected response from /api/v2/parties/1: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://www.abgeordnetenwatch.de/api/v2/parties/1: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -575,7 +575,7 @@ test("a big number written as a decimal or an exponent, a fraction past 2^53 and
     const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
     await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1), (err) => {
       assert.ok(err instanceof AwParseError, n);
-      assert.equal(err.message, `Unexpected response from /api/v2/parties/1: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://www.abgeordnetenwatch.de/api/v2/parties/1: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -611,4 +611,16 @@ test("a subnormal number that does not print as written is a parse error; one th
     const res = await new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1);
     assert.equal(res.data["amount"], value, n);
   }
+});
+
+test("a wrong shape and an error envelope name the request: method and full URL (D9, 2026-10-21)", async () => {
+  const shape = makeMockTransport(() => jsonResponse({ meta: { status: "ok" }, data: {} }));
+  await assert.rejects(new AbgeordnetenwatchClient({ transport: shape.transport }).list("parties", { filters: { label: "x" } }), (err: unknown) =>
+    err instanceof AwParseError && err.message === "GET https://www.abgeordnetenwatch.de/api/v2/parties?label=x: unexpected response shape: expected a data array.");
+  const envelope = makeMockTransport(() => jsonResponse({ meta: { status: "error", status_message: "Database unavailable" }, data: [] }));
+  await assert.rejects(new AbgeordnetenwatchClient({ transport: envelope.transport }).get("parties", 5), (err: unknown) =>
+    err instanceof AwParseError && err.message === "GET https://www.abgeordnetenwatch.de/api/v2/parties/5: error envelope in a 2xx answer: Database unavailable");
+  const total = makeMockTransport(() => jsonResponse({ meta: { status: "ok", result: { total: -1 } }, data: [] }));
+  await assert.rejects(new AbgeordnetenwatchClient({ transport: total.transport }).count("votes", { filters: { poll: 6569 } }), (err: unknown) =>
+    err instanceof AwParseError && err.message === "GET https://www.abgeordnetenwatch.de/api/v2/votes?poll=6569&range_end=1: unexpected response shape: expected a numeric meta.result.total.");
 });

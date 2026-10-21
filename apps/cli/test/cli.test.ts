@@ -449,7 +449,7 @@ test("a malformed 2xx envelope exits 1 with a parse error, not an unexpected Typ
     const { deps, cap } = makeTransportDeps(() => jsonResponse(null));
     assert.equal(await run(argv, deps), 1, argv.join(" "));
     assert.deepEqual(cap.out, []);
-    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.api\] Unexpected response shape from \/api\/v2\/parties/);
+    assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.api\] GET https:\/\/www\.abgeordnetenwatch\.de\/api\/v2\/parties\S*: unexpected response shape: /);
   }
 });
 
@@ -618,7 +618,7 @@ test("an HTTP 200 whose envelope says status error exits 1 with its message, nev
     assert.deepEqual(cap.out, [], argv.join(" "));
     assert.match(
       untimed(cap.err.join("\n")),
-      /^ERROR \[abgeordnetenwatch\.api\] Error envelope in a 2xx answer from \/api\/v2\/(politicians|parties\/5): Database unavailable$/,
+      /^ERROR \[abgeordnetenwatch\.api\] GET https:\/\/www\.abgeordnetenwatch\.de\/api\/v2\/(politicians\?sex=f\S*|parties\/5): error envelope in a 2xx answer: Database unavailable$/,
     );
   }
 });
@@ -631,6 +631,6 @@ test("a number beyond what JSON.parse carries exactly exits 1, not a rounded val
   assert.deepEqual(cap.out, []);
   assert.equal(
     untimed(cap.err.join("\n")),
-    "ERROR [abgeordnetenwatch.api] Unexpected response from /api/v2/parties: the number 12345678901234567890 cannot be represented exactly.",
+    "ERROR [abgeordnetenwatch.api] GET https://www.abgeordnetenwatch.de/api/v2/parties: the number 12345678901234567890 cannot be represented exactly.",
   );
 });
