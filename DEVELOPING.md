@@ -265,7 +265,10 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   cases are skipped: this CLI reads no environment variable and sends no key), P21 the
   README's relative links (README.md ships to npmjs.com, so a link to a document the
   `files` allowlist leaves out must be an absolute GitHub URL), P23 the log records on
-  stderr and `--log-format`.
+  stderr and `--log-format`, P24 the input corpus (a text filter value goes out trimmed and
+  NFC or is refused, an entity id canonical or refused, the same on the CLI and in the
+  library), P25 the response corpus (a number a double can't carry exactly, and an empty
+  answer, are errors). P26 (`-o` integrity) is not here: this CLI has no `-o`.
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
