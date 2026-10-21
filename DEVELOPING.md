@@ -66,6 +66,7 @@ new AbgeordnetenwatchClient({
   userAgent: "my-app/1.0",
   headers: { "X-Request-Id": "abc" },
   onRetry: (event) => console.warn(event), // once per retry, before the wait
+  onWarning: (message) => console.warn(message), // an answer delivered changed (U+FFFD), see below
   bigIntegerKeys: new Set(["_version_"]), // members whose numbers arrive as exact strings (none by default)
   transport: customTransport, // (HttpRequest) => Promise<HttpResponse>
 });
@@ -164,6 +165,11 @@ double's usual precision.
 A member named in the engine option `bigIntegerKeys` (none by default: this API sends no number
 past 2^53) is the exception: its number is delivered as its exact literal, as a JSON string,
 whatever its size (`scanNumbers`, one linear pass that also does the check above).
+Text is never changed silently either: bytes that aren't valid in the answer's charset and lone
+surrogates written as JSON escapes (`\ud800`) become U+FFFD (the result is well-formed, so `jq`
+reads the CLI's output), and `onWarning` gets one message naming the count and the request; the
+CLI logs it as a `WARN` record of `abgeordnetenwatch.api`. One bad character never sinks a whole
+answer.
 Every error about an answer names the request, `GET <url>: …`, with the whole URL (query
 included, userinfo redacted, `describeUrl`), like a network error does: a Content-Type other
 than JSON (`unexpected Content-Type "…" (expected JSON)`), an unknown charset, an empty body, a
@@ -283,7 +289,7 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   NFC or is refused, an entity id canonical or refused, the same on the CLI and in the
   library), P25 the response corpus (a number a double can't carry exactly, and an empty
   answer, are errors), P27 big and odd answers (printed, or refused in one ERROR record, within
-memory). P26 (`-o` integrity) is not here: this CLI has no `-o`.
+memory; lone surrogates and invalid bytes replaced, with a WARN). P26 (`-o` integrity) is not here: this CLI has no `-o`.
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
@@ -468,8 +474,9 @@ forge another one or steer the terminal. Before that a lone surrogate (half a
 character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`),
 and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
-`api` (the API's answers: an error status, and the hints after it as `INFO`, and a
-malformed answer, an `AwParseError`: bad JSON, the wrong shape or content type), `http` (the
+`api` (the API's answers: an error status, and the hints after it as `INFO`, a
+malformed answer, an `AwParseError`: bad JSON, the wrong shape or content type, and a `WARN`
+for an answer whose invalid text was replaced with U+FFFD), `http` (the
 connection, the cleartext warning) and `output` (an `OutputError`: an answer nested too deeply
 or too large to print, which `stringifyJson` tells apart and to which it adds "try --compact"
 only when the compact form of that answer prints; an answer whose escaped form (`escapeControlChars`

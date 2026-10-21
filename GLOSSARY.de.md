@@ -223,6 +223,10 @@ Fehler gibt die CLI die Meldung aus, z. B. `There is no party entity with id 999
 sendet Fehler mit HTTP 500; ein Fehler-Envelope mit Erfolgsstatus (von einem Proxy oder Mirror)
 ist ebenfalls ein Fehler (Exit 1), nie ein leeres Ergebnis.
 
+**Ersetzter Text.** Bytes einer Antwort, die in ihrem Zeichensatz ungültig sind, und halbe
+Zeichen (einzelne Surrogate) werden durch U+FFFD ersetzt und in einem `WARN`-Eintrag von
+`abgeordnetenwatch.api` mit Anzahl und Anfrage gemeldet; der Lauf gelingt trotzdem.
+
 **`meta.abgeordnetenwatch_api`.** Derselbe Block in jeder Antwort: `version` (`2.9.0`),
 `changelog`, `licence` (`CC0 1.0`), `licence_link` und `documentation`.
 

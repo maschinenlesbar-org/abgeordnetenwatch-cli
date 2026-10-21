@@ -212,6 +212,10 @@ the CLI prints the message, e.g. `There is no party entity with id 99999999`. Th
 sends errors with HTTP 500; an error envelope with a success status (from a proxy or mirror) is
 an error too (exit 1), never an empty result.
 
+**Replaced text.** Bytes of an answer that are not valid in its charset, and half characters
+(lone surrogates), are replaced with U+FFFD and reported in one `WARN` record of
+`abgeordnetenwatch.api` with the count and the request; the run still succeeds.
+
 **`meta.abgeordnetenwatch_api`.** The same block on every response: `version` (`2.9.0`),
 `changelog`, `licence` (`CC0 1.0`), `licence_link` and `documentation`.
 
