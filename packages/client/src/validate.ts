@@ -58,13 +58,30 @@ export function normalizeEntityId(id: number | string): string {
 export const nonBlankProblem: Problem<unknown> = (value) =>
   typeof value !== "string" || value.trim() === "" ? "Expected a non-empty value." : undefined;
 
+/** Unicode General Category Cf (format): bidi controls, zero-width characters, U+00AD, U+FEFF, … */
+const FORMAT_CHAR = /\p{Cf}/u;
+
 /**
- * A rejected value as a message shows it: a string quoted, with any URL userinfo cut
- * out (`redactUrl`), so a credential URL passed in the wrong place never reaches the
- * message.
+ * A rejected value as a message shows it: a string quoted as `JSON.stringify` does, with any URL
+ * userinfo cut out (`redactUrl`, so a credential URL passed in the wrong place never reaches the
+ * message) and cut at `MAX_QUOTED_LENGTH`. What JSON leaves raw although it is invisible or a
+ * terminal acts on it is escaped too: DEL, the C1 controls, every Unicode format character (a
+ * zero-width space, a soft hyphen, a bidi override) and U+2028/U+2029 (`"a\u200bb"`), so a
+ * refusal shows the character that caused it, and the quoted part stays a valid JSON string.
  */
 export function describeValue(value: unknown): string {
-  return typeof value === "string" ? JSON.stringify(quoteValue(value)) : String(value);
+  if (typeof value !== "string") return String(value);
+  let out = "";
+  for (const ch of JSON.stringify(quoteValue(value))) {
+    const n = ch.codePointAt(0) ?? 0;
+    if ((n >= 0x7f && n <= 0x9f) || n === 0x2028 || n === 0x2029 || FORMAT_CHAR.test(ch)) {
+      // One escape per UTF-16 unit, so a character above U+FFFF stays valid JSON.
+      for (let i = 0; i < ch.length; i++) out += `\\u${ch.charCodeAt(i).toString(16).padStart(4, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 /**

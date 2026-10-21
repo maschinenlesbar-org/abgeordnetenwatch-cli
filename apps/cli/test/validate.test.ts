@@ -16,7 +16,7 @@ import {
 } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
 import { AbgeordnetenwatchClient } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/client";
 import type { EngineOptions } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/engine";
-import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
+import { makeMockTransport, jsonResponse, parity, untimed } from "./helpers.js";
 import { AwError, AwValidationError } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 import * as library from "../src/index.js";
 import { run } from "../src/cli/run.js";
@@ -200,5 +200,28 @@ test("baseUrlProblem accepts absolute http(s) URLs only, without query, fragment
     ["\thttps://h.example", "A base URL cannot have surrounding whitespace."],
   ] as const) {
     assert.equal(baseUrlProblem(url), reason, JSON.stringify(url));
+  }
+});
+
+test("a refused value is quoted visibly: an invisible or format character shows as an escape, on both sides (D10, 2026-10-21)", async () => {
+  const ZWSP = "\u200b";
+  const RLO = "\u202e";
+  const DEL = "\u007f";
+  const cases: Array<[string[], (c: AbgeordnetenwatchClient) => Promise<unknown>, string, string]> = [
+    [["get", "parties", `1${ZWSP}`], (c) => c.get("parties", `1${ZWSP}`), ZWSP, "\\u200b"],
+    [["list", `par${RLO}ties`], (c) => c.list(`par${RLO}ties` as "parties"), RLO, "\\u202e"],
+    [["list", "parties", `la${ZWSP}bel=x`], (c) => c.list("parties", { filters: { [`la${ZWSP}bel`]: "x" } }), ZWSP, "\\u200b"],
+    [["list", "parties", `label[e${DEL}q]=x`], (c) => c.list("parties", { filters: { [`label[e${DEL}q]`]: "x" } }), DEL, "\\u007f"],
+  ];
+  for (const [argv, call, raw, escaped] of cases) {
+    const o = await parity(argv, (t) => call(new AbgeordnetenwatchClient({ transport: t })));
+    const label = JSON.stringify(argv);
+    assert.equal(o.cli.code, 2, `${label}: ${o.cli.err}`);
+    assert.deepEqual(o.cli.requests, [], label);
+    assert.ok(o.cli.err.includes(escaped.slice(1)), `${label}: the CLI's refusal doesn't show ${escaped}: ${o.cli.err}`);
+    assert.ok(!o.cli.err.includes(raw), `${label}: the CLI's refusal shows the character raw: ${o.cli.err}`);
+    assert.equal(o.lib.ok, false, label);
+    assert.ok(o.lib.error?.message.includes(escaped.slice(1)), `${label}: the library's refusal doesn't show ${escaped}: ${o.lib.error?.message}`);
+    assert.ok(!o.lib.error?.message.includes(raw), `${label}: the library's refusal shows the character raw`);
   }
 });

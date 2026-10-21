@@ -1,6 +1,5 @@
 import { InvalidArgumentError, type Command } from "commander";
 import type { CliDeps } from "../io.js";
-import { quoteValue } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 import { action, parseFilters, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 import {
   ENTITY_COLLECTIONS,
@@ -10,6 +9,7 @@ import {
   type SortDirection,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/types";
 import {
+  describeValue,
   entityIdProblem,
   normalizeEntityId,
   sortDirectionProblem,
@@ -34,7 +34,7 @@ import {
 function entityArg(value: string): EntityCollection {
   if (!isEntityCollection(value)) {
     throw new InvalidArgumentError(
-      `Unknown entity "${quoteValue(value)}". Valid entities: ${ENTITY_COLLECTIONS.join(", ")}.`,
+      `Unknown entity ${describeValue(value)}. Valid entities: ${ENTITY_COLLECTIONS.join(", ")}.`,
     );
   }
   return value;
@@ -47,7 +47,7 @@ function entityArg(value: string): EntityCollection {
  */
 function idArg(value: string): string {
   const reason = entityIdProblem(value);
-  if (reason !== undefined) throw new InvalidArgumentError(`Invalid id "${quoteValue(value)}". ${reason}`);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid id ${describeValue(value)}. ${reason}`);
   return normalizeEntityId(value);
 }
 
@@ -58,7 +58,7 @@ function idArg(value: string): string {
  */
 function sortDirectionArg(value: string): SortDirection {
   const reason = sortDirectionProblem(value);
-  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort direction "${quoteValue(value)}". ${reason}`);
+  if (reason !== undefined) throw new InvalidArgumentError(`Invalid sort direction ${describeValue(value)}. ${reason}`);
   return value as SortDirection;
 }
 
@@ -90,14 +90,14 @@ function filterArg(value: string, previous: string[] = []): string[] {
   const eq = value.indexOf("=");
   if (eq <= 0) {
     throw new InvalidArgumentError(
-      `Invalid filter "${quoteValue(value)}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
+      `Invalid filter ${describeValue(value)}. Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
     );
   }
   const key = value.slice(0, eq);
   const blank = filterBlankProblem([key, value.slice(eq + 1)]);
-  if (blank !== undefined) throw new InvalidArgumentError(`Invalid filter "${quoteValue(value)}". ${blank}`);
+  if (blank !== undefined) throw new InvalidArgumentError(`Invalid filter ${describeValue(value)}. ${blank}`);
   const shape = filterKeyProblem(key);
-  if (shape !== undefined) throw new InvalidArgumentError(`Invalid filter key "${quoteValue(key)}". ${shape}`);
+  if (shape !== undefined) throw new InvalidArgumentError(`Invalid filter key ${describeValue(key)}. ${shape}`);
   const reserved = reservedFilterProblem(key);
   if (reserved !== undefined) {
     const option = RESERVED_FILTER_OPTIONS[filterField(key) as keyof typeof RESERVED_FILTER_OPTIONS];
@@ -112,7 +112,7 @@ function filterArg(value: string, previous: string[] = []): string[] {
   const previousKeys = previous.map((token) => token.slice(0, token.indexOf("=")));
   if (previousKeys.includes(key)) {
     throw new InvalidArgumentError(
-      `Duplicate filter key "${quoteValue(key)}". Specify each field (and operator) at most once.`,
+      `Duplicate filter key ${describeValue(key)}. Specify each field (and operator) at most once.`,
     );
   }
   const clash = filterClashProblem([...previousKeys, key]);

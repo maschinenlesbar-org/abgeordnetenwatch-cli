@@ -6,8 +6,8 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "./io.js";
 import { cleartextProblem, DEFAULT_BASE_URL, isBidiControl, type EngineOptions, type RetryEvent } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/engine";
-import { AwError, quoteValue } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
-import { baseUrlProblem, headerValueProblem, nonBlankProblem } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
+import { AwError } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
+import { baseUrlProblem, describeValue, headerValueProblem, nonBlankProblem } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/validate";
 
 /**
  * commander value-parser: a non-negative decimal integer.
@@ -92,7 +92,7 @@ export function parseFilters(args: string[]): Record<string, string> {
     const eq = arg.indexOf("=");
     if (eq <= 0) {
       throw new InvalidArgumentError(
-        `Invalid filter "${quoteValue(arg)}". Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
+        `Invalid filter ${describeValue(arg)}. Use key=value, e.g. sex=f or 'year_of_birth[gt]=1990'.`,
       );
     }
     filters[arg.slice(0, eq)] = arg.slice(eq + 1);

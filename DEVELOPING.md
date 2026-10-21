@@ -185,7 +185,11 @@ The library owns every rule about what a request may contain, and checks it befo
 sending anything. A rule is a pure `Problem` function in `packages/client/src/validate.ts` (or next
 to the parameter it checks): it returns the reason a value is invalid, or `undefined`.
 Client methods enforce it with `assertValid(name, value, problem)`, which throws
-`AwValidationError` (a subclass of `AwError`) with the message `Invalid <name>: <reason>`;
+`AwValidationError` (a subclass of `AwError`) with the message `Invalid <name>: <reason>`. A
+message that quotes the refused value shows it visibly (`describeValue`: JSON-quoted, userinfo
+redacted, cut at 200 characters, and DEL, C1, U+2028/2029 and every format character such as a
+zero-width space or a bidi override escaped, `"a\u200bb"`), and so does commander's own echo of a
+rejected argument (`escapeCommanderError` in `run.ts`);
 methods that return a promise reject with it, and no request is sent. The CLI's
 commander parsers call the same functions and turn the reason into a usage error, and
 `run.ts` maps an `AwValidationError` raised inside an action to exit 2 as well, logged as
