@@ -154,10 +154,12 @@ answer from <path>: <meta.status_message>`); printed as data, its empty `data` u
 "none found" (`count` 0, exit 0). The records themselves are passed through unchecked, with one
 exception: a number JSON.parse cannot carry exactly (`1e400`, which became `null`; one past
 2^53 that it rounds, in any form: `12345678901234567890`, `12345678901234567890.0`,
-`9007199254740993e0`, `9007199254740992.5`; or a non-zero one too small for a double, `1e-400`,
-which became `0`) raises `AwParseError`
+`9007199254740993e0`, `9007199254740992.5`; a non-zero one too small for a double, `1e-400`,
+which became `0`; or a subnormal one, below the smallest normal double 2.2250738585072014e-308,
+that does not print as written: `3e-324` became `5e-324`, while `5e-324` and `1e-310` pass) raises `AwParseError`
 (`Unexpected response from <path>: the number … cannot be represented exactly.`) rather
-than print a changed value; below 2^53 a decimal fraction keeps a double's usual precision.
+than print a changed value; below 2^53 and above the subnormal range a decimal fraction keeps a
+double's usual precision.
 Past 2^53 the check compares the number as printed (`String(value)`, the shortest decimal that
 reads back as the same double) with the number as written: `12345678901234567890` prints as
 `12345678901234567000` and is refused, while `1e23` or `1.7976931348623157E308` (a double a

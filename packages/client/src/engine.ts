@@ -828,16 +828,21 @@ function decodeBody(body: Buffer, contentType: string, path: string): string {
 /** A JSON number token, matched at a given position (sticky). */
 const JSON_NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 
+/** The smallest positive normal double, 2^-1022. Below it a double has fewer significant digits. */
+const MIN_NORMAL = 2.2250738585072014e-308;
+
 /**
  * Whether the double `value` (finite) prints as the number `literal` wrote, checked where a
- * double can be off by a whole number or more: past 2^53, where every double is an integer, and
- * at 0, which a literal too small for a double becomes. Past 2^53 the CLI prints `String(value)`,
- * the shortest decimal that reads back as the same double: `12345678901234567890` prints as
- * `12345678901234567000`, a changed value, while `1E23` or `1.7976931348623157E308` (a double a
- * server printed in its own shortest form) print as the same number.
+ * double can be off in its leading digits: past 2^53, where every double is an integer, at 0,
+ * which a literal too small for a double becomes, and below the smallest normal double, where a
+ * subnormal has fewer significant digits (`3e-324` becomes `5e-324`). There the CLI prints
+ * `String(value)`, the shortest decimal that reads back as the same double: `12345678901234567890`
+ * prints as `12345678901234567000`, a changed value, while `1E23`, `1.7976931348623157E308` or
+ * `5e-324` (a double a server printed in its own shortest form) print as the same number.
  */
 function exactAtTheEdges(literal: string, value: number): boolean {
-  if (value !== 0 && Math.abs(value) <= Number.MAX_SAFE_INTEGER) return true;
+  const size = Math.abs(value);
+  if (value !== 0 && size <= Number.MAX_SAFE_INTEGER && size >= MIN_NORMAL) return true;
   const written = decimalOf(literal);
   if (value === 0) return written.digits === "";
   const printed = decimalOf(String(value));
@@ -858,8 +863,9 @@ function decimalOf(text: string): { negative: boolean; digits: string; exponent:
  * printed as `null`), rounds one past 2^53 in any form (`12345678901234567890` became
  * `12345678901234567000`, and so did `12345678901234567890.0`; `9007199254740993e0` and
  * `9007199254740992.5` became `9007199254740992`) and turns a non-zero one too small for a
- * double into 0 (`1e-400`), silently. Below 2^53 a decimal fraction keeps a double's usual
- * precision, as JSON means it. A linear scan of the text, skipping strings: a reviver would
+ * double into 0 (`1e-400`), silently, and a subnormal one that does not print as written
+ * (`3e-324` became `5e-324`). Below 2^53 and above the subnormal range a decimal fraction keeps a
+ * double's usual precision, as JSON means it. A linear scan of the text, skipping strings: a reviver would
  * recurse per nesting level and overflow on deep data that JSON.parse itself reads.
  */
 function firstInexactNumber(json: string): string | undefined {

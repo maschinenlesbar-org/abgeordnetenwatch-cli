@@ -594,3 +594,21 @@ test("a big number written as a decimal or an exponent, a fraction past 2^53 and
     assert.equal(res.data["amount"], value, n);
   }
 });
+
+test("a subnormal number that does not print as written is a parse error; one that does passes (D4, 2026-10-21)", async () => {
+  // Below the smallest normal double a double has fewer digits: 3e-324 and 4e-324 became 5e-324.
+  const body = (n: string) => `{"meta":{"status":"ok","result":{"entity_id":"1"}},"data":{"id":1,"amount":${n}}}`;
+  for (const n of ["3e-324", "4e-324", "-4.9e-324", "1.2345678901234567e-310", "2.225073858507201e-309"]) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    await assert.rejects(new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1), (err) => {
+      assert.ok(err instanceof AwParseError, n);
+      assert.match(err.message, new RegExp(`the number ${n.replace(/[.+]/g, "\\$&")} cannot be represented exactly\\.$`));
+      return true;
+    });
+  }
+  for (const [n, value] of [["-5e-324", -5e-324], ["1e-310", 1e-310], ["2.2250738585072014e-308", 2.2250738585072014e-308]] as const) {
+    const mt = makeMockTransport(() => rawResponse(body(n), "application/json"));
+    const res = await new AbgeordnetenwatchClient({ transport: mt.transport }).get("parties", 1);
+    assert.equal(res.data["amount"], value, n);
+  }
+});
