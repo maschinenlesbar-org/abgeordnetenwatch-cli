@@ -704,3 +704,48 @@ test("--sort-by is sent trimmed, and a value that is no field name is a usage er
     assert.match(untimed(cap.err.join("\n")), /^ERROR \[abgeordnetenwatch\.cli\] .*--sort-by/, bad);
   }
 });
+
+// T15 of the 2026-10-21 fix round (jobsuche-cli 28be809, ladesaeulenregister-cli 001c48d): a URL
+// with a password anywhere in an argument — a filter value, padded, after a dash, inside a phrase,
+// an entity, an id, an option value, commander's echo — must never reach stderr, neither raw in
+// a refusal or note nor percent-encoded in the request URL of an error record.
+test("a password in a URL inside any argument is redacted on stderr, raw or percent-encoded (T15)", async () => {
+  const url = "https://bob:s3cretpw@host.example/x";
+  const argvs = [
+    ["list", "politicians", `first_name=${url}`],
+    ["list", "politicians", `first_name= ${url}`],
+    ["list", "politicians", `first_name[cn]=Koch ${url}`],
+    ["list", "politicians", `first_name[sw]=-${url}`],
+    ["list", "politicians", `first_name[zz]=${url}`],
+    ["list", "politicians", `first_name=\u0007${url}`],
+    ["count", "politicians", `first_name=${url}`],
+    ["list", "politicians", "--sort-by", ` ${url}`],
+    ["list", "politicians", "--range-start", ` ${url}`],
+    ["list", "politicians", "--sort-direction", url],
+    ["list", ` ${url}`],
+    ["list", url],
+    ["get", "politicians", ` ${url}`],
+    ["get", ` ${url}`, "5"],
+    [` ${url}`],
+    [url],
+    ["list", "politicians", `first_name=${url}`, "--bogus"],
+    ["list", "politicians", `--sort-by=${url}`],
+  ];
+  const answers: Array<() => HttpResponse> = [
+    () => jsonResponse({ meta: { status: "error", status_message: `bad value ${url}` }, data: [] }, 404),
+    () => jsonResponse({}, 500),
+    () => rawResponse("busy", "text/plain", 503),
+    () => jsonResponse({ meta: { status: "error", status_message: "nope", result: { count: 0, total: 0 } }, data: [] }),
+    () => {
+      throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+    },
+  ];
+  for (const argv of argvs) {
+    for (const answer of answers) {
+      const { deps, cap } = makeTransportDeps(answer);
+      await run(["--max-retries", "0", ...argv], deps);
+      const err = cap.err.join("\n");
+      assert.doesNotMatch(err, /s3cretpw|bob%3As3|s3cretpw%40/, `${JSON.stringify(argv)}: ${err}`);
+    }
+  }
+});
