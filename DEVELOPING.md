@@ -174,6 +174,11 @@ Every error about an answer names the request, `GET <url>: …`, with the whole 
 included, userinfo redacted, `describeUrl`), like a network error does: a Content-Type other
 than JSON (`unexpected Content-Type "…" (expected JSON)`), an unknown charset, an empty body, a
 body that is not JSON, a lossy number, a wrong shape and an error envelope.
+A body too large to become one string (512 MB and more, possible only with
+`maxResponseBytes: 0` or `--max-response-bytes 0`) is an `AwParseError`, `GET <url>: the answer
+is too large to read as text (N bytes; the longest string is 536870888 characters).` (ERROR record
+of `abgeordnetenwatch.api`, exit 1), not a plain `Error` ("Unexpected error" in the CLI); an error
+status with such a body keeps its `AwApiError`, without the body.
 Past 2^53 the check compares the number as printed (`String(value)`, the shortest decimal that
 reads back as the same double) with the number as written: `12345678901234567890` prints as
 `12345678901234567000` and is refused, while `1e23` or `1.7976931348623157E308` (a double a
