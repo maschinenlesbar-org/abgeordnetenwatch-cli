@@ -444,7 +444,8 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   as well as an ordinary one. Only a URL with a scheme counts (a bare `a:b@c`
   is a filter value, a search text or a User-Agent as often as a credential), except as
   the `--base-url` value, where a `user:password@host` typed without its scheme is still a
-  credential. It is found anywhere in an argument (`urlsWithin`), not only at its start: after
+  credential. It is found anywhere in an argument (`urlsWithin`, linear: each `://` found with indexOf,
+  at most 64 URLs per argument), not only at its start: after
   a filter's `=`, padded (a value is sent trimmed), after a dash or inside a phrase; and its
   percent-encoded form with the `@` (`bob%3Apw%40`), as the request URL of an error record
   carries it, is replaced too. The log replaces it in each record's *message*, before the record is cut and
