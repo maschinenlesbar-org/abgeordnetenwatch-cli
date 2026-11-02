@@ -514,6 +514,18 @@ test("the redaction of stdout is linear in the answer when argv carries a creden
   assert.ok(took < 1500, `${Math.round(took)} ms`);
 });
 
+test("the redaction of stdout hides the userinfo of a URL glued onto the one before it (B2)", async () => {
+  // The linear pass read the first URL's authority up to the second `://` and searched on after
+  // it, so the second URL's userinfo reached stdout; the scheme regex it replaced redacted both.
+  const value = "https://host://u:p1@h and https://u:p2@x://v:q3@w";
+  const { deps, cap } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5, label: value } }));
+  const code = await run(["--base-url", "https://alice:s3cret-Pw@mirror.example", "--compact", "get", "parties", "5"], deps);
+  assert.equal(code, 0, cap.err.join("\n"));
+  const out = cap.out.join("");
+  assert.ok(out.includes("https://host://***@h and https://***@x://***@w"), out);
+  for (const secret of ["u:p1", "u:p2", "v:q3"]) assert.ok(!out.includes(secret), out);
+});
+
 test("an answer nested too deeply is a clean error; it suggests --compact only where --compact prints it (D7, 2026-10-21)", async () => {
   // A hostile or broken answer: JSON.parse reads it, the pretty printer's recursion can't. Whether
   // the compact printer can depends on the Node version (iterative from Node 26) and the stack:
