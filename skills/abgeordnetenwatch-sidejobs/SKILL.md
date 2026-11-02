@@ -56,8 +56,15 @@ easiest thing to get wrong:
 
 ```bash
 abgeordnetenwatch count sidejobs mandates=<MANDATE_ID>
-abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 1000 --data-only --compact > /tmp/sj.json
+D=$(mktemp -d "${TMPDIR:-/tmp}/aw.XXXXXXXX") &&
+abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 1000 --data-only --compact > "$D/sj.json" &&
+echo "side jobs saved in $D/sj.json"
 ```
+
+> **Keep the files in a private directory.** `mktemp -d` makes one per run (mode 0700, a name
+> nobody can guess), never a fixed name in the shared `/tmp`, where another local user could
+> plant a link or the data. Shell variables don't survive between your shell calls: reuse the
+> literal path the step prints (`<DIR>` below).
 
 > `--range-end` is the page size, honoured up to 1000 (default 100). If `count` is larger than
 > the page, fetch the rest with `--range-start`.
@@ -80,7 +87,8 @@ abgeordnetenwatch list sidejobs mandates=<MANDATE_ID> --range-end 1000 --data-on
 | `data_change_date` | When the disclosure was last updated |
 
 ```bash
-jq -c '.[] | {job: .label, payer: .sidejob_organization.label, income, income_level}' /tmp/sj.json
+# <DIR>: the directory Step 2 printed
+jq -c '.[] | {job: .label, payer: .sidejob_organization.label, income, income_level}' "<DIR>/sj.json"
 ```
 
 > **Band or amount depends on the period.** Bundestag disclosures up to the 2017 - 2021

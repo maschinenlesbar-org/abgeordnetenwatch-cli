@@ -55,15 +55,22 @@ the 2025 - 2029 Bundestag), so one 1000-item page covers it; the loop below stil
 through anything larger:
 
 ```bash
+set -o pipefail
 POLL=<POLL_ID>
-total=$(abgeordnetenwatch count votes poll=$POLL | jq .total)
-: > /tmp/pv.json
+D=$(mktemp -d "${TMPDIR:-/tmp}/aw.XXXXXXXX") || exit 1
+total=$(abgeordnetenwatch count votes poll="$POLL" | jq .total) || exit 1
 for start in $(seq 0 1000 $((total - 1))); do
-  abgeordnetenwatch list votes poll=$POLL --range-start $start --range-end 1000 \
-    --data-only --compact | jq -c '.[]' >> /tmp/pv.json
+  abgeordnetenwatch list votes poll="$POLL" --range-start "$start" --range-end 1000 \
+    --data-only --compact | jq -c '.[]' >> "$D/pv.json" || exit 1
 done
-echo "collected $(wc -l < /tmp/pv.json) of $total"
+echo "collected $(wc -l < "$D/pv.json") of $total in $D/pv.json"
 ```
+
+> **Keep the files in a private directory.** `mktemp -d` makes one per run (mode 0700, a name
+> nobody can guess), never a fixed name in the shared `/tmp`, where another local user could
+> plant a link or the data. Shell variables don't survive between your shell calls: reuse the
+> literal path the step prints (`<DIR>` in Step 3). A failed call stops the loop
+> (`pipefail`, `|| exit 1`), so a partial file is never tallied as if it were whole.
 
 > **Don't drop `--range-end`.** Without it the API returns only 100 votes, and a breakdown of
 > the first 100 of a 630-vote Bundestag poll *looks* complete. Verify the collected line
@@ -83,7 +90,7 @@ jq -s '
       total: length
     })
   | sort_by(-.total)
-' /tmp/pv.json
+' "<DIR>/pv.json"   # <DIR>: the directory Step 2 printed
 ```
 
 ## Step 4 — Brief the user

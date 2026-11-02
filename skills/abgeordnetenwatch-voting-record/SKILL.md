@@ -73,10 +73,18 @@ Filter votes by the mandate id. The vote values are `yes`, `no`, `abstain`, `no_
 ```bash
 # total (cheap):
 abgeordnetenwatch count votes mandate=<MANDATE_ID>
-# the records (page size up to 1000; loop --range-start for members with >1000 votes):
-abgeordnetenwatch list votes mandate=<MANDATE_ID> --range-end 1000 --data-only --compact > /tmp/v.json
-jq -c 'group_by(.vote) | map({ (.[0].vote): length }) | add' /tmp/v.json
+# the records (page size up to 1000; loop --range-start for members with >1000 votes),
+# saved in a fresh private directory; each step runs only when the one before succeeded:
+D=$(mktemp -d "${TMPDIR:-/tmp}/aw.XXXXXXXX") &&
+abgeordnetenwatch list votes mandate=<MANDATE_ID> --range-end 1000 --data-only --compact > "$D/v.json" &&
+jq -c 'group_by(.vote) | map({ (.[0].vote): length }) | add' "$D/v.json" &&
+echo "votes saved in $D/v.json"
 ```
+
+> **Keep the files in a private directory.** `mktemp -d` makes one per run (mode 0700, a name
+> nobody can guess), never a fixed name in the shared `/tmp`, where another local user could
+> plant a link or the data. Shell variables don't survive between your shell calls: reuse the
+> literal path the step prints (`<DIR>` below).
 
 > **Page size is honoured up to 1000** (without `--range-end` the API returns 100; a value
 > above 1000 falls back to 100). If `count` reports more votes than one page holds, fetch
@@ -90,7 +98,8 @@ Each vote references its **poll** (the bill/motion). Join to the poll label to m
 record legible, and pull the fraction the member sat with:
 
 ```bash
-jq -c '.[] | {vote, poll: .poll.label, fraction: .fraction.label}' /tmp/v.json | head
+# <DIR>: the directory Step 3 printed
+jq -c '.[] | {vote, poll: .poll.label, fraction: .fraction.label}' "<DIR>/v.json" | head
 ```
 
 For "did they vote with their party?" compare the member's vote on a poll against their
