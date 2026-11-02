@@ -89,6 +89,7 @@ packages/client/     @maschinenlesbar.org/abgeordnetenwatch-client — private, 
   test/              tests that only touch the client, + the transport helpers
 tools/pack/          prepack/postpack: ship the client (dist/node_modules) and commander in the tarball
 tools/bump.mjs       version bump + commit + tag (npm run bump)
+tools/sbom/          the CycloneDX SBOM tool, own lockfile (release.yml's sbom job only)
 tsconfig.docs.json   TypeDoc only: the package entry, with the client read from its sources
 openapi.yaml         full OpenAPI 3.0.3 description of the upstream API
 ```
@@ -263,9 +264,17 @@ What the library rejects with `AwValidationError`:
 Node.js 22.12 or later (`engines`; commander 15 needs it). CI (`ci.yml`) type-checks, builds
 and tests on Node 22/24/26, then packs the real tarball, checks the pack left nothing behind,
 installs it globally with the registry out of reach and runs the bin. `release.yml` (on a
-`v*` tag, made by `npm run bump`) verifies the tag against `apps/cli/package.json`, writes
-the SBOMs (scoped to the `apps/cli` workspace) and runs `npm pack --workspace apps/cli`;
-`publish.yml` runs `npm publish --workspace apps/cli`.
+`v*` tag, made by `npm run bump`) runs three jobs. **pack** (read-only) verifies the tag
+against `apps/cli/package.json`, tests, runs `npm pack --workspace apps/cli` and records the
+tarball's and the notes' sha256 as job outputs. **sbom** (read-only) writes the two SBOMs
+(scoped to the `apps/cli` workspace) with the CycloneDX tool from the lockfile-pinned
+`tools/sbom/` (`npm ci --ignore-scripts --prefix tools/sbom`, run from its `node_modules/.bin`,
+never `npx`). **release**, the only job with `contents: write`, downloads both artifacts,
+checks them against the pack job's digests and creates the GitHub Release with `gh`. So no
+third-party code runs where the tarball is built or where the write token is. To update the
+tool, change its version in `tools/sbom/package.json` and run
+`npm install --package-lock-only --ignore-scripts` there; don't chain its install into an npm
+script (the `tools/docs` rule). `publish.yml` runs `npm publish --workspace apps/cli`.
 
 ```bash
 npm run build       # compiles every workspace (tsc -b) to its dist/
