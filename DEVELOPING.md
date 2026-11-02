@@ -441,7 +441,11 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   userinfo of every URL argument (`credentialsIn`, exported) and replaces it with `***` in
   everything it prints — commander's usage errors, which echo rejected values, an unknown
   command, a stray argument — so a password with spaces, quotes, `#`, `?` or `/` is caught
-  as well as an ordinary one. Only a URL with a scheme counts (a bare `a:b@c`
+  as well as an ordinary one. Behind the exact strings, `redactUrlUserinfo`
+  ([`errors.ts`](packages/client/src/errors.ts)) replaces any other `scheme://userinfo@` as a
+  pattern backstop, in one linear pass however many URLs a text holds: the stdout of a run with
+  credentials in argv goes through it, and a regex retried at every word start of a long
+  `a.a.…` value in an answer took seconds to hours there. Only a URL with a scheme counts (a bare `a:b@c`
   is a filter value, a search text or a User-Agent as often as a credential), except as
   the `--base-url` value, where a `user:password@host` typed without its scheme is still a
   credential. It is found anywhere in an argument (`urlsWithin`, linear: each `://` found with indexOf,

@@ -4,7 +4,7 @@ import { redactionFor, run } from "../src/cli/run.js";
 import { renderJson } from "../src/cli/shared.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/client";
-import { AwApiError, credentialsIn } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
+import { AwApiError, credentialsIn, redactUrlUserinfo } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/http";
 import type { DetailMeta, Entity, ListMeta } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/types";
 import { jsonResponse, makeMockTransport, rawResponse, untimed } from "./helpers.js";
@@ -490,6 +490,28 @@ test("credentials in --base-url are redacted from error messages", async () => {
   assert.equal(mt.last().url, "http://127.0.0.1:18101/e418/api/v2/parties");
   assert.equal(mt.last().headers?.["Authorization"], `Basic ${Buffer.from("user:secret").toString("base64")}`);
   assert.equal(untimed(cap.err.join("\n")), "ERROR [abgeordnetenwatch.api] HTTP 418 for GET http://127.0.0.1:18101/e418/api/v2/parties");
+});
+
+test("redactUrlUserinfo hides the userinfo of every URL in a line and leaves other text alone", () => {
+  assert.equal(
+    redactUrlUserinfo("argument 'ftp://user:s3cret@h.example' is invalid; also http://a@b@c.example/x?y=u@v"),
+    "argument 'ftp://***@h.example' is invalid; also http://***@c.example/x?y=u@v",
+  );
+  assert.equal(redactUrlUserinfo("error: unknown option '--bogus' (mail@example.org)"), "error: unknown option '--bogus' (mail@example.org)");
+});
+
+test("the redaction of stdout is linear in the answer when argv carries a credential", async () => {
+  // With a URL with userinfo in argv, every stdout text is redacted. The scheme regex this
+  // replaces (a match retried at every word start of `a.a.…`) took about 14 s on 128 000
+  // characters, outside the request deadline; the linear pass takes milliseconds.
+  const value = "a.".repeat(100_000);
+  const { deps, cap } = makeTransportDeps(() => jsonResponse({ meta: {}, data: { id: 5, label: value } }));
+  const started = performance.now();
+  const code = await run(["--base-url", "https://alice:s3cret-Pw@mirror.example", "--compact", "get", "parties", "5"], deps);
+  const took = performance.now() - started;
+  assert.equal(code, 0, cap.err.join("\n"));
+  assert.ok(cap.out.join("").includes(value));
+  assert.ok(took < 1500, `${Math.round(took)} ms`);
 });
 
 test("an answer nested too deeply is a clean error; it suggests --compact only where --compact prints it (D7, 2026-10-21)", async () => {

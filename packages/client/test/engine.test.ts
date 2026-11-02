@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
 import { RequestEngine, bigIntegerKeysOption, firstInexactNumber, scanNumbers } from "../src/engine.js";
 import { AbgeordnetenwatchClient } from "../src/client.js";
-import { AwApiError, AwParseError, AwValidationError, cutText, toWellFormed } from "../src/errors.js";
+import { AwApiError, AwParseError, AwValidationError, cutText, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
@@ -441,4 +441,19 @@ test("an answer longer than V8's longest string is an AwParseError naming the re
   }
   // An error status with such a body is still the API error, without the unreadable body.
   await assert.rejects(on(valid, 500).getJson("/api/v2/parties"), (err: unknown) => err instanceof AwApiError && err.status === 500 && err.body === "");
+});
+
+test("redactUrlUserinfo hides every URL's userinfo in one linear pass, however many URLs", () => {
+  // The URL regex this replaces (a scheme tried at every word start) takes about 3 s on this.
+  const started = performance.now();
+  redactUrlUserinfo("a.".repeat(30_000));
+  assert.ok(performance.now() - started < 1000);
+  assert.equal(redactUrlUserinfo("a -https://u:p@h/x and x-ftp://v@w?q, mail@example.org"), "a -https://***@h/x and x-ftp://***@w?q, mail@example.org");
+  assert.equal(redactUrlUserinfo("1://u:p@h ://u:p@h"), "1://u:p@h ://u:p@h");
+  assert.equal(redactUrlUserinfo("https://h/p?u=a@b"), "https://h/p?u=a@b");
+  for (const text of ["a".repeat(1_000_000), "a.".repeat(500_000), "://".repeat(100_000), `https://${"u".repeat(1_000_000)}`]) {
+    assert.equal(redactUrlUserinfo(text), text);
+  }
+  const many = redactUrlUserinfo("https://u:p@h ".repeat(100_000));
+  assert.equal(many, "https://***@h ".repeat(100_000));
 });
