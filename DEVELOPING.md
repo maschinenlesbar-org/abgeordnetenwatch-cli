@@ -318,7 +318,8 @@ The client's tests are in `packages/client/test/` (`query`, `filters`, `http`, `
   blank, invisible, control and half characters refused and shown escaped, the same on the CLI
   and in the library), P25 the response corpus (a number a double can't carry exactly, and an empty
   answer, are errors), P27 big and odd answers (printed, or refused in one ERROR record, within
-memory; lone surrogates and invalid bytes replaced, with a WARN), and P26 output integrity in
+memory, an answer in millions of one-byte chunks too; lone surrogates and invalid bytes
+replaced, with a WARN), and P26 output integrity in
 its stdout case only (stdout redirected to a file and cut short by a file-size limit is exit 1
 with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no `-o`).
   They use mock transports or local servers only, never the live API.
@@ -399,6 +400,9 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   `HttpRequest.signal`, which the built-in transport honours and a fetch transport
   should pass on, and rejects at the deadline either way) and checks the size of the
   body it gets back (the message names `maxResponseBytes` and `--max-response-bytes`).
+  The built-in transport joins the body's chunks as they arrive (every 1024 chunks or
+  64 KiB), so the memory it holds follows the bytes, not the number of chunks a server
+  sends: one Buffer per one-byte chunk took about 210 bytes of heap per byte.
   Response headers are read in any case and from a `Headers` object or a `Map` too, so
   `Retry-After`, `Location` and `Content-Type` work with a fetch transport; the body may
   be a `Buffer`, any `ArrayBuffer` view (fetch's `Uint8Array`) or an `ArrayBuffer`.
