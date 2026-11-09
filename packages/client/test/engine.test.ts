@@ -681,3 +681,42 @@ test("an echo of the base URL as WHATWG spells it is scrubbed, a short password 
     assert.ok(!text.includes("p%22%C3%A4@") && !text.includes('p"ä@'), text);
   }
 });
+
+test("a redirect whose Location echoes the base URL's credential is not followed, and the target is scrubbed (D2)", async () => {
+  // Followed, the server's URL became the request URL that every later message names (`.url`,
+  // `HTTP 302 for GET <url>`), with the credential in its query or path, percent-encoded in a
+  // spelling the scrub did not know; and the credential went to wherever the Location pointed.
+  const PW = "pä\"s's-W0rd";
+  const base = `https://alice:${encodeURIComponent(PW)}@mirror.example`;
+  const basic = Buffer.from(`alice:${PW}`, "utf8").toString("base64");
+  const secrets = [PW, `alice:${PW}`, basic].flatMap((secret) => [secret, JSON.stringify(secret).slice(1, -1)]);
+  const decoded = (text: string): string =>
+    text.replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  for (const location of [
+    `https://elsewhere.example/login?user=alice&pw=${encodeURIComponent(PW)}`,
+    `https://elsewhere.example/login?pw=${PW}`,
+    `https://elsewhere.example/${encodeURIComponent(`alice:${PW}`)}/x`,
+    `https://elsewhere.example/auth?basic=${basic}`,
+    `/relative/${PW}`,
+  ]) {
+    const mt = makeMockTransport(() => redirectResponse(location));
+    const e = new RequestEngine({ baseUrl: base, transport: mt.transport, maxRetries: 0 });
+    const err = await e.getJson("/x").catch((caught: unknown) => caught);
+    assert.ok(err instanceof AwApiError && err.status === 302, String(err));
+    assert.equal(mt.calls.length, 1, `${location}: followed`);
+    assert.match(err.message, /redirect to \S+ not followed/);
+    const seen = decoded([err.message, err.url, err.location ?? "", err.detail ?? ""].join("\n"));
+    for (const secret of secrets) assert.ok(!seen.includes(secret), `${location}: ${seen}`);
+  }
+  // Without credentials, or a Location that echoes none, the redirect is followed as before.
+  const plain = makeMockTransport((req) => (req.url.includes("/next") ? jsonResponse({ ok: 1 }) : redirectResponse(`/next?pw=${PW}`)));
+  assert.deepEqual(await new RequestEngine({ transport: plain.transport }).getJson("/x"), { ok: 1 });
+  const other = makeMockTransport((req) => (req.url.includes("/next") ? jsonResponse({ ok: 1 }) : redirectResponse("/next?pw=other")));
+  assert.deepEqual(await new RequestEngine({ baseUrl: base, transport: other.transport }).getJson("/x"), { ok: 1 });
+});

@@ -104,8 +104,9 @@ export interface EngineOptions {
   retryDelayMs?: number | undefined;
   /**
    * Number of HTTP redirects (301/302/303/307/308) to follow, 0..20. Defaults to 5. Any
-   * other 3xx, one with a missing or malformed Location, and one past this limit
-   * surface as an AwApiError naming the target.
+   * other 3xx, one with a missing or malformed Location, one past this limit, and one whose
+   * Location echoes the base URL's credentials surface as an AwApiError naming the target
+   * (those credentials scrubbed).
    */
   maxRedirects?: number | undefined;
   /**
@@ -518,7 +519,8 @@ export class RequestEngine {
         return [raw];
       }
     });
-    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms))].sort((a, b) => b.length - a.length);
+    // Each form also percent-encoded, as a server writes it into a URL (a redirect's Location).
+    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms).flatMap(urlSpellings))].sort((a, b) => b.length - a.length);
     this.transport = options.transport ?? nodeHttpTransport;
     // Header names and values are checked here, so a bad one is an AwValidationError
     // at construction rather than a raw TypeError (or an injected header) later.
@@ -803,9 +805,13 @@ export class RequestEngine {
       // Follow redirects, resolving the Location relative to the current URL.
       // abgeordnetenwatch 301-redirects a collection path without its trailing
       // slash (`/api/v2` -> `/api/v2/`), so this matters in practice.
+      // A Location that echoes the base URL's credential (in its path or query, raw or
+      // percent-encoded) is not followed: it would carry the credential to wherever it points,
+      // and every later message would name a URL that holds it. It surfaces as an AwApiError
+      // naming the target, scrubbed.
       const location = headerValue(responseHeaders["location"]);
       const nextUrl =
-        FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects
+        FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects && (location === undefined || this.scrub(location) === location)
           ? resolveLocation(location, url)
           : undefined;
       if (nextUrl !== undefined) {
@@ -842,8 +848,9 @@ export class RequestEngine {
         redirects += 1;
         continue;
       }
-      // Any other 3xx — not a followed status, no usable Location, or past
-      // maxRedirects — falls through and surfaces as an AwApiError naming the target.
+      // Any other 3xx — not a followed status, no usable Location, past maxRedirects, or a
+      // Location that echoes the credentials — falls through and surfaces as an AwApiError
+      // naming the target.
 
       const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
@@ -963,7 +970,9 @@ export class RequestEngine {
     // endpoint cannot inject terminal escape sequences via the stderr error message, and cut.
     if (detail !== undefined) detail = this.quoteServerValue(detail);
     if (hint !== undefined) detail = detail === undefined ? hint : `${detail}; ${hint}`;
-    // Name the target of a redirect that was not followed.
+    // Name the target of a redirect that was not followed: the base URL's credentials scrubbed
+    // from the Location as sent, before resolving it percent-encodes what is left of them in a
+    // new spelling (`'` as `%27` in a query).
     const location =
       status >= 300 && status < 400 && locationHeader
         ? redirectTarget(url, this.scrub(locationHeader))
@@ -1253,6 +1262,19 @@ function decodedName(quoted: string): string {
  */
 export function firstInexactNumber(json: string): string | undefined {
   return scanNumbers(json).inexact;
+}
+
+/**
+ * `form` and its spelling in a URL (`encodeURIComponent`): a server that puts a credential into
+ * a URL, a redirect's Location, percent-encodes it. A form that has no such spelling (a lone
+ * surrogate) is kept as it is.
+ */
+function urlSpellings(form: string): string[] {
+  try {
+    return [form, encodeURIComponent(form)];
+  } catch {
+    return [form];
+  }
 }
 
 /** `url` without its userinfo (the engine sends that as an Authorization header). */

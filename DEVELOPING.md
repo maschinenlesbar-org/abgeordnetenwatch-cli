@@ -339,8 +339,10 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   301-redirects a collection path without its trailing slash (`/api/v2` ->
   `/api/v2/`), so following them is required for the client to work. Only 301, 302,
   303, 307 and 308 are followed. Any other 3xx (300, 304, 305), one with a missing or
-  malformed `Location`, and one past the limit surface as an `AwApiError` whose
-  message and `location` field name the target:
+  malformed `Location`, one past the limit, and one whose `Location` echoes the base URL's
+  credentials (the forms the engine scrubs, raw or percent-encoded, in its path or query)
+  surface as an `AwApiError` whose message and `location` field name the target, those
+  credentials scrubbed from the `Location` before it is resolved:
   `HTTP 302 for GET <url>: redirect to <target> not followed` (or
   `redirect not followed (no Location header)`).
 - **Caller headers are stripped on a cross-origin redirect.** If a redirect
