@@ -488,3 +488,24 @@ test("redactUrlUserinfo hides the userinfo of a URL glued onto the one before it
     assert.ok(ms < 1000, `${Math.round(ms)} ms on ${text.slice(0, 40)}…`);
   }
 });
+
+test("a number with a long run of zeros is refused in linear time (A)", async () => {
+  // decimalOf stripped trailing zeros with `/0+$/`, which tries a match at every zero of a run that
+  // doesn't end the digits: 1.<100 000 zeros>1e300 took about 15 s, past any --timeout (the number
+  // scan runs once the answer is in). Counted with index loops, it takes milliseconds.
+  const body = `{"meta":{"status":"ok"},"data":{"id":1,"x":1.${"0".repeat(100_000)}1e300}}`;
+  const e = new RequestEngine({ transport: async () => rawResponse(body, "application/json"), maxRetries: 0 });
+  let err: unknown;
+  const ms = await (async () => {
+    const start = performance.now();
+    err = await e.getJson("/x").catch((caught: unknown) => caught);
+    return performance.now() - start;
+  })();
+  assert.ok(ms < 1000, `${Math.round(ms)} ms`);
+  assert.ok(err instanceof AwParseError && /cannot be represented exactly/.test(err.message), String(err));
+  assert.ok(err.message.length < 1000, "the message quotes the literal cut");
+  // The same digits and exponent as before: trailing zeros of an integer past 2^53 are exact,
+  // leading and trailing ones of a fraction too.
+  assert.equal(firstInexactNumber(`[${"9".repeat(17)}0000, 1${"0".repeat(30)}, 0.000${"0".repeat(20)}]`), `${"9".repeat(17)}0000`);
+  assert.equal(firstInexactNumber(`[1${"0".repeat(30)}, 12345678901234567000, 1.0e300, 0.00, -0]`), undefined);
+});
