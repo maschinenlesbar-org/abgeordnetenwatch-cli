@@ -322,6 +322,14 @@ memory, an answer in millions of one-byte chunks too; lone surrogates and invali
 replaced, with a WARN), and P26 output integrity in
 its stdout case only (stdout redirected to a file and cut short by a file-size limit is exit 1
 with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no `-o`).
+  P28–P31 are the security audit's (2026-10-27): P28 hostile error answers (the number scan
+  and the cleaning of server text linear and memory-bounded; the base URL's credentials
+  scrubbed from decoded text, a quoted 2xx error envelope and a redirect's Location), P29
+  base-URL credentials (a token userinfo scrubbed, a backslash or a mangled scheme refused,
+  requests to the parsed host, linear stdout redaction), P30 output links (all skipped,
+  `HAS_OUTPUT_OPTION = false`: this CLI has no `-o`; its adapter stands in for the io.ts
+  exports it names) and P31 the release pipeline (`release.yml` and the locked
+  `tools/sbom/`, read as text).
   They use mock transports or local servers only, never the live API.
 
 ## Notes from the live API (2026-06)
