@@ -282,13 +282,15 @@ export const headerNameProblem: Problem<unknown> = (value) =>
     : "Expected an HTTP header name (letters, digits and !#$%&'*+.^_`|~-).";
 
 /**
- * Rule for the base URL: an absolute `http:`/`https:` URL with no query or
- * fragment, no surrounding whitespace, and no `%` in the userinfo that doesn't start
- * an escape (`%25` for a literal one: the engine percent-decodes it for the
- * Authorization header). Request paths are appended to it as a
- * string, so a `?` or `#` would swallow every path, and `new URL()` trims
- * surrounding whitespace silently while the engine would keep the raw value
- * (`"https://h/ "` requested `/%20/api/v2/...`).
+ * Rule for the base URL: an absolute `http:`/`https:` URL, spelled `http(s)://` and the host,
+ * with no query or fragment, no backslash, no surrounding whitespace, and no `%` in the
+ * userinfo that doesn't start an escape (`%25` for a literal one: the engine percent-decodes
+ * it for the Authorization header). Request paths are appended to it as a string, so a `?` or
+ * `#` would swallow every path. WHATWG reads a `\` in an http(s) URL as `/`, so it ends the
+ * host (`https://u:pw@a.example\@b.example` is a.example), and it repairs `http:host`,
+ * `http:/host` and `http:///host` silently into `http://host`: every reader of the base URL
+ * has to agree where its host is, so both are refused. `new URL()` trims surrounding
+ * whitespace silently (`"https://h/ "` would have requested `/%20/api/v2/...`).
  */
 export const baseUrlProblem: Problem<unknown> = (value) => {
   if (typeof value !== "string") return "Expected an absolute http(s) URL.";
@@ -302,6 +304,9 @@ export const baseUrlProblem: Problem<unknown> = (value) => {
     return `Unsupported scheme "${url.protocol}". Expected an http(s) URL.`;
   }
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  // WHATWG reads a "\" in an http(s) URL as "/", so it ends the host: in
+  // `https://u:pw@a.example\@b.example` every reader of the base URL has to agree where.
+  if (value.includes("\\")) return 'A base URL cannot contain a backslash (\\); write "/" instead.';
   if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
   // The userinfo is percent-decoded for the Authorization header; a "%" that isn't an
   // escape fails there ("URI malformed") at request time, as a raw URIError. Reject it here.
@@ -312,5 +317,8 @@ export const baseUrlProblem: Problem<unknown> = (value) => {
       return 'The user name or password has a "%" that is not followed by two hex digits; write a literal "%" as %25.';
     }
   }
+  // WHATWG skips any slashes after "http:" and repairs `http:host`, `http:/host` and
+  // `http:///host` into `http://host` silently: the host requested would not be the one typed.
+  if (!/^https?:\/\/[^/]/i.test(value)) return 'Expected an absolute http(s) URL ("https://" and the host).';
   return undefined;
 };

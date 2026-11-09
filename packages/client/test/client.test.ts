@@ -654,3 +654,37 @@ test("a credential in a 2xx error envelope's message is scrubbed, a JSON-escaped
     });
   }
 });
+
+test("a base URL with a backslash, or a scheme not followed by // and the host, is rejected at construction, never echoing the password (F, F4)", () => {
+  for (const [baseUrl, reason] of [
+    ["https://alice:s3cret@api.example\\@evil.example", 'A base URL cannot contain a backslash (\\); write "/" instead.'],
+    ["https:\\\\alice:s3cret@h.example", 'A base URL cannot contain a backslash (\\); write "/" instead.'],
+    ["http:alice:s3cret@h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["https:/alice:s3cret@h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["http:///alice:s3cret@h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["HTTPS:h.example/v1", 'Expected an absolute http(s) URL ("https://" and the host).'],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ transport: mt.transport, baseUrl }),
+      (err: unknown) => err instanceof AwValidationError && err.message.endsWith(`: ${reason}`) && !err.message.includes("s3cret"),
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0, baseUrl);
+  }
+  // A spelling the parser keeps as typed stays accepted: an upper-case scheme, an explicit port.
+  for (const baseUrl of ["HTTPS://h.example/v1", "http://alice:pw@h.example:8080"]) {
+    assert.doesNotThrow(() => new AbgeordnetenwatchClient({ transport: makeMockTransport(() => jsonResponse({})).transport, baseUrl }), baseUrl);
+  }
+});
+
+test("requests go to the base URL as WHATWG parses it: host lower-cased, default port dropped, an @ in the path kept (F)", async () => {
+  for (const [baseUrl, sent] of [
+    ["https://API.Example:443/v1", "https://api.example/v1/api/v2/parties/1"],
+    ["https://alice:pw@api.example/v1/@evil.example", "https://api.example/v1/@evil.example/api/v2/parties/1"],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse({ meta: { status: "ok" }, data: { id: 1 } }));
+    await new AbgeordnetenwatchClient({ transport: mt.transport, baseUrl }).get("parties", 1);
+    assert.equal(mt.calls[0]?.url, sent, baseUrl);
+  }
+});

@@ -438,8 +438,16 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   transport re-checks the scheme per request. A base URL with a query (`?`) or fragment
   (`#`) is rejected too, because paths are appended to it as a string and either would
   swallow every request path, and so is one with surrounding whitespace, which
-  `new URL()` would trim silently while the engine kept the raw string (`"https://h/ "`
-  requested `/%20/api/v2/...`). A `%` in the userinfo that isn't an escape
+  `new URL()` would trim silently (`"https://h/ "` requested `/%20/api/v2/...`). So is a
+  backslash (WHATWG reads it as `/` in an http(s) URL, so `https://u:pw@a.example\@b.example`
+  is a.example, while a reading of the text would see b.example) and a scheme not followed by
+  `//` and the host (`http:host`, `http:/host`, `http:///host`, which WHATWG repairs silently
+  into `http://host`): `Expected an absolute http(s) URL ("https://" and the host).`. The
+  engine requests the base URL as WHATWG parses it (host lower-cased, a default port dropped,
+  the path percent-encoded where WHATWG does it), the reading every check makes; messages show
+  that spelling, and a custom transport receives it. `credentialsIn` reads a userinfo as WHATWG
+  does too: after any slashes and backslashes that follow a special scheme (`http:///u:pw@h`),
+  ending at a backslash, so a refused value is never echoed with its password. A `%` in the userinfo that isn't an escape
   (`http://alice:100%@mirror`) is rejected the same way, as a usage error before any
   request, instead of a raw `URIError` when the Authorization header is built.
 - **Plain `http:` gets a warning, not a refusal.** `cleartextProblem(baseUrl, secrets)`

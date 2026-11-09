@@ -187,7 +187,7 @@ test("the client rejects a bad userAgent or header at construction, before any r
 });
 
 test("baseUrlProblem accepts absolute http(s) URLs only, without query, fragment or padding", () => {
-  for (const url of ["https://www.abgeordnetenwatch.de", "http://127.0.0.1:8080/aw/", "https://u:p@h.example"]) {
+  for (const url of ["https://www.abgeordnetenwatch.de", "http://127.0.0.1:8080/aw/", "https://u:p@h.example", "HTTPS://H.example"]) {
     assert.equal(baseUrlProblem(url), undefined, url);
   }
   for (const [url, reason] of [
@@ -198,6 +198,15 @@ test("baseUrlProblem accepts absolute http(s) URLs only, without query, fragment
     ["https://h.example#f", "A base URL cannot have a query (?) or fragment (#)."],
     ["https://h.example/ ", "A base URL cannot have surrounding whitespace."],
     ["\thttps://h.example", "A base URL cannot have surrounding whitespace."],
+    // WHATWG ends an http(s) authority at "\", and repairs a scheme not followed by "//" and
+    // the host silently: every reader of the base URL has to agree where its host is (F, F4).
+    ["https://u:p@a.example\\@b.example", 'A base URL cannot contain a backslash (\\); write "/" instead.'],
+    ["https://h.example/v1\\x", 'A base URL cannot contain a backslash (\\); write "/" instead.'],
+    ["https:\\\\h.example", 'A base URL cannot contain a backslash (\\); write "/" instead.'],
+    ["http:h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["http:/h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["http:///h.example", 'Expected an absolute http(s) URL ("https://" and the host).'],
+    ["HTTPS:h.example/v1", 'Expected an absolute http(s) URL ("https://" and the host).'],
   ] as const) {
     assert.equal(baseUrlProblem(url), reason, JSON.stringify(url));
   }

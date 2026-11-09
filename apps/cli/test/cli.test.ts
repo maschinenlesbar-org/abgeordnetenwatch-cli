@@ -800,3 +800,23 @@ for (const [what, big] of [
     assert.ok(took < 1000, `${what} took ${Math.round(took)} ms`);
   });
 }
+
+test("a refused --base-url never echoes its password, however the slashes after the scheme are spelled (F3, F4)", async () => {
+  // WHATWG skips any slashes and backslashes after "http:": `http:///alice:pw@h` carries `alice:pw`.
+  // Read after "://" (or prefixed with "http://"), the userinfo was missed and commander's echo of
+  // the refused value printed the password in clear.
+  for (const baseUrl of [
+    "https:\\\\alice:pw1-s3cret@127.0.0.1:9",
+    "http:///alice:pw1-s3cret@h.example/?q=1",
+    "http:alice:pw1-s3cret@127.0.0.1:9",
+    "https:/alice:pw1-s3cret@h.example",
+    "https://alice:pw1-s3cret@api.example\\@evil.example",
+  ]) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: {} }));
+    const code = await run(["--base-url", baseUrl, "get", "parties", "5"], deps);
+    assert.equal(code, 2, baseUrl);
+    assert.equal(mt.calls.length, 0, baseUrl);
+    const text = [...cap.out, ...cap.err].join("\n");
+    assert.ok(!text.includes("pw1-s3cret"), text);
+  }
+});

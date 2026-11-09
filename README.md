@@ -116,7 +116,8 @@ See [openapi.yaml](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/
 
 Credentials in `--base-url` (`https://user:pw@mirror.example`, for a proxy or mirror; the
 API itself needs none) are sent as HTTP Basic auth and shown as `***` in everything the CLI
-prints, usage errors included.
+prints, usage errors included. A base URL is spelled `http(s)://` and the host, without a
+query, fragment or backslash; anything else is a usage error.
 
 A base URL on plain `http:` to a host other than loopback (`localhost`, `127.0.0.0/8`,
 `::1`) works, but the CLI writes one warning record to stderr before the first request, e.g.

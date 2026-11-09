@@ -508,10 +508,14 @@ export class RequestEngine {
     }
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
     assertValidBaseUrl(baseUrl);
-    this.#baseUrl = baseUrl.replace(/\/+$/, "");
+    // Requests go to the base URL as WHATWG parses it, the reading every check of it makes (the
+    // host, the cleartext warning, the Authorization header), not to a text-based reading of the
+    // string: a transport that reads the URL as text reaches the same host.
+    const href = new URL(baseUrl).href;
+    this.#baseUrl = href.replace(/\/+$/, "");
     // The userinfo as typed and as WHATWG writes it into the URL (it percent-encodes some of
     // its characters: `p"ä` becomes `p%22%C3%A4`), which a server or proxy may echo.
-    const userinfos = [...new Set([...credentialsIn(this.#baseUrl), ...credentialsIn(new URL(baseUrl).href)])];
+    const userinfos = [...new Set([...credentialsIn(baseUrl), ...credentialsIn(href)])];
     this.#credentials = userinfos.flatMap((raw) => {
       try {
         return [raw, decodeURIComponent(raw)];
