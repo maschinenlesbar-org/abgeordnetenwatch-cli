@@ -347,7 +347,8 @@ const realSleep = (ms: number): Promise<void> =>
 /**
  * Validate a base URL (baseUrlProblem) and throw AwValidationError when it is not
  * usable: a configuration error, never an AwNetworkError, which a caller may retry
- * as transient. The userinfo is redacted from the message. The engine runs it on the
+ * as transient. The userinfo is redacted from the message, that of a value typed without
+ * its scheme (`user:password@host`) too. The engine runs it on the
  * raw configured value, before it strips trailing slashes, so a bad
  * `--base-url ftp://x` names the value the user passed rather than
  * `ftp://x/api/v2/...` from the transport.
@@ -355,7 +356,9 @@ const realSleep = (ms: number): Promise<void> =>
 export function assertValidBaseUrl(baseUrl: string): void {
   const reason = baseUrlProblem(baseUrl);
   if (reason === undefined) return;
-  throw new AwValidationError(`Invalid base URL "${redactUrl(String(baseUrl))}": ${reason}`);
+  const value = String(baseUrl);
+  const shown = credentialsIn(value).length > 0 ? redactUrl(value) : redactCredentials(value, credentialsIn(`http://${value}`));
+  throw new AwValidationError(`Invalid base URL "${shown}": ${reason}`);
 }
 
 /** True for a loopback host: `localhost`, 127.0.0.0/8 or `::1` (as URL#hostname spells it). */

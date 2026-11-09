@@ -4,7 +4,7 @@ import { redactionFor, run } from "../src/cli/run.js";
 import { renderJson } from "../src/cli/shared.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { AbgeordnetenwatchClient } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/client";
-import { AwApiError, credentialsIn, redactUrlUserinfo } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
+import { AwApiError, AwValidationError, credentialsIn, redactUrlUserinfo } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/http";
 import type { DetailMeta, Entity, ListMeta } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/types";
 import { jsonResponse, makeMockTransport, rawResponse, untimed } from "./helpers.js";
@@ -818,5 +818,27 @@ test("a refused --base-url never echoes its password, however the slashes after 
     assert.equal(mt.calls.length, 0, baseUrl);
     const text = [...cap.out, ...cap.err].join("\n");
     assert.ok(!text.includes("pw1-s3cret"), text);
+  }
+});
+
+test("a --base-url typed without its scheme never names its user name or password as a scheme", async () => {
+  // `T0kenS3cret:@h` parses as a URL whose scheme is the token, lower-cased: the refusal named it
+  // (`Unsupported scheme "t0kens3cret:"`), which no exact-string redaction matches.
+  for (const [baseUrl, secret] of [
+    ["T0kenS3cret:@h.example", "t0kens3cret"],
+    ["alice:s3cret-pw@h.example", "s3cret-pw"],
+    ["Alice:s3cret-pw@h.example/x", "s3cret-pw"],
+  ] as const) {
+    const { deps, cap, mt } = makeTransportDeps(() => jsonResponse({ meta: {}, data: {} }));
+    assert.equal(await run(["--base-url", baseUrl, "get", "parties", "5"], deps), 2, baseUrl);
+    assert.equal(mt.calls.length, 0, baseUrl);
+    const text = [...cap.out, ...cap.err].join("\n");
+    assert.ok(!text.toLowerCase().includes(secret), text);
+    assert.match(text, /Expected an absolute http\(s\) URL\./, baseUrl);
+    assert.throws(
+      () => new AbgeordnetenwatchClient({ baseUrl }),
+      (err: unknown) => err instanceof AwValidationError && !err.message.toLowerCase().includes(secret) && /Expected an absolute http\(s\) URL\./.test(err.message),
+      baseUrl,
+    );
   }
 });
