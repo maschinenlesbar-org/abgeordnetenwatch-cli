@@ -42,6 +42,12 @@ const errorBodyWith = (json: string): string => `{"meta":{"status":"error","stat
 const quotedBody: ((json: string) => string) | undefined = (json) => `{"meta":{"status":"error","status_message":${json}},"data":{}}`;
 /** The exit code of an API error (a non-2xx answer) and of a parse error in this repo (most use 1). */
 const API_EXIT = 1;
+/**
+ * How the error reads when every request is answered with a 302 to the Location under test: a
+ * client that doesn't follow redirects says `HTTP 302`; one that follows them ends at its
+ * redirect limit (or a refused hop) with its own message.
+ */
+const REDIRECT_ERROR = /^HTTP 302 /;
 /** The log program, as in `ERROR [<bin>.api]`. */
 const PROGRAM = "abgeordnetenwatch";
 // --------------------------------------------------------------------------------------
@@ -235,7 +241,7 @@ test("P28: a credential in a redirect's Location is scrubbed, in its path and it
   ];
   for (const location of locations) {
     const err = await failure(async () => response(302, "", { location }), BASE);
-    assert.ok(err instanceof Error && /^HTTP 302 /.test(err.message), String(err));
+    assert.ok(err instanceof Error && REDIRECT_ERROR.test(err.message), String(err));
     const seen = percentDecoded(everything(err));
     for (const secret of SECRETS) assert.ok(!seen.includes(secret), `${location}: ${seen.slice(0, 2000)}`);
   }
