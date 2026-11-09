@@ -8,7 +8,7 @@ import { TextDecoder } from "node:util";
 import { execFileSync } from "node:child_process";
 import { RequestEngine, bigIntegerKeysOption, firstInexactNumber, sanitizeServerText, scanNumbers } from "../src/engine.js";
 import { AbgeordnetenwatchClient } from "../src/client.js";
-import { AwApiError, AwParseError, AwValidationError, TextBuilder, cutText, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
+import { AwApiError, AwParseError, AwValidationError, TextBuilder, cutText, echoedCredentialForms, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
@@ -719,4 +719,31 @@ test("a redirect whose Location echoes the base URL's credential is not followed
   assert.deepEqual(await new RequestEngine({ transport: plain.transport }).getJson("/x"), { ok: 1 });
   const other = makeMockTransport((req) => (req.url.includes("/next") ? jsonResponse({ ok: 1 }) : redirectResponse("/next?pw=other")));
   assert.deepEqual(await new RequestEngine({ baseUrl: base, transport: other.transport }).getJson("/x"), { ok: 1 });
+});
+
+test("echoedCredentialForms treats a userinfo without a password as a token (Basic `TOKEN:`) (E)", () => {
+  const basic = (pair: string): string => Buffer.from(pair, "utf8").toString("base64");
+  assert.deepEqual(echoedCredentialForms("alice:s3cret"), [basic("alice:s3cret"), "alice:s3cret", "s3cret"]);
+  assert.deepEqual(echoedCredentialForms("T0ken"), [basic("T0ken:"), "T0ken:", "T0ken"]);
+  assert.deepEqual(echoedCredentialForms("T0ken:"), [basic("T0ken:"), "T0ken:", "T0ken"]);
+  assert.deepEqual(echoedCredentialForms("T%C3%B6k"), [basic("Tök:"), "Tök:"]); // short: not alone
+  assert.deepEqual(echoedCredentialForms(":pw12"), [basic(":pw12"), ":pw12", "pw12"]);
+  assert.deepEqual(echoedCredentialForms(""), []);
+  assert.deepEqual(echoedCredentialForms(":"), []);
+});
+
+test("a token in the base URL (userinfo without a password) is scrubbed from errors in every echoed form (E)", async () => {
+  // Node sends `https://T0kenS3cret@host` as Basic `T0kenS3cret:`; none of its forms was scrubbed.
+  const token = "T0kenS3cret";
+  const basic = Buffer.from(`${token}:`, "utf8").toString("base64");
+  for (const base of [`https://${token}@mirror.example`, `https://${token}:@mirror.example`]) {
+    for (const echo of [`bad token ${token}`, `Authorization: Basic ${basic}`, `user ${token}: unknown`]) {
+      const e = new RequestEngine({ baseUrl: base, maxRetries: 0, transport: async () => apiErrorBody(echo, 401) });
+      const err = await e.getJson("/x").catch((caught: unknown) => caught);
+      assert.ok(err instanceof AwApiError, String(err));
+      for (const text of [err.message, err.detail ?? "", err.body]) {
+        assert.ok(!text.includes(token) && !text.includes(basic), `${base} ${echo}: ${text}`);
+      }
+    }
+  }
 });

@@ -477,7 +477,8 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
   userinfo (raw, percent-decoded and as WHATWG writes it into the URL), and the forms a
   server echoes it back in (the `Basic` value, the decoded `user:password`, the password
-  alone from 4 characters: `echoedCredentialForms`), from error bodies and details, a
+  alone from 4 characters: `echoedCredentialForms`; in a userinfo without a password, a
+  token, the user name is that secret, sent as Basic `TOKEN:`), from error bodies and details, a
   redirect `Location`, a custom transport's error text and the `cause` chain. A detail is
   scrubbed again once decoded, since a JSON escape (`s3cret\u002dpw`) hides the credential
   from the scrub of the body as sent; for the same reason `AwApiError.body` is, when the base
