@@ -9,9 +9,9 @@
 // so the client is generic over the collection name rather than exposing 18
 // near-identical method pairs. See openapi.yaml for the full entity reference.
 
-import { RequestEngine, sanitizeServerText, type EngineOptions } from "./engine.js";
+import { RequestEngine, type EngineOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { AwParseError, AwValidationError, cutForMessage, MAX_QUOTED_LENGTH } from "./errors.js";
+import { AwParseError, AwValidationError, MAX_QUOTED_LENGTH } from "./errors.js";
 import { assertParams, describeValue, normalizeEntityId, normalizeText, normalizeToken, validateListParams } from "./validate.js";
 import { validateFilters } from "./filters.js";
 import {
@@ -98,7 +98,7 @@ export class AbgeordnetenwatchClient {
     const query = this.toQuery(params);
     const body = await this.engine.getJson<unknown>(path, query);
     const request = this.describe(path, query);
-    assertEnvelope(body, request);
+    assertEnvelope(body, request, this.engine);
     if (!Array.isArray(body["data"])) throw shapeError(request, "a data array");
     return body as unknown as ListResponse<T>;
   }
@@ -118,7 +118,7 @@ export class AbgeordnetenwatchClient {
     const path = `${API_PREFIX}/${checkCollection(collection)}/${normalizeEntityId(id)}`;
     const body = await this.engine.getJson<unknown>(path);
     const request = this.describe(path);
-    assertEnvelope(body, request);
+    assertEnvelope(body, request, this.engine);
     if (!isObject(body["data"])) throw shapeError(request, "a data object");
     return body as unknown as DetailResponse<T>;
   }
@@ -172,9 +172,10 @@ function shapeError(request: string, expected: string): AwParseError {
 /**
  * Check the `{ meta, data }` envelope every 2xx response carries. A body of `null`,
  * an array or an object without `meta` would otherwise surface as a raw TypeError
- * ("Cannot read properties of null") or print as if it were data.
+ * ("Cannot read properties of null") or print as if it were data. The envelope's message is
+ * quoted with `engine.quoteServerValue`, the base URL's credentials scrubbed.
  */
-function assertEnvelope(body: unknown, request: string): asserts body is Record<string, unknown> {
+function assertEnvelope(body: unknown, request: string, engine: RequestEngine): asserts body is Record<string, unknown> {
   if (!isObject(body) || !isObject(body["meta"])) {
     throw shapeError(request, "a JSON object with meta and data");
   }
@@ -185,8 +186,8 @@ function assertEnvelope(body: unknown, request: string): asserts body is Record<
     const message = body["meta"]["status_message"];
     const reason =
       typeof message === "string" && message.trim() !== ""
-        ? cutForMessage(sanitizeServerText(message))
-        : `meta.status ${cutForMessage(sanitizeServerText(JSON.stringify(status)), MAX_QUOTED_LENGTH)}`;
+        ? engine.quoteServerValue(message)
+        : `meta.status ${engine.quoteServerValue(JSON.stringify(status), MAX_QUOTED_LENGTH)}`;
     throw new AwParseError(`${request}: error envelope in a 2xx answer: ${reason}`);
   }
 }

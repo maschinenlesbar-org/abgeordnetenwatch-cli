@@ -473,10 +473,17 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   exported) for a value that doesn't parse as a URL. The engine keeps the base URL and
   the caller's `headers` in real `#private` fields, so `console.log(client)`,
   `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
-  userinfo (raw and percent-decoded), and the forms a server echoes it back in (the
-  `Basic` value, the decoded `user:password`, the password alone from 4 characters:
-  `echoedCredentialForms`), from error bodies and details, a redirect `Location`, a
-  custom transport's error text and the `cause` chain. The CLI replaces the same forms:
+  userinfo (raw, percent-decoded and as WHATWG writes it into the URL), and the forms a
+  server echoes it back in (the `Basic` value, the decoded `user:password`, the password
+  alone from 4 characters: `echoedCredentialForms`), from error bodies and details, a
+  redirect `Location`, a custom transport's error text and the `cause` chain. A detail is
+  scrubbed again once decoded, since a JSON escape (`s3cret\u002dpw`) hides the credential
+  from the scrub of the body as sent; for the same reason `AwApiError.body` is, when the base
+  URL has credentials and the body is JSON whose decoded text still holds one, the decoded
+  JSON written again with them replaced (and `""` for such a body too deeply nested to write
+  again). A value the client quotes from a 2xx answer (an error envelope's
+  `meta.status_message`) goes through `RequestEngine.quoteServerValue`: scrubbed, cleaned,
+  then cut, so a cut never leaves half a password. The CLI replaces the same forms:
   the `Basic` value and the pair on stdout and stderr, the password alone on stderr only,
   since it may well occur in the data. Whatever a custom transport
   throws reaches the caller as an `AwNetworkError` (`GET <url> failed: <reason>`, the

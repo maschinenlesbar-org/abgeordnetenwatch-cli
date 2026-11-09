@@ -638,3 +638,19 @@ test("sortBy is a field name, sent trimmed; anything else is refused before any 
     assert.equal(mt.calls.length, 0, JSON.stringify(bad));
   }
 });
+
+test("a credential in a 2xx error envelope's message is scrubbed, a JSON-escaped one too (D)", async () => {
+  // The envelope's message was quoted as decoded, unscrubbed: a server that echoed the base URL's
+  // password there put it into the error, and the CLI's redaction caught only the raw spelling.
+  const base = "https://alice:s3cret-Pw@mirror.example";
+  for (const json of ['"bad login s3cret-Pw"', '"bad login s3cret\\u002dPw"', '"alice\\u003as3cret-Pw"']) {
+    const mt = makeMockTransport(() => rawResponse(`{"meta":{"status":"error","status_message":${json}},"data":[]}`, "application/json"));
+    const client = new AbgeordnetenwatchClient({ baseUrl: base, transport: mt.transport });
+    await assert.rejects(client.list("parties"), (err: unknown) => {
+      assert.ok(err instanceof AwParseError, String(err));
+      assert.ok(!err.message.includes("s3cret"), err.message);
+      assert.match(err.message, /error envelope in a 2xx answer: /);
+      return true;
+    });
+  }
+});
