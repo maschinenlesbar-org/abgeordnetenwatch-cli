@@ -536,8 +536,8 @@ test("an HTTP 200 envelope with meta.status other than ok rejects with its messa
   ] as const) {
     await assert.rejects(call(), (err) => {
       assert.ok(err instanceof AwParseError, label);
-      // The server's text is cleaned of control characters, like an error status's detail.
-      assert.equal(err.message, `GET https://www.abgeordnetenwatch.de${path}: error envelope in a 2xx answer: Database [31munavailable`, label);
+      // The server's text is cleaned of escape sequences, like an error status's detail.
+      assert.equal(err.message, `GET https://www.abgeordnetenwatch.de${path}: error envelope in a 2xx answer: Database unavailable`, label);
       return true;
     });
   }
