@@ -475,7 +475,9 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
   [`errors.ts`](packages/client/src/errors.ts)) shows it as `***@` in every error message and in
   `AwApiError.url`, and library messages quote a rejected value through it. The CLI also
   redacts on output: `run.ts` (`redactionFor`, `withRedactedOutput`) takes the exact
-  userinfo of every URL argument (`credentialsIn`, exported) and replaces it with `***` in
+  userinfo of every URL argument (`credentialsIn`, exported; a base URL is read as a URL however its scheme is typed,
+`typedUrlCredentials`: missing, `alice:pw@host`, or mistyped, `http//alice:pw@host` with the
+colon left out, whose userinfo is everything between the first slashes and the last `@`) and replaces it with `***` in
   everything it prints — commander's usage errors, which echo rejected values, an unknown
   command, a stray argument — so a password with spaces, quotes, `#`, `?` or `/` is caught
   as well as an ordinary one. Behind the exact strings, `redactUrlUserinfo`
