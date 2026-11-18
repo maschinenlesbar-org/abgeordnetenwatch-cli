@@ -68,6 +68,28 @@ export function handleOutputErrors(
   });
 }
 
+/** The exit codes of the signals `exitOnSignalsAsPid1` listens for: 128 + the signal's number. */
+const SIGNAL_EXITS = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 } as const;
+
+/** What `exitOnSignalsAsPid1` needs of the process. */
+export interface SignalProcess {
+  readonly pid: number;
+  once(event: string, listener: () => void): unknown;
+  exit(code: number): void;
+}
+
+/**
+ * As PID 1 (the first process of a container), a signal without a listener is ignored: Node's
+ * default action re-raises it, and the kernel drops a default-action signal sent to PID 1, so
+ * `docker stop` waited 10 s and then killed the run. There, and only there, the bin shim listens
+ * for SIGINT, SIGTERM and SIGHUP and exits with 130, 143 or 129. Anywhere else Node's default
+ * action stays.
+ */
+export function exitOnSignalsAsPid1(proc: SignalProcess = process): void {
+  if (proc.pid !== 1) return;
+  for (const [signal, code] of Object.entries(SIGNAL_EXITS)) proc.once(signal, () => proc.exit(code));
+}
+
 /** True for the write errors that mean the reader has gone: EPIPE, or ENOTCONN on a socket. */
 function readerGone(err: NodeJS.ErrnoException): boolean {
   return err.code === "EPIPE" || err.code === "ENOTCONN";

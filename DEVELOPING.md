@@ -583,7 +583,10 @@ escaped: the frame is never touched, and a secret is kept out of the log in eith
 timestamps testable. stdout carries data only. A failed write to stdout other than a
 closed pipe (`handleOutputErrors`, in the bin shim, outside `run()`) is an ERROR record of
 `abgeordnetenwatch.output` (`Could not write to stdout: …`), in the format argv asks for
-(`processLogger`). Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`) are WARN
+(`processLogger`). In a container the bin is PID 1, which ignores a signal nothing listens for
+(`docker stop` waited 10 s, then killed): there, and only there, the shim's
+`exitOnSignalsAsPid1` listens for SIGINT, SIGTERM and SIGHUP and exits 130, 143 or 129.
+Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`) are WARN
 records of `abgeordnetenwatch.cli` too: the bin shim installs `installWarningLog`, which
 removes Node's default `warning` listener and logs `(node) <name>: <message>` through the
 same logger. In `defaultDeps` a record waits for stdout (`stderrAfterStdout`): it is held
