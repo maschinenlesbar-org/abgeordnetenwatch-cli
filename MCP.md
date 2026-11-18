@@ -1,0 +1,115 @@
+# abgeordnetenwatch-mcp
+
+An [MCP](https://modelcontextprotocol.io/) server for the open
+[abgeordnetenwatch.de](https://www.abgeordnetenwatch.de/api) parliamentary data API: German
+politicians in the Bundestag, the 16 Landtage and the EU Parliament, their roll-call votes, side
+jobs and committees, as tools for AI agents. Read-only, no API key, public data (CC0 1.0).
+
+It is the MCP side of [abgeordnetenwatch-cli](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli),
+built on the same typed client, and released with it.
+
+## Install
+
+```bash
+npm i -g @maschinenlesbar.org/abgeordnetenwatch-mcp
+```
+
+This installs the **`abgeordnetenwatch-mcp`** command (Node.js 22.12+). Or run the container
+image, for linux/amd64 and linux/arm64, which needs no Node.js:
+
+```bash
+docker run -i --rm ghcr.io/maschinenlesbar-org/abgeordnetenwatch-mcp:latest
+```
+
+## Connect a client
+
+The server speaks MCP on stdio by default.
+
+**Claude Code**
+
+```bash
+claude mcp add abgeordnetenwatch -- abgeordnetenwatch-mcp
+# or with the image:
+claude mcp add abgeordnetenwatch -- docker run -i --rm ghcr.io/maschinenlesbar-org/abgeordnetenwatch-mcp:latest
+```
+
+**Claude Desktop** (`claude_desktop_config.json`)
+
+```json
+{ "mcpServers": { "abgeordnetenwatch": { "command": "abgeordnetenwatch-mcp" } } }
+```
+
+**VS Code** (`.vscode/mcp.json`)
+
+```json
+{ "servers": { "abgeordnetenwatch": { "type": "stdio", "command": "abgeordnetenwatch-mcp" } } }
+```
+
+**Over HTTP** (Streamable HTTP, one endpoint `POST /mcp`):
+
+```bash
+abgeordnetenwatch-mcp --transport http            # http://127.0.0.1:3000/mcp
+claude mcp add --transport http abgeordnetenwatch http://127.0.0.1:3000/mcp
+```
+
+In a container, publish the port on loopback only:
+`docker run --rm -p 127.0.0.1:3000:3000 ghcr.io/maschinenlesbar-org/abgeordnetenwatch-mcp:latest --transport http --host 0.0.0.0 --allowed-hosts localhost,127.0.0.1`.
+
+For scripts and shared configs, pin a release and its digest from the
+[release notes](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/releases) instead of
+`latest`: `…/abgeordnetenwatch-mcp:<version>@sha256:<digest>`. Check an image's provenance with
+`gh attestation verify oci://ghcr.io/maschinenlesbar-org/abgeordnetenwatch-mcp:<version> --repo maschinenlesbar-org/abgeordnetenwatch-cli`.
+
+## Tools
+
+| Tool | What it answers |
+|---|---|
+| `findPolitician` | Politicians by name, with the full match count (a full page is not all matches). |
+| `getVotingRecord` | A politician's roll-call votes in one mandate: yes/no/abstain/no_show and the recent votes. |
+| `findPolls` | The roll-call votes of a parliament period, newest first, by topic or dates. |
+| `getPollResult` | How a vote went, in all and fraction by fraction. |
+| `getSideJobs` | Declared side jobs and income of a politician's mandate, as declared (a band is not an amount). |
+| `listEntities` | Any collection with filters, sorting and paging. |
+| `getEntity` | One record with all its fields. |
+| `countEntities` | How many records match. |
+
+Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
+`source` it came from and the data licence. A failure is a tool error that says what to change.
+
+## Options
+
+```
+--transport <stdio|http>   stdio (default), or Streamable HTTP on POST /mcp
+--host <address>           HTTP: the address to listen on (default 127.0.0.1)
+--port <n>                 HTTP: the port (default 3000)
+--allowed-hosts <list>     HTTP: Host header names to answer (default localhost,127.0.0.1,[::1])
+--allowed-origins <list>   HTTP: browser origin host names to accept
+--base-url <url>           API base URL (default https://www.abgeordnetenwatch.de)
+--timeout <ms>             per upstream request (default 30000)
+--call-timeout <ms>        per tool call, retries included (default 45000)
+--max-result-chars <n>     cap on one tool result's JSON (default 25000)
+--max-pages <n>            pages of 1000 read per collection and call (default 10)
+--user-agent <ua>          User-Agent header value
+--log-format <text|jsonl>  the log records on stderr (default text)
+```
+
+## What it does and doesn't do
+
+- **Read-only.** No tool changes anything, here or upstream.
+- **No authentication** on HTTP. It listens on loopback by default; it checks the `Host` and
+  `Origin` headers against DNS rebinding. Exposed beyond localhost (it logs a warning then), it
+  belongs behind a proxy that authenticates.
+- **Gentle with the upstream.** One server process sends at most 2 requests at a time and 120 a
+  minute to abgeordnetenwatch.de, pauses on HTTP 429, and stops a tool call after its deadline.
+- **Results are data.** Text from the API is cleaned (control, bidi and zero-width characters
+  removed), but it is still other people's text: a model can be told things in it. The server
+  can't act on that (it has no tool that writes), but other tools in the same session could.
+- **Logs** go to stderr, one record per line; stdout carries only the protocol.
+- **Never installs anything** and needs no key.
+
+## Licence
+
+Code: AGPL-3.0-or-later or commercial
+([LICENSING.md](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/LICENSING.md)).
+Data: abgeordnetenwatch.de publishes it under CC0 1.0
+([DATA_LICENSE.md](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/DATA_LICENSE.md)).
