@@ -1,13 +1,17 @@
-// Smoke-test a CLI image the way users run it: read-only, no capabilities, an arbitrary uid,
+// Smoke-test an app's image (cli or mcp) the way users run it: read-only, no capabilities, an arbitrary uid,
 // bounded memory and processes. What is repo-specific (a request command and the mock's
 // answers) is in tools/image/smoke.json.
 //
 //   node tools/image/smoke.mjs --app cli --image 127.0.0.1:5000/abgeordnetenwatch-cli@sha256:…
+//   node tools/image/smoke.mjs --app mcp --image 127.0.0.1:5000/abgeordnetenwatch-mcp@sha256:…
 //
-// Checks: --version is the image's version label; --help exits 0; with --network none the
+// Both: --version is the image's version label. CLI: --help exits 0; with --network none the
 // command fails with the network exit code and exactly one ERROR record on stderr; against a
 // mock upstream on an internal network the command succeeds; `docker stop` ends a call that
-// waits on the upstream within 5 s with 143 (SIGTERM), not the kill after 10 s.
+// waits on the upstream within 5 s with 143 (SIGTERM), not the kill after 10 s. MCP: an
+// initialize piped into `docker run -i` is answered and the server exits when stdin ends; over
+// HTTP (`--transport http`, the port published on loopback) an initialize is answered,
+// /healthz is 200, a foreign Origin is 403, and `docker stop` ends it with 143 within 5 s.
 
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -15,7 +19,7 @@ import { join } from "node:path";
 import { dockerEnv, fail, here, parseArgs, run } from "./docker.mjs";
 
 const args = parseArgs(process.argv.slice(2), ["app", "image"]);
-if (args.app !== "cli") fail(`no smoke test for --app ${args.app} yet`);
+if (args.app !== "cli" && args.app !== "mcp") fail(`--app must be cli or mcp, got ${args.app}`);
 const config = JSON.parse(readFileSync(args.config ?? join(here, "smoke.json"), "utf8"));
 const env = dockerEnv();
 const image = args.image;
@@ -42,7 +46,8 @@ http.createServer((req) => console.log("waiting " + req.url)).listen(8081, () =>
 
 function waitForLog(container, text) {
   for (let i = 0; i < 100; i += 1) {
-    if (docker(["logs", container], { allowFail: true }).stdout.includes(text)) return;
+    const logs = docker(["logs", container], { allowFail: true });
+    if (logs.stdout.includes(text) || logs.stderr.includes(text)) return;
     run("sleep", ["0.1"]);
   }
   fail(`${container} never logged ${JSON.stringify(text)}`);
@@ -54,6 +59,10 @@ try {
   const version = docker(["image", "inspect", "--format", '{{ index .Config.Labels "org.opencontainers.image.version" }}', image]).stdout.trim();
   const printed = docker(["run", "--rm", ...hardened, image, "--version"], { allowFail: true });
   check("--version", printed.status === 0 && printed.stdout.trim() === version, `exit ${printed.status}, printed ${JSON.stringify(printed.stdout)}, label ${version}`);
+  if (args.app === "mcp") {
+    smokeMcp();
+    process.exit(0);
+  }
 
   const help = docker(["run", "--rm", ...hardened, image, "--help"], { allowFail: true });
   check("--help", help.status === 0 && help.stdout.includes("Usage:"), `exit ${help.status}`);
@@ -87,4 +96,39 @@ try {
 } finally {
   docker(["rm", "--force", mock, waiting], { allowFail: true });
   docker(["network", "rm", network], { allowFail: true });
+}
+
+/** The MCP server's checks: stdio, then HTTP on a loopback port. */
+function smokeMcp() {
+  const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "0" } } });
+  const started = Date.now();
+  const stdio = docker(["run", "--rm", "-i", ...hardened, "--network", "none", image], { input: `${initialize}\n`, allowFail: true });
+  const answer = stdio.stdout.split("\n").find((line) => line.includes('"id":1')) ?? "";
+  check(
+    "stdio: an initialize is answered, and the end of stdin ends the server",
+    stdio.status === 0 && answer.includes('"serverInfo"') && Date.now() - started < 15_000,
+    `exit ${stdio.status}, stdout ${JSON.stringify(stdio.stdout.slice(0, 300))}, stderr ${JSON.stringify(stdio.stderr.slice(0, 300))}`,
+  );
+  const http = `smoke-mcp-${id}`;
+  try {
+    docker(["run", "--detach", "--name", http, ...hardened, "-p", "127.0.0.1::3000", image, "--transport", "http", "--host", "0.0.0.0", "--allowed-hosts", "localhost,127.0.0.1"]);
+    const port = docker(["port", http, "3000/tcp"]).stdout.trim().split("\n")[0]?.split(":").pop();
+    if (port === undefined || port === "") fail("the HTTP server's port isn't published");
+    waitForLog(http, "serving MCP on http");
+    const post = (headers = []) =>
+      run("curl", ["-s", "-o", "/dev/stderr", "-w", "%{http_code}", "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", ...headers.flatMap((h) => ["-H", h]), "--data", initialize, `http://127.0.0.1:${port}/mcp`], { allowFail: true });
+    const ok = post();
+    check("HTTP: POST /mcp answers an initialize", ok.stdout === "200" && ok.stderr.includes('"serverInfo"'), `HTTP ${ok.stdout}: ${ok.stderr.slice(0, 300)}`);
+    const health = run("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", `http://127.0.0.1:${port}/healthz`], { allowFail: true });
+    check("HTTP: /healthz is 200", health.stdout === "200", `HTTP ${health.stdout}`);
+    const foreign = post(["origin: http://evil.example"]);
+    check("HTTP: a foreign Origin is 403", foreign.stdout === "403", `HTTP ${foreign.stdout}`);
+    const stopping = Date.now();
+    docker(["stop", "--time", "10", http]);
+    const took = Date.now() - stopping;
+    const exitCode = Number(docker(["inspect", "--format", "{{ .State.ExitCode }}", http]).stdout.trim());
+    check("docker stop ends the HTTP server with SIGTERM's 143, in under 5 s", exitCode === 143 && took < 5000, `exit ${exitCode} after ${took} ms`);
+  } finally {
+    docker(["rm", "--force", http], { allowFail: true });
+  }
 }

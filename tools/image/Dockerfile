@@ -15,3 +15,10 @@ FROM ${BASE_IMAGE} AS base
 FROM base AS cli
 ADD app.tgz /opt/
 ENTRYPOINT ["/nodejs/bin/node", "/opt/package/dist/src/cli/index.js"]
+
+# The MCP server: stdio by default (`docker run -i`); `--transport http --host 0.0.0.0` serves
+# POST /mcp on port 3000.
+FROM base AS mcp
+ADD app.tgz /opt/
+EXPOSE 3000
+ENTRYPOINT ["/nodejs/bin/node", "/opt/package/dist/src/mcp/index.js"]

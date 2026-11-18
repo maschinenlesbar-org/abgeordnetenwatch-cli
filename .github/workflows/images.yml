@@ -1,6 +1,6 @@
 name: Images
 
-# The container image on every push, built and pushed exactly as a release does it (the same
+# The container images (the CLI and the MCP server) on every push, built and pushed exactly as a release does it (the same
 # tools/image scripts), so the image path is proven before a tag depends on it:
 #  - build:       pack the CLI, build the multi-arch OCI archive, push it to a local registry
 #                 with push.mjs (the script publish.yml pushes to ghcr.io with), smoke-test it;
@@ -24,7 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: abgeordnetenwatch-cli
+  # app (the Dockerfile target and apps/<app>) and image name, per image.
+  IMAGES: cli:abgeordnetenwatch-cli mcp:abgeordnetenwatch-mcp
 
 jobs:
   build:
@@ -52,36 +53,49 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Pack the CLI
+      - name: Pack the apps
         run: |
-          mkdir -p dist-artifacts
-          npm pack --workspace apps/cli --pack-destination dist-artifacts
-          ls dist-artifacts/*.tgz
+          for pair in $IMAGES; do
+            app="${pair%%:*}"
+            mkdir -p "dist-artifacts/$app"
+            npm pack --workspace "apps/$app" --pack-destination "dist-artifacts/$app"
+          done
+          ls dist-artifacts/*/*.tgz
 
       - name: Pins agree
         run: test "$(jq -r .registry tools/image/pins.json)" = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
 
-      - name: Build the OCI archive
+      - name: Build the OCI archives
         run: |
-          node tools/image/build.mjs --app cli --tarball dist-artifacts/*.tgz --out "dist-artifacts/$IMAGE.oci.tar" > build.json
-          cat build.json
+          mkdir -p images
+          for pair in $IMAGES; do
+            app="${pair%%:*}"; image="${pair#*:}"
+            node tools/image/build.mjs --app "$app" --tarball "dist-artifacts/$app/"*.tgz --out "images/$image.oci.tar" > "images/$image.build.json"
+            cat "images/$image.build.json"
+          done
 
-      - name: Push to the local registry
-        run: node tools/image/push.mjs --archive "dist-artifacts/$IMAGE.oci.tar" --to "127.0.0.1:5000/$IMAGE:ci"
+      - name: Push to the local registry and smoke-test (amd64)
+        run: |
+          for pair in $IMAGES; do
+            app="${pair%%:*}"; image="${pair#*:}"
+            node tools/image/push.mjs --archive "images/$image.oci.tar" --to "127.0.0.1:5000/$image:ci"
+            node tools/image/smoke.mjs --app "$app" --image "127.0.0.1:5000/$image@$(jq -r .index "images/$image.build.json")"
+          done
 
-      - name: Smoke test (amd64)
-        run: node tools/image/smoke.mjs --app cli --image "127.0.0.1:5000/$IMAGE@$(jq -r .index build.json)"
-
-      - name: Cut out the arm64 image for the arm64 runner
-        run: skopeo copy --override-os linux --override-arch arm64 "oci-archive:dist-artifacts/$IMAGE.oci.tar" "docker-archive:dist-artifacts/$IMAGE.arm64.docker.tar:$IMAGE:arm64"
+      - name: Cut out the arm64 images for the arm64 runner
+        run: |
+          for pair in $IMAGES; do
+            image="${pair#*:}"
+            skopeo copy --override-os linux --override-arch arm64 "oci-archive:images/$image.oci.tar" "docker-archive:images/$image.arm64.docker.tar:$image:arm64"
+          done
 
       - name: Upload the archives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image
           path: |
-            dist-artifacts/${{ env.IMAGE }}.oci.tar
-            dist-artifacts/${{ env.IMAGE }}.arm64.docker.tar
+            images/*.oci.tar
+            images/*.arm64.docker.tar
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
@@ -107,13 +121,16 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image
-          path: dist-artifacts
+          path: images
 
       - name: Smoke test (arm64)
         run: |
-          docker load --input "dist-artifacts/$IMAGE.arm64.docker.tar"
-          test "$(docker image inspect --format '{{ .Architecture }}' "$IMAGE:arm64")" = arm64
-          node tools/image/smoke.mjs --app cli --image "$IMAGE:arm64"
+          for pair in $IMAGES; do
+            app="${pair%%:*}"; image="${pair#*:}"
+            docker load --input "images/$image.arm64.docker.tar"
+            test "$(docker image inspect --format '{{ .Architecture }}' "$image:arm64")" = arm64
+            node tools/image/smoke.mjs --app "$app" --image "$image:arm64"
+          done
 
   sbom:
     name: Image SBOMs and the vulnerability gate
@@ -136,10 +153,14 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image
-          path: dist-artifacts
+          path: images
 
       - name: SBOMs and gate
-        run: node tools/image/sbom.mjs --archive "dist-artifacts/$IMAGE.oci.tar" --name "$IMAGE" --out sbom --gate true
+        run: |
+          for pair in $IMAGES; do
+            image="${pair#*:}"
+            node tools/image/sbom.mjs --archive "images/$image.oci.tar" --name "$image" --out sbom --gate true
+          done
 
       - name: Upload the SBOMs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
