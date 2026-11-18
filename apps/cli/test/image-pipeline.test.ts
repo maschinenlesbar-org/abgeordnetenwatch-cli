@@ -53,7 +53,7 @@ test("the image job builds from the checked tarball, records the archive's diges
 test("the image SBOM job runs after the digest is recorded, without a gate, and its outputs are trusted for nothing", () => {
   const sbom = job("image-sbom");
   assert.match(sbom, /needs:.*\bimage\b/);
-  assert.match(sbom, /"\$ARCHIVE_SHA256" "image\/\$ARCHIVE" \| sha256sum --check --strict/, "checks the archive first");
+  assert.match(sbom, /"\$ARCHIVE_SHA256" "image\/\$ARCHIVE" "\$MCP_ARCHIVE_SHA256" "image\/\$MCP_ARCHIVE" \| sha256sum --check --strict/, "checks both archives first");
   assert.match(sbom, /needs\.image\.outputs\.archive-sha256/);
   assert.match(sbom, /tools\/image\/sbom\.mjs/);
   assert.doesNotMatch(sbom, /--gate/, "no vulnerability gate in a release run");
@@ -73,8 +73,11 @@ test("the attest job checks out nothing, pins actions/attest and has exactly the
 test("the release job checks the image archive against the image job's digest and attaches it with the image SBOMs", () => {
   const rel = job("release");
   assert.match(rel, /"\$ARCHIVE_SHA256" "image\/\$ARCHIVE" \| sha256sum --check --strict/);
+  assert.match(rel, /"\$MCP_TARBALL_SHA256" "package\/\$MCP_TARBALL" "\$MCP_ARCHIVE_SHA256" "image\/\$MCP_ARCHIVE" \| sha256sum --check --strict/);
   assert.match(rel, /needs:.*\battest\b/);
-  for (const asset of ['"image/$ARCHIVE"', "amd64.image.cdx.json", "arm64.image.cdx.json", "SHA256SUMS"]) assert.ok(rel.includes(asset), asset);
+  for (const asset of ['"image/$ARCHIVE"', '"image/$MCP_ARCHIVE"', '"package/$MCP_TARBALL"', "abgeordnetenwatch-cli-${VERSION}.amd64.image.cdx.json", "abgeordnetenwatch-mcp-${VERSION}.arm64.image.cdx.json", "abgeordnetenwatch-mcp-${VERSION}.cdx.json", "SHA256SUMS"]) {
+    assert.ok(rel.includes(asset), asset);
+  }
 });
 
 test("images.yml gates on push and weekly, smoke-tests arm64 on an arm64 runner", () => {

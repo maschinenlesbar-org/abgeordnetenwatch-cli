@@ -30,6 +30,8 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
       tarball: ${{ steps.pack.outputs.tarball }}
       tarball-sha256: ${{ steps.pack.outputs.tarball-sha256 }}
+      mcp-tarball: ${{ steps.pack.outputs.mcp-tarball }}
+      mcp-tarball-sha256: ${{ steps.pack.outputs.mcp-tarball-sha256 }}
       notes: ${{ steps.changelog.outputs.notes }}
       notes-sha256: ${{ steps.changelog.outputs.notes-sha256 }}
 
@@ -64,6 +66,12 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           if [ "$tag" != "$PKG_VERSION" ]; then
             echo "::error::Tag '$GITHUB_REF_NAME' does not match apps/cli/package.json version '$PKG_VERSION'."
+            exit 1
+          fi
+          # The apps are released together (tools/bump.mjs): the MCP server's version is the same.
+          mcp="$(node -p "require('./apps/mcp/package.json').version")"
+          if [ "$tag" != "$mcp" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match apps/mcp/package.json version '$mcp'."
             exit 1
           fi
 
@@ -101,6 +109,11 @@ jobs:
           test -f "dist-artifacts/$tarball"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "tarball-sha256=$(sha256sum "dist-artifacts/$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          npm pack --workspace apps/mcp --pack-destination dist-artifacts
+          mcp="maschinenlesbar.org-abgeordnetenwatch-mcp-${VERSION}.tgz"
+          test -f "dist-artifacts/$mcp"
+          echo "mcp-tarball=$mcp" >> "$GITHUB_OUTPUT"
+          echo "mcp-tarball-sha256=$(sha256sum "dist-artifacts/$mcp" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
           ls -la dist-artifacts
 
       - name: Upload the tarball and the notes
@@ -109,6 +122,7 @@ jobs:
           name: package
           path: |
             dist-artifacts/${{ steps.pack.outputs.tarball }}
+            dist-artifacts/${{ steps.pack.outputs.mcp-tarball }}
             dist-artifacts/${{ steps.changelog.outputs.notes }}
           if-no-files-found: error
           retention-days: 1
@@ -169,6 +183,19 @@ jobs:
             --spec-version 1.6 \
             --output-format JSON \
             --output-file "${base}.dev.cdx.json"
+          mcp="sbom/abgeordnetenwatch-mcp-${VERSION}"
+          tools/sbom/node_modules/.bin/cyclonedx-npm \
+            --workspace apps/mcp \
+            --omit dev \
+            --spec-version 1.6 \
+            --output-format JSON \
+            --output-file "${mcp}.cdx.json"
+          tools/sbom/node_modules/.bin/cyclonedx-npm \
+            --workspace apps/mcp \
+            --include-workspace-root \
+            --spec-version 1.6 \
+            --output-format JSON \
+            --output-file "${mcp}.dev.cdx.json"
           ls -la sbom
 
       - name: Upload the SBOMs
@@ -178,6 +205,8 @@ jobs:
           path: |
             sbom/abgeordnetenwatch-cli-${{ needs.pack.outputs.version }}.cdx.json
             sbom/abgeordnetenwatch-cli-${{ needs.pack.outputs.version }}.dev.cdx.json
+            sbom/abgeordnetenwatch-mcp-${{ needs.pack.outputs.version }}.cdx.json
+            sbom/abgeordnetenwatch-mcp-${{ needs.pack.outputs.version }}.dev.cdx.json
           if-no-files-found: error
           retention-days: 1
 
@@ -196,6 +225,9 @@ jobs:
       archive: ${{ steps.build.outputs.archive }}
       archive-sha256: ${{ steps.build.outputs.archive-sha256 }}
       index: ${{ steps.build.outputs.index }}
+      mcp-archive: ${{ steps.build.outputs.mcp-archive }}
+      mcp-archive-sha256: ${{ steps.build.outputs.mcp-archive-sha256 }}
+      mcp-index: ${{ steps.build.outputs.mcp-index }}
     services:
       registry:
         # tools/image/pins.json's registry pin, repeated: a service can't read a file.
@@ -221,16 +253,19 @@ jobs:
           name: package
           path: package
 
-      - name: Verify the tarball against the pack job's digest
+      - name: Verify the tarballs against the pack job's digests
         env:
           TARBALL: ${{ needs.pack.outputs.tarball }}
           TARBALL_SHA256: ${{ needs.pack.outputs.tarball-sha256 }}
-        run: printf '%s  %s\n' "$TARBALL_SHA256" "package/$TARBALL" | sha256sum --check --strict -
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
+          MCP_TARBALL_SHA256: ${{ needs.pack.outputs.mcp-tarball-sha256 }}
+        run: printf '%s  %s\n' "$TARBALL_SHA256" "package/$TARBALL" "$MCP_TARBALL_SHA256" "package/$MCP_TARBALL" | sha256sum --check --strict -
 
-      - name: Build the OCI archive
+      - name: Build the OCI archives
         id: build
         env:
           TARBALL: ${{ needs.pack.outputs.tarball }}
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
           VERSION: ${{ needs.pack.outputs.version }}
         run: |
           mkdir -p image
@@ -240,20 +275,32 @@ jobs:
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
           echo "archive-sha256=$(sha256sum "image/$archive" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
           echo "index=$(jq -r .index build.json)" >> "$GITHUB_OUTPUT"
+          mcp="abgeordnetenwatch-mcp-${VERSION}.oci.tar"
+          node tools/image/build.mjs --app mcp --tarball "package/$MCP_TARBALL" --out "image/$mcp" > mcp-build.json
+          cat mcp-build.json
+          echo "mcp-archive=$mcp" >> "$GITHUB_OUTPUT"
+          echo "mcp-archive-sha256=$(sha256sum "image/$mcp" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "mcp-index=$(jq -r .index mcp-build.json)" >> "$GITHUB_OUTPUT"
 
       - name: Push to a local registry and smoke-test
         env:
           ARCHIVE: ${{ steps.build.outputs.archive }}
           INDEX: ${{ steps.build.outputs.index }}
+          MCP_ARCHIVE: ${{ steps.build.outputs.mcp-archive }}
+          MCP_INDEX: ${{ steps.build.outputs.mcp-index }}
         run: |
           node tools/image/push.mjs --archive "image/$ARCHIVE" --to 127.0.0.1:5000/abgeordnetenwatch-cli:release
           node tools/image/smoke.mjs --app cli --image "127.0.0.1:5000/abgeordnetenwatch-cli@$INDEX"
+          node tools/image/push.mjs --archive "image/$MCP_ARCHIVE" --to 127.0.0.1:5000/abgeordnetenwatch-mcp:release
+          node tools/image/smoke.mjs --app mcp --image "127.0.0.1:5000/abgeordnetenwatch-mcp@$MCP_INDEX"
 
-      - name: Upload the archive
+      - name: Upload the archives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image
-          path: image/${{ steps.build.outputs.archive }}
+          path: |
+            image/${{ steps.build.outputs.archive }}
+            image/${{ steps.build.outputs.mcp-archive }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
@@ -287,17 +334,22 @@ jobs:
           name: image
           path: image
 
-      - name: Verify the archive against the image job's digest
+      - name: Verify the archives against the image job's digests
         env:
           ARCHIVE: ${{ needs.image.outputs.archive }}
           ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
-        run: printf '%s  %s\n' "$ARCHIVE_SHA256" "image/$ARCHIVE" | sha256sum --check --strict -
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
+          MCP_ARCHIVE_SHA256: ${{ needs.image.outputs.mcp-archive-sha256 }}
+        run: printf '%s  %s\n' "$ARCHIVE_SHA256" "image/$ARCHIVE" "$MCP_ARCHIVE_SHA256" "image/$MCP_ARCHIVE" | sha256sum --check --strict -
 
       - name: Generate the image SBOMs (CycloneDX, per platform)
         env:
           ARCHIVE: ${{ needs.image.outputs.archive }}
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
           VERSION: ${{ needs.pack.outputs.version }}
-        run: node tools/image/sbom.mjs --archive "image/$ARCHIVE" --name "abgeordnetenwatch-cli-${VERSION}" --out image-sbom
+        run: |
+          node tools/image/sbom.mjs --archive "image/$ARCHIVE" --name "abgeordnetenwatch-cli-${VERSION}" --out image-sbom
+          node tools/image/sbom.mjs --archive "image/$MCP_ARCHIVE" --name "abgeordnetenwatch-mcp-${VERSION}" --out image-sbom
 
       - name: Upload the image SBOMs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -306,6 +358,8 @@ jobs:
           path: |
             image-sbom/abgeordnetenwatch-cli-${{ needs.pack.outputs.version }}.amd64.image.cdx.json
             image-sbom/abgeordnetenwatch-cli-${{ needs.pack.outputs.version }}.arm64.image.cdx.json
+            image-sbom/abgeordnetenwatch-mcp-${{ needs.pack.outputs.version }}.amd64.image.cdx.json
+            image-sbom/abgeordnetenwatch-mcp-${{ needs.pack.outputs.version }}.arm64.image.cdx.json
           if-no-files-found: error
           retention-days: 1
 
@@ -332,11 +386,19 @@ jobs:
           ARCHIVE: ${{ needs.image.outputs.archive }}
           ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
           INDEX: ${{ needs.image.outputs.index }}
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
+          MCP_TARBALL_SHA256: ${{ needs.pack.outputs.mcp-tarball-sha256 }}
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
+          MCP_ARCHIVE_SHA256: ${{ needs.image.outputs.mcp-archive-sha256 }}
+          MCP_INDEX: ${{ needs.image.outputs.mcp-index }}
         run: |
           printf '%s  %s\n' \
             "$TARBALL_SHA256" "$TARBALL" \
             "$ARCHIVE_SHA256" "$ARCHIVE" \
-            "${INDEX#sha256:}" "abgeordnetenwatch-cli" > "$RUNNER_TEMP/subjects.txt"
+            "${INDEX#sha256:}" "abgeordnetenwatch-cli" \
+            "$MCP_TARBALL_SHA256" "$MCP_TARBALL" \
+            "$MCP_ARCHIVE_SHA256" "$MCP_ARCHIVE" \
+            "${MCP_INDEX#sha256:}" "abgeordnetenwatch-mcp" > "$RUNNER_TEMP/subjects.txt"
           cat "$RUNNER_TEMP/subjects.txt"
 
       - name: Attest
@@ -380,7 +442,7 @@ jobs:
 
       # The pack job's digests are job outputs, recorded by the runner: an artifact changed
       # after its upload (by the SBOM job, say) fails here, before anything is published.
-      - name: Verify the tarball, the notes and the image archive against the recorded digests
+      - name: Verify the tarballs, the notes and the image archives against the recorded digests
         env:
           TARBALL: ${{ needs.pack.outputs.tarball }}
           TARBALL_SHA256: ${{ needs.pack.outputs.tarball-sha256 }}
@@ -388,8 +450,13 @@ jobs:
           NOTES_SHA256: ${{ needs.pack.outputs.notes-sha256 }}
           ARCHIVE: ${{ needs.image.outputs.archive }}
           ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
+          MCP_TARBALL_SHA256: ${{ needs.pack.outputs.mcp-tarball-sha256 }}
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
+          MCP_ARCHIVE_SHA256: ${{ needs.image.outputs.mcp-archive-sha256 }}
         run: |
           printf '%s  %s\n' "$TARBALL_SHA256" "package/$TARBALL" "$NOTES_SHA256" "package/$NOTES" "$ARCHIVE_SHA256" "image/$ARCHIVE" | sha256sum --check --strict -
+          printf '%s  %s\n' "$MCP_TARBALL_SHA256" "package/$MCP_TARBALL" "$MCP_ARCHIVE_SHA256" "image/$MCP_ARCHIVE" | sha256sum --check --strict -
 
       # After the check: the notes get the image's index digest (what `docker pull` resolves a
       # tag to) and SHA256SUMS lists the checked files, for readers. The attestations are what
@@ -402,9 +469,18 @@ jobs:
           ARCHIVE: ${{ needs.image.outputs.archive }}
           ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
           INDEX: ${{ needs.image.outputs.index }}
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
+          MCP_TARBALL_SHA256: ${{ needs.pack.outputs.mcp-tarball-sha256 }}
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
+          MCP_ARCHIVE_SHA256: ${{ needs.image.outputs.mcp-archive-sha256 }}
+          MCP_INDEX: ${{ needs.image.outputs.mcp-index }}
         run: |
-          printf '\n## Container image\n\nIndex digest (linux/amd64, linux/arm64): `%s`. Check it with `gh attestation verify oci://<image>@%s --repo %s`.\n' "$INDEX" "$INDEX" "$GITHUB_REPOSITORY" >> "package/$NOTES"
-          printf '%s  %s\n' "$TARBALL_SHA256" "$TARBALL" "$ARCHIVE_SHA256" "$ARCHIVE" > SHA256SUMS
+          {
+            printf '\n## Container images\n\nIndex digests (linux/amd64, linux/arm64); check one with `gh attestation verify oci://<image>@<digest> --repo %s`.\n\n' "$GITHUB_REPOSITORY"
+            printf -- '- `ghcr.io/%s/abgeordnetenwatch-cli`: `%s`\n' "$GITHUB_REPOSITORY_OWNER" "$INDEX"
+            printf -- '- `ghcr.io/%s/abgeordnetenwatch-mcp`: `%s`\n' "$GITHUB_REPOSITORY_OWNER" "$MCP_INDEX"
+          } >> "package/$NOTES"
+          printf '%s  %s\n' "$TARBALL_SHA256" "$TARBALL" "$ARCHIVE_SHA256" "$ARCHIVE" "$MCP_TARBALL_SHA256" "$MCP_TARBALL" "$MCP_ARCHIVE_SHA256" "$MCP_ARCHIVE" > SHA256SUMS
 
       # With assets, gh creates the release as a draft, uploads them, then publishes it.
       # The assets are named one by one, so nothing else an artifact may hold is attached.
@@ -416,6 +492,8 @@ jobs:
           TARBALL: ${{ needs.pack.outputs.tarball }}
           NOTES: ${{ needs.pack.outputs.notes }}
           ARCHIVE: ${{ needs.image.outputs.archive }}
+          MCP_TARBALL: ${{ needs.pack.outputs.mcp-tarball }}
+          MCP_ARCHIVE: ${{ needs.image.outputs.mcp-archive }}
         # No PRs land in this repo (see CONTRIBUTING.md), so GitHub's own
         # generated notes have nothing to list — --generate-notes only adds the
         # "Full Changelog: vX...vY" compare link after our own notes above.
@@ -431,5 +509,11 @@ jobs:
             "image/$ARCHIVE" \
             "image-sbom/abgeordnetenwatch-cli-${VERSION}.amd64.image.cdx.json" \
             "image-sbom/abgeordnetenwatch-cli-${VERSION}.arm64.image.cdx.json" \
+            "package/$MCP_TARBALL" \
+            "sbom/abgeordnetenwatch-mcp-${VERSION}.cdx.json" \
+            "sbom/abgeordnetenwatch-mcp-${VERSION}.dev.cdx.json" \
+            "image/$MCP_ARCHIVE" \
+            "image-sbom/abgeordnetenwatch-mcp-${VERSION}.amd64.image.cdx.json" \
+            "image-sbom/abgeordnetenwatch-mcp-${VERSION}.arm64.image.cdx.json" \
             SHA256SUMS \
             "package/$NOTES"

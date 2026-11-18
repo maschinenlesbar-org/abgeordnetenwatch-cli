@@ -36,16 +36,28 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PACKAGE: '@maschinenlesbar.org/abgeordnetenwatch-cli'
-  TARBALL_PREFIX: maschinenlesbar.org-abgeordnetenwatch-cli
-  IMAGE: abgeordnetenwatch-cli
-  IMAGE_REF: ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli
+  # The images, pushed to ghcr.io/maschinenlesbar-org/<image>.
+  IMAGES: abgeordnetenwatch-cli abgeordnetenwatch-mcp
+  REGISTRY: ghcr.io/maschinenlesbar-org
 
 jobs:
+  # One leg per package, each re-runnable alone. A new package needs its first version on npm
+  # (and its Trusted Publisher) before this job can publish it; see the plan's setup notes.
   npm:
-    name: Publish to npm
+    name: Publish ${{ matrix.package }} to npm
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: '@maschinenlesbar.org/abgeordnetenwatch-cli'
+            tarball-prefix: maschinenlesbar.org-abgeordnetenwatch-cli
+          - package: '@maschinenlesbar.org/abgeordnetenwatch-mcp'
+            tarball-prefix: maschinenlesbar.org-abgeordnetenwatch-mcp
+    env:
+      PACKAGE: ${{ matrix.package }}
+      TARBALL_PREFIX: ${{ matrix.tarball-prefix }}
     permissions:
       contents: read
       attestations: read # gh attestation verify
@@ -125,7 +137,7 @@ jobs:
           npm publish "$TARBALL" --provenance --access public
 
   images:
-    name: Push the image to the GitHub Container Registry
+    name: Push the images to the GitHub Container Registry
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -162,19 +174,20 @@ jobs:
           node-version: 24.x
           package-manager-cache: false
 
-      - name: Download and verify the image archive
+      - name: Download and verify the image archives
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          archive="${IMAGE}-${VERSION}.oci.tar"
-          gh release download "$GITHUB_REF_NAME" --pattern "$archive" --dir release
-          gh release verify-asset "$GITHUB_REF_NAME" "release/$archive"
-          gh attestation verify "release/$archive" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-            --source-ref "$GITHUB_REF"
-          echo "ARCHIVE=release/$archive" >> "$GITHUB_ENV"
-          echo "INDEX=$(tar -xOf "release/$archive" index.json | jq -r '.manifests[0].digest')" >> "$GITHUB_ENV"
+          mkdir -p release
+          for image in $IMAGES; do
+            archive="${image}-${VERSION}.oci.tar"
+            gh release download "$GITHUB_REF_NAME" --pattern "$archive" --dir release
+            gh release verify-asset "$GITHUB_REF_NAME" "release/$archive"
+            gh attestation verify "release/$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "$GITHUB_REF"
+          done
 
       # skopeo keeps the login in a file under RUNNER_TEMP, removed at the end.
       - name: Log in to ghcr.io with this run's token
@@ -186,49 +199,48 @@ jobs:
           printf '%s' "$GH_TOKEN" | REGISTRY_AUTH_FILE="$RUNNER_TEMP/registry-auth.json" \
             skopeo login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
 
-      - name: Push the version tag
+      # Per image: the version tag (skipped when it already is this image, an error when it is
+      # another), `latest` only when this is the highest version, then the digest read back.
+      - name: Push the images
         run: |
-          set +e
-          raw="$(skopeo inspect --raw "docker://$IMAGE_REF:$VERSION" 2>"$RUNNER_TEMP/inspect.err")"
-          status=$?
-          set -e
-          if [ "$status" -eq 0 ]; then
-            existing="sha256:$(printf '%s' "$raw" | sha256sum | cut -d ' ' -f 1)"
-            if [ "$existing" = "$INDEX" ]; then
-              echo "::notice::$IMAGE_REF:$VERSION is already this image ($INDEX); nothing to push."
-              exit 0
+          for image in $IMAGES; do
+            ref="$REGISTRY/$image"
+            archive="release/${image}-${VERSION}.oci.tar"
+            index="$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')"
+            set +e
+            raw="$(skopeo inspect --raw "docker://$ref:$VERSION" 2>"$RUNNER_TEMP/inspect.err")"
+            status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
+              existing="sha256:$(printf '%s' "$raw" | sha256sum | cut -d ' ' -f 1)"
+              if [ "$existing" != "$index" ]; then
+                echo "::error::$ref:$VERSION is $existing, the release's image is $index."
+                exit 1
+              fi
+              echo "::notice::$ref:$VERSION is already this image ($index); nothing to push."
+            elif grep -qiE 'manifest unknown|name unknown|not found' "$RUNNER_TEMP/inspect.err"; then
+              node tools/image/push.mjs --archive "$archive" --to "$ref:$VERSION"
+            else
+              cat "$RUNNER_TEMP/inspect.err"
+              echo "::error::Could not ask ghcr.io whether $image:$VERSION exists."
+              exit 1
             fi
-            echo "::error::$IMAGE_REF:$VERSION is $existing, the release's image is $INDEX."
-            exit 1
-          fi
-          if ! grep -qiE 'manifest unknown|name unknown|not found' "$RUNNER_TEMP/inspect.err"; then
-            cat "$RUNNER_TEMP/inspect.err"
-            echo "::error::Could not ask ghcr.io whether $IMAGE:$VERSION exists."
-            exit 1
-          fi
-          node tools/image/push.mjs --archive "$ARCHIVE" --to "$IMAGE_REF:$VERSION"
-
-      # `latest` names the highest released version, never an older one re-published later.
-      - name: Move latest when this is the highest version
-        run: |
-          highest="$(skopeo list-tags "docker://$IMAGE_REF" | jq -r '.Tags[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
-          if [ "$highest" != "$VERSION" ]; then
-            echo "::notice::$highest is newer than $VERSION; latest stays."
-            exit 0
-          fi
-          skopeo copy --all --preserve-digests "docker://$IMAGE_REF:$VERSION" "docker://$IMAGE_REF:latest"
-
-      - name: Read the image back
-        run: |
-          served="sha256:$(skopeo inspect --raw "docker://$IMAGE_REF:$VERSION" | sha256sum | cut -d ' ' -f 1)"
-          if [ "$served" != "$INDEX" ]; then
-            echo "::error::$IMAGE_REF:$VERSION serves $served, the release's image is $INDEX."
-            exit 1
-          fi
-          if ! skopeo inspect --raw --no-creds "docker://$IMAGE_REF:$VERSION" > /dev/null 2>&1; then
-            echo "::warning::$IMAGE_REF is not public yet: https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/package/${IMAGE} -> Package settings -> Change visibility -> Public."
-          fi
-          echo "::notice::$IMAGE_REF:$VERSION@$INDEX"
+            highest="$(skopeo list-tags "docker://$ref" | jq -r '.Tags[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+            if [ "$highest" = "$VERSION" ]; then
+              skopeo copy --all --preserve-digests "docker://$ref:$VERSION" "docker://$ref:latest"
+            else
+              echo "::notice::$highest is newer than $VERSION; $image:latest stays."
+            fi
+            served="sha256:$(skopeo inspect --raw "docker://$ref:$VERSION" | sha256sum | cut -d ' ' -f 1)"
+            if [ "$served" != "$index" ]; then
+              echo "::error::$ref:$VERSION serves $served, the release's image is $index."
+              exit 1
+            fi
+            if ! skopeo inspect --raw --no-creds "docker://$ref:$VERSION" > /dev/null 2>&1; then
+              echo "::warning::$ref is not public yet: https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/package/${image} -> Package settings -> Change visibility -> Public."
+            fi
+            echo "::notice::$ref:$VERSION@$index"
+          done
 
       - name: Remove the login
         if: always()
