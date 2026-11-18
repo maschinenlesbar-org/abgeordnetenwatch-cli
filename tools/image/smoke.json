@@ -1,0 +1,33 @@
+{
+  "comment": "What tools/image/smoke.mjs needs that is particular to this repo: the bin (its log topic), a command that makes one request, the exit code of a network error, the mock's answer to that request, and a string the printed answer contains.",
+  "bin": "abgeordnetenwatch",
+  "command": ["list", "parties", "--range-end", "1"],
+  "networkErrorExit": 1,
+  "answers": {
+    "/api/v2/parties": {
+      "meta": {
+        "abgeordnetenwatch_api": {
+          "version": "2.13",
+          "changelog": "https://www.abgeordnetenwatch.de/api/version-changelog/aktuell",
+          "licence": "CC0 1.0",
+          "licence_link": "https://creativecommons.org/publicdomain/zero/1.0/deed.de",
+          "documentation": "https://www.abgeordnetenwatch.de/api/entitaeten/party"
+        },
+        "status": "ok",
+        "status_message": "",
+        "result": { "count": 1, "total": 1, "range_start": 0, "range_end": 1 }
+      },
+      "data": [
+        {
+          "id": 1,
+          "entity_type": "party",
+          "label": "SPD",
+          "api_url": "https://www.abgeordnetenwatch.de/api/v2/parties/1",
+          "full_name": "Sozialdemokratische Partei Deutschlands",
+          "short_name": "SPD"
+        }
+      ]
+    }
+  },
+  "expectStdout": "Sozialdemokratische Partei Deutschlands"
+}
