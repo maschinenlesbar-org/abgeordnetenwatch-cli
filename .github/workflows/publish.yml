@@ -104,7 +104,9 @@ jobs:
             echo "::error::The tarball is $packed, the tag wants $PACKAGE@$VERSION."
             exit 1
           fi
-          echo "TARBALL=release/$tarball" >> "$GITHUB_ENV"
+          # A leading ./ makes npm read a file: `release/x.tgz` alone is a GitHub shorthand (owner/repo),
+          # which npm tried to clone over SSH in 0.10.0's publish run.
+          echo "TARBALL=./release/$tarball" >> "$GITHUB_ENV"
 
       # The registry's integrity of an existing version is the sha512 of its tarball: the same
       # bytes are a skip (a re-run), other bytes a failure.

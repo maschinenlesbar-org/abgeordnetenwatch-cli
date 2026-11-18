@@ -117,6 +117,8 @@ test("publish.yml publishes the release's own files, checked against the immutab
     assert.doesNotMatch(job, /npm (ci|install|test|pack)\b|npm run\b/, `${name} runs no dependency code`);
   }
   assert.match(publishJob("npm"), /npm publish "\$TARBALL" --provenance/);
+  // Without ./ npm reads `release/x.tgz` as the GitHub repository release/x.tgz (0.10.0's publish run).
+  assert.match(publishJob("npm"), /echo "TARBALL=\.\/release\/\$tarball"/);
 });
 
 test("publish.yml pushes the image with the run's own token, no stored credential, and removes the login", () => {
