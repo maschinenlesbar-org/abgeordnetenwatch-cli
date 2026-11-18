@@ -12,6 +12,8 @@ export const pins = JSON.parse(readFileSync(join(here, "pins.json"), "utf8"));
 /** Print `message` and end the script with exit 1. */
 export function fail(message) {
   process.stderr.write(`error: ${message}\n`);
+  // In GitHub Actions also an annotation, which the public run page shows without the log.
+  if (process.env.GITHUB_ACTIONS === "true") process.stdout.write(`::error::${message.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 4000)}\n`);
   process.exit(1);
 }
 
