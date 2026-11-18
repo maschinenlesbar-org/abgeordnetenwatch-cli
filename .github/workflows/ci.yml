@@ -53,16 +53,23 @@ jobs:
       # node_modules/commander empty in openka-cli, issue #1). The pack must also leave
       # nothing behind: prepack's copies in the app's node_modules would shadow the
       # workspace symlinks.
-      - name: Packed tarball installs globally
+      - name: Packed tarballs install globally
         run: |
-          pack="$RUNNER_TEMP/pack"
-          mkdir -p "$pack"
-          npm pack --workspace apps/cli --pack-destination "$pack"
-          if [ -e apps/cli/node_modules ] || [ -e apps/cli/dist/node_modules ] || [ -e apps/cli/.prepack-generated.json ]; then
-            echo "::error::the pack left prepack's copies behind in apps/cli"
-            exit 1
-          fi
-          prefix="$RUNNER_TEMP/global"
-          npm install --global --offline --prefix "$prefix" "$pack"/*.tgz
-          bin="$(node -p "Object.keys(require('./apps/cli/package.json').bin)[0]")"
-          "$prefix/bin/$bin" --version
+          # Every published app (apps/* that is not private): pack it, check the pack left
+          # nothing behind, install it globally with the registry out of reach, run each bin.
+          for app in apps/*/; do
+            app="${app%/}"
+            [ "$(node -p "require('./$app/package.json').private === true")" = true ] && continue
+            pack="$RUNNER_TEMP/pack/$app"
+            mkdir -p "$pack"
+            npm pack --workspace "$app" --pack-destination "$pack"
+            if [ -e "$app/node_modules" ] || [ -e "$app/dist/node_modules" ] || [ -e "$app/.prepack-generated.json" ]; then
+              echo "::error::the pack left prepack's copies behind in $app"
+              exit 1
+            fi
+            prefix="$RUNNER_TEMP/global/$app"
+            npm install --global --offline --prefix "$prefix" "$pack"/*.tgz
+            for bin in $(node -p "Object.keys(require('./$app/package.json').bin).join(' ')"); do
+              "$prefix/bin/$bin" --version
+            done
+          done
