@@ -67,3 +67,28 @@ export {
 } from "./filters.js";
 
 export * from "./types.js";
+export {
+  DEFAULT_MAX_PAGES,
+  OPERATION_PAGE_SIZE,
+  findPolitician,
+  findPolls,
+  getPollResult,
+  getSideJobs,
+  getVotingRecord,
+  readAll,
+  resolveMandate,
+} from "./operations.js";
+export type {
+  MandateSummary,
+  OperationOptions,
+  PoliticianRef,
+  PoliticianSearch,
+  PoliticianSummary,
+  PollResult,
+  PollSearch,
+  Resolved,
+  SideJob,
+  SideJobs,
+  VoteTally,
+  VotingRecord,
+} from "./operations.js";
