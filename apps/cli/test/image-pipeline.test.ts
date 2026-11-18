@@ -108,10 +108,11 @@ const publishJob = (name: string): string => {
   return text;
 };
 
-test("publish.yml publishes the release's own files, checked against release.yml's attestation for the tag", () => {
+test("publish.yml publishes the release's own files, checked against the immutable release and release.yml's attestation for the tag", () => {
   for (const name of ["npm", "images"]) {
     const job = publishJob(name);
     assert.match(job, /gh release download/, name);
+    assert.match(job, /gh release verify-asset "\$GITHUB_REF_NAME"/, name);
     assert.match(job, /gh attestation verify [^\n]*\n[^\n]*--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml"[^\n]*\n[^\n]*--source-ref "\$GITHUB_REF"/, name);
     assert.doesNotMatch(job, /npm (ci|install|test|pack)\b|npm run\b/, `${name} runs no dependency code`);
   }

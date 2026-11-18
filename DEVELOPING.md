@@ -547,7 +547,8 @@ scanner's database changes daily), `attest` signs build provenance for the tarba
 and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
 `publish.yml` publishes the release's own files: the tarball to npm and the archive to
 `ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli` (with the run's `GITHUB_TOKEN`), each checked
-first against the provenance `release.yml` signed for that tag (`gh attestation verify`).
+first against the immutable release (`gh release verify-asset`) and the provenance `release.yml`
+signed for that tag (`gh attestation verify`).
 `apps/cli/test/image-pipeline.test.ts` pins these rules.
 
 As PID 1 the bin shim listens for SIGINT, SIGTERM and SIGHUP (`exitOnSignalsAsPid1`): without

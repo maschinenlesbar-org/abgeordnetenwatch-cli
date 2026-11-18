@@ -8,9 +8,10 @@ name: Publish
 # also means this file is the one the release was cut with.
 #
 # What is published are the GitHub Release's own files, not a rebuild: each job downloads its
-# file from the release and checks it against the build provenance release.yml's attest job
-# signed for this tag (`gh attestation verify`, signer release.yml, source ref this tag) before
-# anything leaves this run. A file swapped on the release after it was cut fails that check. So
+# file from the release and checks it twice before anything leaves this run: against the
+# release's own attestation (`gh release verify-asset`; the repository has immutable releases
+# on, so a published release's files can't be swapped) and against the build provenance
+# release.yml's attest job signed for this tag (`gh attestation verify`). So
 # the npm package, the image in the registry and the release asset are the same bytes, and no
 # third-party code runs in these jobs: no `npm ci`, no tests (release.yml ran them on this tag).
 #
@@ -94,6 +95,7 @@ jobs:
         run: |
           tarball="${TARBALL_PREFIX}-${VERSION}.tgz"
           gh release download "$GITHUB_REF_NAME" --pattern "$tarball" --dir release
+          gh release verify-asset "$GITHUB_REF_NAME" "release/$tarball"
           gh attestation verify "release/$tarball" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref "$GITHUB_REF"
@@ -165,6 +167,7 @@ jobs:
         run: |
           archive="${IMAGE}-${VERSION}.oci.tar"
           gh release download "$GITHUB_REF_NAME" --pattern "$archive" --dir release
+          gh release verify-asset "$GITHUB_REF_NAME" "release/$archive"
           gh attestation verify "release/$archive" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref "$GITHUB_REF"
