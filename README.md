@@ -36,6 +36,27 @@ abgeordnetenwatch --help
 abgeordnetenwatch entities          # the 18 collections you can query
 ```
 
+### Docker
+
+From 0.10.0 every release is also a container image for linux/amd64 and linux/arm64 on Amazon
+ECR Public, made from the same tarball as the npm package. It needs no Node.js and no
+install:
+
+```bash
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  public.ecr.aws/maschinenlesbar/abgeordnetenwatch-cli:latest list parties --range-end 3
+```
+
+`latest` is the newest release. For scripts, name a release and pin its digest, which the
+[release notes](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/releases) give:
+`…/abgeordnetenwatch-cli:0.10.0@sha256:<digest>`. Each image carries signed build provenance;
+check it with
+
+```bash
+gh attestation verify oci://public.ecr.aws/maschinenlesbar/abgeordnetenwatch-cli:latest \
+  --repo maschinenlesbar-org/abgeordnetenwatch-cli
+```
+
 ## Quickstart
 
 ```bash

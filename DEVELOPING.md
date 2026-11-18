@@ -514,6 +514,44 @@ colon left out, whose userinfo is everything between the first slashes and the l
   throws reaches the caller as an `AwNetworkError` (`GET <url> failed: <reason>`, the
   original as `cause`).
 
+## Container image
+
+`tools/image/` builds the CLI's image from the release tarball (`npm pack` output), never from
+source: `ADD` unpacks it onto distroless Node 24 (Debian 13, `nonroot`, uid 65532), so the image
+holds exactly the files npm users get. The base, BuildKit, the test registry, skopeo (local runs
+only), syft and grype are pinned in `pins.json`; bump them in the deps round. A Node or Debian
+security fix reaches the image only through a new base digest, so it means a patch release.
+
+| Script | What it does |
+|---|---|
+| `build.mjs` | Multi-arch OCI archive (amd64, arm64), reproducible: no provenance or SBOM attestation, timestamps from `SOURCE_DATE_EPOCH` (default: the HEAD commit's time). Two builds give the same index digest; compare index digests, not files. |
+| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ECR. |
+| `smoke.mjs` | Runs the image read-only, without capabilities, as an arbitrary uid: `--version`, `--help`, a network error, one request to a mock upstream (`smoke.json`), and `docker stop`, which must end a waiting call with 143 in under 5 s. |
+| `sbom.mjs` | One CycloneDX SBOM per platform with syft, and with `--gate true` grype over them: a fixable high or critical finding fails. Accepted findings go into `.grype.yaml` with a reason. CI only. |
+
+Locally (colima; the scripts never read your docker config, so no credential helper is asked):
+
+```bash
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+npm pack --workspace apps/cli --pack-destination dist-artifacts
+node tools/image/build.mjs --app cli --tarball dist-artifacts/<tarball>.tgz --out dist-artifacts/cli.oci.tar
+docker run -d -p 127.0.0.1:5000:5000 <registry pin from pins.json>
+node tools/image/push.mjs --archive dist-artifacts/cli.oci.tar --to 127.0.0.1:5000/abgeordnetenwatch-cli:dev
+node tools/image/smoke.mjs --app cli --image 127.0.0.1:5000/abgeordnetenwatch-cli@<index digest>
+```
+
+In CI: `images.yml` does all of it on every push and weekly, with the arm64 image smoke-tested on
+an arm64 runner and the vulnerability gate. In `release.yml` the job `image` builds from the
+checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
+scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
+and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
+`publish.yml` publishes the release's own files: the tarball to npm and the archive to ECR
+Public, each checked against the immutable release and the attestation first.
+`apps/cli/test/image-pipeline.test.ts` pins these rules.
+
+As PID 1 the bin shim listens for SIGINT, SIGTERM and SIGHUP (`exitOnSignalsAsPid1`): without
+a listener the kernel drops them, and `docker stop` would wait 10 s and kill.
+
 ## Website
 
 The project website — <https://maschinenlesbar.org/abgeordnetenwatch-cli/> in English

@@ -49,3 +49,10 @@ and compatible with both licensing options.
 ---
 
 Copyright © 2026 Sebastian Schürmann. All rights reserved.
+
+## Container images
+
+The container images of a release contain, besides this software, the packages of their base
+image ([distroless](https://github.com/GoogleContainerTools/distroless) Node.js on Debian 13),
+each under its own licence. Their sources are Debian's and Node.js's; the image SBOMs attached
+to each release list every package with its version and licence.
