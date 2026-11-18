@@ -1,0 +1,150 @@
+name: Images
+
+# The container image on every push, built and pushed exactly as a release does it (the same
+# tools/image scripts), so the image path is proven before a tag depends on it:
+#  - build:       pack the CLI, build the multi-arch OCI archive, push it to a local registry
+#                 with push.mjs (the script publish.yml pushes to ECR with), smoke-test it;
+#  - smoke-arm64: the arm64 image on an arm64 runner;
+#  - sbom:        one CycloneDX SBOM per platform and the vulnerability gate (a fixable high
+#                 or critical finding fails). Weekly too: the scanner's database changes, and
+#                 a red run means a new base pin and a patch release.
+# Pilot repo only until the rollout (see .plans/ in the workspace).
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: abgeordnetenwatch-cli
+
+jobs:
+  build:
+    name: Build, push to a local registry, smoke-test (amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      registry:
+        # tools/image/pins.json's registry pin; a service can't read a file, so it is repeated here.
+        image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+        ports:
+          - 127.0.0.1:5000:5000
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install
+        run: npm ci
+
+      - name: Pack the CLI
+        run: |
+          mkdir -p dist-artifacts
+          npm pack --workspace apps/cli --pack-destination dist-artifacts
+          ls dist-artifacts/*.tgz
+
+      - name: Pins agree
+        run: test "$(jq -r .registry tools/image/pins.json)" = "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
+
+      - name: Build the OCI archive
+        run: |
+          node tools/image/build.mjs --app cli --tarball dist-artifacts/*.tgz --out "dist-artifacts/$IMAGE.oci.tar" > build.json
+          cat build.json
+
+      - name: Push to the local registry
+        run: node tools/image/push.mjs --archive "dist-artifacts/$IMAGE.oci.tar" --to "127.0.0.1:5000/$IMAGE:ci"
+
+      - name: Smoke test (amd64)
+        run: node tools/image/smoke.mjs --app cli --image "127.0.0.1:5000/$IMAGE@$(jq -r .index build.json)"
+
+      - name: Cut out the arm64 image for the arm64 runner
+        run: skopeo copy --override-os linux --override-arch arm64 "oci-archive:dist-artifacts/$IMAGE.oci.tar" "docker-archive:dist-artifacts/$IMAGE.arm64.docker.tar:$IMAGE:arm64"
+
+      - name: Upload the archives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image
+          path: |
+            dist-artifacts/${{ env.IMAGE }}.oci.tar
+            dist-artifacts/${{ env.IMAGE }}.arm64.docker.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  smoke-arm64:
+    name: Smoke-test (arm64)
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Download the archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: dist-artifacts
+
+      - name: Smoke test (arm64)
+        run: |
+          docker load --input "dist-artifacts/$IMAGE.arm64.docker.tar"
+          test "$(docker image inspect --format '{{ .Architecture }}' "$IMAGE:arm64")" = arm64
+          node tools/image/smoke.mjs --app cli --image "$IMAGE:arm64"
+
+  sbom:
+    name: Image SBOMs and the vulnerability gate
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Download the archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: dist-artifacts
+
+      - name: SBOMs and gate
+        run: node tools/image/sbom.mjs --archive "dist-artifacts/$IMAGE.oci.tar" --name "$IMAGE" --out sbom --gate true
+
+      - name: Upload the SBOMs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-sbom
+          path: sbom/
+          if-no-files-found: error
+          retention-days: 7

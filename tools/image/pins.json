@@ -4,5 +4,19 @@
   "buildkit": "moby/buildkit:v0.35.0@sha256:aa632b921ef07411d2cb77292cd34213d4f7b384001d6fceef1e1f25bf9752bb",
   "registry": "registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373",
   "skopeo": "quay.io/skopeo/stable:v1.20.0@sha256:47853bb9fb24202af9110531ebd6e43c5f97701254ca290596640290d17942f4",
-  "platforms": ["linux/amd64", "linux/arm64"]
+  "platforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "tools": {
+    "comment": "Release binaries of the SBOM tool and the scanner, pinned by sha256 from each release's checksums file; versions at least two weeks old when pinned (Trivy's tags were hijacked in March 2026).",
+    "syft": {
+      "version": "1.56.0",
+      "linux_amd64": "1c2493cfcf52d3367d6cb25780d9190c111c2219c34c820574c43e8bae15c528"
+    },
+    "grype": {
+      "version": "0.121.1",
+      "linux_amd64": "bc3ea3f9e6fd56ac781c08c6c5e614271b79f438200757f6932085c19b0a4657"
+    }
+  }
 }

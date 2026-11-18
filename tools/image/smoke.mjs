@@ -48,7 +48,8 @@ function waitForLog(container, text) {
   fail(`${container} never logged ${JSON.stringify(text)}`);
 }
 
-docker(["pull", "--quiet", image]);
+// An image loaded from an archive (the arm64 check) is already there and has no registry.
+if (docker(["image", "inspect", image], { allowFail: true }).status !== 0) docker(["pull", "--quiet", image]);
 try {
   const version = docker(["image", "inspect", "--format", '{{ index .Config.Labels "org.opencontainers.image.version" }}', image]).stdout.trim();
   const printed = docker(["run", "--rm", ...hardened, image, "--version"], { allowFail: true });
