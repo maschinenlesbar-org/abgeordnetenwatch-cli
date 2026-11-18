@@ -60,7 +60,7 @@ try {
   const printed = docker(["run", "--rm", ...hardened, image, "--version"], { allowFail: true });
   check("--version", printed.status === 0 && printed.stdout.trim() === version, `exit ${printed.status}, printed ${JSON.stringify(printed.stdout)}, label ${version}`);
   if (args.app === "mcp") {
-    smokeMcp();
+    await smokeMcp();
     process.exit(0);
   }
 
@@ -99,7 +99,7 @@ try {
 }
 
 /** The MCP server's checks: stdio, then HTTP on a loopback port. */
-function smokeMcp() {
+async function smokeMcp() {
   const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "0" } } });
   const started = Date.now();
   const stdio = docker(["run", "--rm", "-i", ...hardened, "--network", "none", image], { input: `${initialize}\n`, allowFail: true });
@@ -115,14 +115,21 @@ function smokeMcp() {
     const port = docker(["port", http, "3000/tcp"]).stdout.trim().split("\n")[0]?.split(":").pop();
     if (port === undefined || port === "") fail("the HTTP server's port isn't published");
     waitForLog(http, "serving MCP on http");
-    const post = (headers = []) =>
-      run("curl", ["-s", "-o", "/dev/stderr", "-w", "%{http_code}", "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", ...headers.flatMap((h) => ["-H", h]), "--data", initialize, `http://127.0.0.1:${port}/mcp`], { allowFail: true });
-    const ok = post();
-    check("HTTP: POST /mcp answers an initialize", ok.stdout === "200" && ok.stderr.includes('"serverInfo"'), `HTTP ${ok.stdout}: ${ok.stderr.slice(0, 300)}`);
-    const health = run("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", `http://127.0.0.1:${port}/healthz`], { allowFail: true });
-    check("HTTP: /healthz is 200", health.stdout === "200", `HTTP ${health.stdout}`);
-    const foreign = post(["origin: http://evil.example"]);
-    check("HTTP: a foreign Origin is 403", foreign.stdout === "403", `HTTP ${foreign.stdout}`);
+    const base = `http://127.0.0.1:${port}`;
+    const post = async (headers = {}) => {
+      const response = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+        body: initialize,
+      });
+      return { status: response.status, body: await response.text() };
+    };
+    const ok = await post();
+    check("HTTP: POST /mcp answers an initialize", ok.status === 200 && ok.body.includes('"serverInfo"'), `HTTP ${ok.status}: ${ok.body.slice(0, 300)}`);
+    const health = await fetch(`${base}/healthz`);
+    check("HTTP: /healthz is 200", health.status === 200, `HTTP ${health.status}`);
+    const foreign = await post({ origin: "http://evil.example" });
+    check("HTTP: a foreign Origin is 403", foreign.status === 403, `HTTP ${foreign.status}`);
     const stopping = Date.now();
     docker(["stop", "--time", "10", http]);
     const took = Date.now() - stopping;
