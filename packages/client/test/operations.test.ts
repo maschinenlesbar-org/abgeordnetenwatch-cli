@@ -170,7 +170,7 @@ test("inputs are checked before any request", async () => {
   const client = new AbgeordnetenwatchClient({ transport: mock.transport });
   await assert.rejects(getVotingRecord(client, { name: "x", politicianId: 1 }), AwValidationError);
   await assert.rejects(getVotingRecord(client, {}), AwValidationError);
-  await assert.rejects(findPolitician(client, { name: "​" }), AwValidationError);
+  await assert.rejects(findPolitician(client, { name: "\u200b" }), AwValidationError);
   await assert.rejects(findPolitician(client, { name: "Scholz", limit: 500 }), AwValidationError);
   await assert.rejects(getPollResult(client, { pollId: "-1" }), AwValidationError);
   assert.equal(mock.calls.length, 0);
