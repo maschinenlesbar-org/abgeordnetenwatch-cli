@@ -100,3 +100,31 @@ test("every image and tool is pinned, and the workflows' registry service matche
 test("the Dockerfile pulls no frontend: no syntax directive", () => {
   assert.doesNotMatch(read("tools/image/Dockerfile"), /^#\s*syntax\s*=/im);
 });
+
+const publishJobs = jobs(read(".github/workflows/publish.yml"));
+const publishJob = (name: string): string => {
+  const text = publishJobs.get(name);
+  assert.ok(text, `publish.yml has a job ${name}`);
+  return text;
+};
+
+test("publish.yml publishes the release's own files, checked against the immutable release and release.yml's attestation", () => {
+  for (const name of ["npm", "images"]) {
+    const job = publishJob(name);
+    assert.match(job, /gh release download/, name);
+    assert.match(job, /gh release verify-asset/, name);
+    assert.match(job, /gh attestation verify [^\n]*\n[^\n]*--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml"/, name);
+    assert.doesNotMatch(job, /npm (ci|install|test|pack)\b|npm run\b/, `${name} runs no dependency code`);
+  }
+  assert.match(publishJob("npm"), /npm publish "\$TARBALL" --provenance/);
+});
+
+test("publish.yml's image push runs in the environment the AWS role trusts, with no AWS action and no key in the shell", () => {
+  const images = publishJob("images");
+  assert.match(images, /environment:\s*ecr-public/);
+  assert.doesNotMatch(images, /aws-actions\/|assume-role-with-web-identity|AWS_SECRET_ACCESS_KEY|set -x/);
+  assert.match(images, /AWS_WEB_IDENTITY_TOKEN_FILE/);
+  assert.match(images, /tools\/image\/push\.mjs/);
+  assert.match(images, /if: always\(\)\s+run: rm -f "\$RUNNER_TEMP\/oidc\.jwt"/);
+  assert.doesNotMatch(publishJob("npm"), /environment:/, "the npm job can't mint a token the AWS role trusts");
+});

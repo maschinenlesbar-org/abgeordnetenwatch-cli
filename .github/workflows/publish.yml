@@ -1,24 +1,35 @@
 name: Publish
 
-# Manually publish a released version to the npm registry, run from its tag:
+# Manually publish a released version, run from its tag:
 #
 #   gh workflow run publish.yml -R <owner>/<repo> --ref vX.Y.Z
 #
-# The version is the tag's (vX.Y.Z -> X.Y.Z); a run from a branch fails. Running
-# from the tag also means this file is the one the release was cut with. The repository is
-# an npm workspace: the published package is apps/cli, which bundles packages/client.
+# The version is the tag's (vX.Y.Z -> X.Y.Z); a run from a branch fails. Running from the tag
+# also means this file is the one the release was cut with.
 #
-# Authentication uses npm Trusted Publishing (OIDC): GitHub mints a short-lived
-# token for this run and npm verifies it against the trusted publisher
-# configured for the package — no long-lived NPM_TOKEN is stored.
+# What is published are the GitHub Release's own files, not a rebuild: each job downloads its
+# file from the release and checks it twice before anything leaves this run — against the
+# release's attestation (`gh release verify-asset`; the repository has immutable releases on, so
+# a file can't be swapped after the release) and against the build provenance release.yml's
+# attest job signed (`gh attestation verify`, signer release.yml at this tag). So the npm
+# package, the image in the registry and the release asset are the same bytes, and no
+# third-party code runs in these jobs: no checkout of dependencies, no `npm ci`, no tests
+# (release.yml ran them on this tag).
 #
-# One-time setup on npmjs.com: package `@maschinenlesbar.org/abgeordnetenwatch-cli` ->
-# Settings -> Trusted Publisher -> GitHub Actions, this repo, workflow `publish.yml`.
+# Two independent jobs, each safe to re-run alone (`gh run rerun <id> --failed`): a version
+# already published with the same bytes is skipped, with other bytes it fails.
+#  - npm:    npm Trusted Publishing (OIDC), no NPM_TOKEN stored anywhere. One-time setup on
+#            npmjs.com: the package -> Settings -> Trusted Publisher -> GitHub Actions, this
+#            repo, workflow `publish.yml`.
+#  - images: the image archive to Amazon ECR Public, with a role assumed through GitHub OIDC.
+#            Runs in the environment `ecr-public` (deployment policy: tags v*), whose variables
+#            AWS_ECR_ROLE_ARN and ECR_REGISTRY (public.ecr.aws/<alias>) name the role and the
+#            registry; the role trusts only this environment of this repository. Without the
+#            variables the job ends with a notice.
 on:
   workflow_dispatch:
 
-# Least privilege at the workflow level: only read. The OIDC id-token scope is
-# granted per-job, to the publish job that actually needs it.
+# Least privilege at the workflow level: only read. The OIDC id-token scope is granted per job.
 permissions:
   contents: read
 
@@ -26,12 +37,19 @@ concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  PACKAGE: '@maschinenlesbar.org/abgeordnetenwatch-cli'
+  TARBALL_PREFIX: maschinenlesbar.org-abgeordnetenwatch-cli
+  IMAGE: abgeordnetenwatch-cli
+
 jobs:
-  publish:
+  npm:
     name: Publish to npm
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+      attestations: read # gh attestation verify
       id-token: write # npm Trusted Publishing (OIDC); provenance is attached automatically
 
     steps:
@@ -52,19 +70,12 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
-      # Publish exactly the tagged source.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.ref }}
-          persist-credentials: false
-
       - name: Use Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Trusted publishing requires npm >= 11.5.1. Node 24 bundles it (Node 22
           # still ships npm 10), so npm itself is never installed ad hoc from the
-          # registry inside this id-token: write job, where a compromised package
-          # would run with the token that mints the provenance attestation.
+          # registry inside this id-token: write job.
           node-version: 24.x
           registry-url: 'https://registry.npmjs.org'
           # No cache restoration in the publishing job (cache-poisoning hardening).
@@ -78,22 +89,185 @@ jobs:
             exit 1
           fi
 
-      - name: Verify apps/cli/package.json matches the tag
+      - name: Download and verify the release tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          pkg="$(node -p "require('./apps/cli/package.json').version")"
-          if [ "$pkg" != "$VERSION" ]; then
-            echo "::error::apps/cli/package.json version ('$pkg') does not match the tag (v$VERSION)."
+          tarball="${TARBALL_PREFIX}-${VERSION}.tgz"
+          gh release download "$GITHUB_REF_NAME" --pattern "$tarball" --dir release
+          gh release verify-asset "$GITHUB_REF_NAME" "release/$tarball"
+          gh attestation verify "release/$tarball" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "$GITHUB_REF"
+          packed="$(tar -xOzf "release/$tarball" package/package.json | jq -r '.name + "@" + .version')"
+          if [ "$packed" != "$PACKAGE@$VERSION" ]; then
+            echo "::error::The tarball is $packed, the tag wants $PACKAGE@$VERSION."
             exit 1
           fi
+          echo "TARBALL=release/$tarball" >> "$GITHUB_ENV"
 
-      - name: Install
-        run: npm ci
+      # The registry's integrity of an existing version is the sha512 of its tarball: the same
+      # bytes are a skip (a re-run), other bytes a failure.
+      - name: Publish to npm (Trusted Publishing, provenance)
+        run: |
+          ours="sha512-$(openssl dgst -sha512 -binary "$TARBALL" | base64 -w 0)"
+          theirs="$(npm view "$PACKAGE@$VERSION" dist.integrity 2>/dev/null || true)"
+          if [ -n "$theirs" ]; then
+            if [ "$theirs" = "$ours" ]; then
+              echo "::notice::$PACKAGE@$VERSION is already on npm with these bytes; nothing to do."
+              exit 0
+            fi
+            echo "::error::$PACKAGE@$VERSION is on npm with other bytes ($theirs)."
+            exit 1
+          fi
+          npm publish "$TARBALL" --provenance --access public
 
-      - name: Test
-        run: npm test
+  images:
+    name: Push the image to ECR Public
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ecr-public
+    permissions:
+      contents: read
+      attestations: read # gh attestation verify
+      id-token: write # the GitHub OIDC token the AWS role trusts
 
-      # The app's `prepack` hook builds and bundles packages/client and commander.
-      # No NPM_TOKEN: OIDC provides the short-lived credential, and provenance
-      # is generated from this workflow run.
-      - name: Publish to npm
-        run: npm publish --workspace apps/cli --provenance --access public
+    steps:
+      - name: Take the version from the release tag
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/tags/v*) version="${REF#refs/tags/v}" ;;
+            *)
+              echo "::error::Run this workflow from a release tag, not from $REF."
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag v$version is not a release version (vX.Y.Z)."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Check the environment's variables
+        id: vars
+        env:
+          ROLE: ${{ vars.AWS_ECR_ROLE_ARN }}
+          REGISTRY: ${{ vars.ECR_REGISTRY }}
+        run: |
+          if [ -z "$ROLE" ] || [ -z "$REGISTRY" ]; then
+            echo "::notice::AWS_ECR_ROLE_ARN or ECR_REGISTRY is not set in the environment ecr-public; no image is pushed."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "$ROLE" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$' || { echo "::error::AWS_ECR_ROLE_ARN is not a role ARN."; exit 1; }
+          printf '%s' "$REGISTRY" | grep -Eq '^public\.ecr\.aws/[a-z0-9][a-z0-9_-]*$' || { echo "::error::ECR_REGISTRY must be public.ecr.aws/<alias>."; exit 1; }
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      # The tag's tools/image (push.mjs), never its dependencies.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.vars.outputs.skip == 'false'
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        if: steps.vars.outputs.skip == 'false'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Download and verify the image archive
+        if: steps.vars.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          archive="${IMAGE}-${VERSION}.oci.tar"
+          gh release download "$GITHUB_REF_NAME" --pattern "$archive" --dir release
+          gh release verify-asset "$GITHUB_REF_NAME" "release/$archive"
+          gh attestation verify "release/$archive" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "$GITHUB_REF"
+          echo "ARCHIVE=release/$archive" >> "$GITHUB_ENV"
+
+      # The GitHub OIDC token goes into a file the AWS CLI reads itself (AWS_WEB_IDENTITY_TOKEN_FILE),
+      # so no access key passes through this shell or its log; skopeo keeps its login in a file
+      # under RUNNER_TEMP, removed at the end.
+      - name: Log in to ECR Public through GitHub OIDC
+        if: steps.vars.outputs.skip == 'false'
+        env:
+          ROLE: ${{ vars.AWS_ECR_ROLE_ARN }}
+        run: |
+          umask 077
+          curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc.jwt"
+          {
+            echo "AWS_ROLE_ARN=$ROLE"
+            echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc.jwt"
+            echo "AWS_ROLE_SESSION_NAME=publish-${GITHUB_RUN_ID}"
+            echo "AWS_REGION=us-east-1"
+            echo "REGISTRY_AUTH_FILE=$RUNNER_TEMP/registry-auth.json"
+          } >> "$GITHUB_ENV"
+          export AWS_ROLE_ARN="$ROLE" AWS_WEB_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc.jwt" AWS_ROLE_SESSION_NAME="publish-${GITHUB_RUN_ID}" AWS_REGION=us-east-1 REGISTRY_AUTH_FILE="$RUNNER_TEMP/registry-auth.json"
+          aws ecr-public get-login-password --region us-east-1 | skopeo login --username AWS --password-stdin public.ecr.aws
+
+      - name: Push the version tag
+        if: steps.vars.outputs.skip == 'false'
+        env:
+          REGISTRY: ${{ vars.ECR_REGISTRY }}
+        run: |
+          index="$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')"
+          set +e
+          existing="$(aws ecr-public describe-images --repository-name "$IMAGE" --image-ids imageTag="$VERSION" \
+            --query 'imageDetails[0].imageDigest' --output text 2>"$RUNNER_TEMP/describe.err")"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            if [ "$existing" = "$index" ]; then
+              echo "::notice::$REGISTRY/$IMAGE:$VERSION is already this image ($index); nothing to push."
+              echo "INDEX=$index" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "::error::$REGISTRY/$IMAGE:$VERSION is $existing, the release's image is $index."
+            exit 1
+          fi
+          if ! grep -q ImageNotFoundException "$RUNNER_TEMP/describe.err"; then
+            cat "$RUNNER_TEMP/describe.err"
+            echo "::error::Could not ask ECR whether $IMAGE:$VERSION exists."
+            exit 1
+          fi
+          node tools/image/push.mjs --archive "$ARCHIVE" --to "$REGISTRY/$IMAGE:$VERSION"
+          echo "INDEX=$index" >> "$GITHUB_ENV"
+
+      # `latest` names the highest released version, never an older one re-published later.
+      - name: Move latest when this is the highest version
+        if: steps.vars.outputs.skip == 'false'
+        env:
+          REGISTRY: ${{ vars.ECR_REGISTRY }}
+        run: |
+          highest="$(aws ecr-public describe-image-tags --repository-name "$IMAGE" --query 'imageTagDetails[].imageTag' --output text \
+            | tr '\t' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          if [ "$highest" != "$VERSION" ]; then
+            echo "::notice::$highest is newer than $VERSION; latest stays."
+            exit 0
+          fi
+          skopeo copy --all --preserve-digests "docker://$REGISTRY/$IMAGE:$VERSION" "docker://$REGISTRY/$IMAGE:latest"
+
+      - name: Read the image back without credentials
+        if: steps.vars.outputs.skip == 'false'
+        env:
+          REGISTRY: ${{ vars.ECR_REGISTRY }}
+        run: |
+          served="sha256:$(skopeo inspect --raw --no-creds "docker://$REGISTRY/$IMAGE:$VERSION" | sha256sum | cut -d ' ' -f 1)"
+          if [ "$served" != "$INDEX" ]; then
+            echo "::error::$REGISTRY/$IMAGE:$VERSION serves $served, the release's image is $INDEX."
+            exit 1
+          fi
+          echo "::notice::$REGISTRY/$IMAGE:$VERSION@$INDEX"
+
+      - name: Remove the login and the token
+        if: always()
+        run: rm -f "$RUNNER_TEMP/oidc.jwt" "$RUNNER_TEMP/registry-auth.json" "$RUNNER_TEMP/describe.err"
