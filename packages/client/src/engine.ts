@@ -38,6 +38,46 @@ import {
 } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.abgeordnetenwatch.de";
+
+/** Per-call options of a request. */
+export interface RequestOptions {
+  /**
+   * Ends the call as soon as it aborts, wherever the call is: before a request, in the
+   * transport (whose own signal is aborted too), in the backoff before a retry. The call then
+   * rejects with an AwNetworkError `<METHOD> <url> failed: aborted`, which is never retried.
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * Check a RequestOptions argument from a JavaScript caller: an object (or nothing) whose
+ * `signal`, if any, is an AbortSignal. Anything else is an AwValidationError before any request.
+ */
+export function assertRequestOptions(options: unknown): asserts options is RequestOptions | undefined {
+  if (options === undefined) return;
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new AwValidationError("Invalid options: expected an object such as { signal }.");
+  }
+  const signal = (options as { signal?: unknown }).signal;
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    throw new AwValidationError("Invalid options: signal must be an AbortSignal.");
+  }
+}
+
+/**
+ * `promise`, unless `signal` aborts first: then a rejection with `error()`. Without a signal,
+ * `promise` itself. The listener is removed once either settles.
+ */
+function unlessAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined, error: () => Error): Promise<T> {
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(error());
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(error());
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return Promise.race([promise, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
+}
 const DEFAULT_USER_AGENT = "abgeordnetenwatch-cli";
 
 export interface RawResponse {
@@ -570,8 +610,18 @@ export class RequestEngine {
     }
   }
 
-  /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
-  private async backOff(attempt: number, delayMs: number, url: string, status?: number): Promise<void> {
+  /**
+   * Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. An
+   * abort of `signal` ends the wait at once with `aborted()`.
+   */
+  private async backOff(
+    attempt: number,
+    delayMs: number,
+    url: string,
+    status: number | undefined,
+    signal: AbortSignal | undefined,
+    aborted: () => Error,
+  ): Promise<void> {
     try {
       this.onRetry?.({
         retry: attempt,
@@ -583,7 +633,7 @@ export class RequestEngine {
     } catch {
       // a logging hook is no reason to fail the request
     }
-    await this.sleep(delayMs);
+    await unlessAborted(this.sleep(delayMs), signal, aborted);
   }
 
   /**
@@ -663,25 +713,32 @@ export class RequestEngine {
    * Call the transport under the overall deadline (`timeoutMs`): the request gets an
    * AbortSignal that fires at the deadline, and the call rejects then whether the transport
    * stops or not — a custom transport (fetch, a node:http wrapper) that ignores `timeoutMs`
-   * can't hang the caller. A synchronous throw becomes a rejection.
+   * can't hang the caller. A synchronous throw becomes a rejection. The caller's `signal`
+   * aborts the transport's signal too, and the call rejects with `aborted()` at once.
    */
-  private async callTransport(request: HttpRequest): Promise<HttpResponse> {
-    const call = (signal?: AbortSignal): Promise<HttpResponse> =>
-      Promise.resolve().then(() => this.transport(signal === undefined ? request : { ...request, signal }));
-    if (this.timeoutMs === 0) return call();
+  private async callTransport(request: HttpRequest, signal: AbortSignal | undefined, aborted: () => Error): Promise<HttpResponse> {
+    const call = (transportSignal?: AbortSignal): Promise<HttpResponse> =>
+      Promise.resolve().then(() => this.transport(transportSignal === undefined ? request : { ...request, signal: transportSignal }));
+    if (this.timeoutMs === 0 && signal === undefined) return call();
     const controller = new AbortController();
+    const stop = (): void => controller.abort(aborted());
+    signal?.addEventListener("abort", stop, { once: true });
     let timer: NodeJS.Timeout | undefined;
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        const err = new AwNetworkError(`Request timed out after ${this.timeoutMs}ms`);
-        controller.abort(err);
-        reject(err);
-      }, Math.min(this.timeoutMs, MAX_TIMEOUT_MS));
-    });
+    const deadline =
+      this.timeoutMs === 0
+        ? new Promise<never>(() => {})
+        : new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              const err = new AwNetworkError(`Request timed out after ${this.timeoutMs}ms`);
+              controller.abort(err);
+              reject(err);
+            }, Math.min(this.timeoutMs, MAX_TIMEOUT_MS));
+          });
     try {
-      return await Promise.race([call(controller.signal), deadline]);
+      return await unlessAborted(Promise.race([call(controller.signal), deadline]), signal, aborted);
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
     }
   }
 
@@ -689,8 +746,10 @@ export class RequestEngine {
   async request(
     method: string,
     path: string,
-    options: { query?: QueryParams; accept: string } = { accept: "application/json" },
+    options: { query?: QueryParams; accept: string; signal?: AbortSignal } = { accept: "application/json" },
   ): Promise<RawResponse> {
+    assertRequestOptions({ signal: options.signal });
+    const signal = options.signal;
     // The transport never sees the base URL's userinfo: the engine sends it as an
     // Authorization header, per hop, so a redirect to the same origin (relative or
     // absolute) keeps it and one to another origin or scheme drops it. A transport such
@@ -715,25 +774,32 @@ export class RequestEngine {
     const idempotent = /^(GET|HEAD)$/i.test(method);
     let attempt = 0;
     let redirects = 0;
+    // The caller's abort, named like any failure of this request (the URL as it is now).
+    const aborted = (): AwNetworkError => new AwNetworkError(`${method} ${redactUrl(url)} failed: aborted`);
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
+      if (signal?.aborted) throw aborted();
       let response: HttpResponse;
       try {
-        response = await this.callTransport({
-          method,
-          url,
-          headers,
-          timeoutMs: this.timeoutMs,
-          redirect: "manual",
-          ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
-        });
+        response = await this.callTransport(
+          {
+            method,
+            url,
+            headers,
+            timeoutMs: this.timeoutMs,
+            redirect: "manual",
+            ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
+          },
+          signal,
+          aborted,
+        );
       } catch (cause) {
         // A connection the server (or a proxy) reset is the network-level twin of a 503:
         // retry an idempotent request, whichever transport reported it. Timeouts are not
         // retried — a slow upstream should not be asked again at once.
         if (idempotent && hasTransientCode(cause) && attempt < this.maxRetries) {
           attempt += 1;
-          await this.backOff(attempt, this.retryDelayMs * attempt, url);
+          await this.backOff(attempt, this.retryDelayMs * attempt, url, undefined, signal, aborted);
           continue;
         }
         // A reset names only itself ("socket hang up"): say which request it broke off and,
@@ -805,7 +871,7 @@ export class RequestEngine {
         // less: `Retry-After: 0` or a date in the past turned the retries into a zero-delay
         // burst against a server that had just asked for less load.
         const backoff = this.retryDelayMs * attempt;
-        await this.backOff(attempt, retryAfter === undefined ? backoff : Math.max(retryAfter, backoff), url, status);
+        await this.backOff(attempt, retryAfter === undefined ? backoff : Math.max(retryAfter, backoff), url, status, signal, aborted);
         continue;
       }
 
@@ -895,8 +961,13 @@ export class RequestEngine {
    * well-formed text (`jq` rejects a lone surrogate, and with it the whole output), and
    * `onWarning` is told how many. One bad character never sinks a whole answer.
    */
-  async getJson<T>(path: string, query?: QueryParams): Promise<T> {
-    const res = await this.request("GET", path, { query, accept: "application/json" });
+  async getJson<T>(path: string, query?: QueryParams, options?: RequestOptions): Promise<T> {
+    assertRequestOptions(options);
+    const res = await this.request("GET", path, {
+      query,
+      accept: "application/json",
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+    });
     const request = `GET ${this.describeUrl(path, query)}`;
     // Guard against a 2xx response that is not actually JSON (e.g. a captive
     // portal or a wildcard-DNS host returning an HTML page). The header may carry

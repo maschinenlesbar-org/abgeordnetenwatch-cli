@@ -9,7 +9,7 @@
 // so the client is generic over the collection name rather than exposing 18
 // near-identical method pairs. See openapi.yaml for the full entity reference.
 
-import { RequestEngine, type EngineOptions } from "./engine.js";
+import { assertRequestOptions, RequestEngine, type EngineOptions, type RequestOptions } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import { AwParseError, AwValidationError, MAX_QUOTED_LENGTH } from "./errors.js";
 import { assertParams, describeValue, normalizeEntityId, normalizeText, normalizeToken, validateListParams } from "./validate.js";
@@ -93,10 +93,12 @@ export class AbgeordnetenwatchClient {
   async list<T = Entity>(
     collection: EntityCollection,
     params: ListParams = {},
+    options?: RequestOptions,
   ): Promise<ListResponse<T>> {
+    assertRequestOptions(options);
     const path = `${API_PREFIX}/${checkCollection(collection)}`;
     const query = this.toQuery(params);
-    const body = await this.engine.getJson<unknown>(path, query);
+    const body = await this.engine.getJson<unknown>(path, query, options);
     const request = this.describe(path, query);
     assertEnvelope(body, request, this.engine);
     if (!Array.isArray(body["data"])) throw shapeError(request, "a data array");
@@ -114,9 +116,11 @@ export class AbgeordnetenwatchClient {
   async get<T = Entity>(
     collection: EntityCollection,
     id: number | string,
+    options?: RequestOptions,
   ): Promise<DetailResponse<T>> {
+    assertRequestOptions(options);
     const path = `${API_PREFIX}/${checkCollection(collection)}/${normalizeEntityId(id)}`;
-    const body = await this.engine.getJson<unknown>(path);
+    const body = await this.engine.getJson<unknown>(path, undefined, options);
     const request = this.describe(path);
     assertEnvelope(body, request, this.engine);
     if (!isObject(body["data"])) throw shapeError(request, "a data object");
@@ -129,13 +133,14 @@ export class AbgeordnetenwatchClient {
    * Asks for a single item (`range_end: 1`) and reads `meta.result.total`, which
    * the API reports as the true match count independent of the page size.
    */
-  async count(collection: EntityCollection, params: ListParams = {}): Promise<number> {
+  async count(collection: EntityCollection, params: ListParams = {}, options?: RequestOptions): Promise<number> {
+    assertRequestOptions(options);
     // Check the caller's own parameters, including a rangeEnd that is then replaced.
     assertParams("params", params);
     assertKnownListParams(params);
     validateListParams(params);
     const asked: ListParams = { ...params, rangeEnd: 1 };
-    const res = await this.list(collection, asked);
+    const res = await this.list(collection, asked, options);
     const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
     if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
       throw shapeError(this.describe(`${API_PREFIX}/${collection}`, this.toQuery(asked)), "a numeric meta.result.total");
