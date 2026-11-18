@@ -3,7 +3,7 @@ name: Images
 # The container image on every push, built and pushed exactly as a release does it (the same
 # tools/image scripts), so the image path is proven before a tag depends on it:
 #  - build:       pack the CLI, build the multi-arch OCI archive, push it to a local registry
-#                 with push.mjs (the script publish.yml pushes to ECR with), smoke-test it;
+#                 with push.mjs (the script publish.yml pushes to ghcr.io with), smoke-test it;
 #  - smoke-arm64: the arm64 image on an arm64 runner;
 #  - sbom:        one CycloneDX SBOM per platform and the vulnerability gate (a fixable high
 #                 or critical finding fails). Weekly too: the scanner's database changes, and

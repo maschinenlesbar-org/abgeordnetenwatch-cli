@@ -38,13 +38,13 @@ abgeordnetenwatch entities          # the 18 collections you can query
 
 ### Docker
 
-From 0.10.0 every release is also a container image for linux/amd64 and linux/arm64 on Amazon
-ECR Public, made from the same tarball as the npm package. It needs no Node.js and no
+From 0.10.0 every release is also a container image for linux/amd64 and linux/arm64 on the
+GitHub Container Registry, made from the same tarball as the npm package. It needs no Node.js and no
 install:
 
 ```bash
 docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-  public.ecr.aws/maschinenlesbar/abgeordnetenwatch-cli:latest list parties --range-end 3
+  ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli:latest list parties --range-end 3
 ```
 
 `latest` is the newest release. For scripts, name a release and pin its digest, which the
@@ -53,7 +53,7 @@ docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
 check it with
 
 ```bash
-gh attestation verify oci://public.ecr.aws/maschinenlesbar/abgeordnetenwatch-cli:latest \
+gh attestation verify oci://ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli:latest \
   --repo maschinenlesbar-org/abgeordnetenwatch-cli
 ```
 

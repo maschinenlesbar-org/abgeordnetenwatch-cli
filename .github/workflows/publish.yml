@@ -8,24 +8,21 @@ name: Publish
 # also means this file is the one the release was cut with.
 #
 # What is published are the GitHub Release's own files, not a rebuild: each job downloads its
-# file from the release and checks it twice before anything leaves this run — against the
-# release's attestation (`gh release verify-asset`; the repository has immutable releases on, so
-# a file can't be swapped after the release) and against the build provenance release.yml's
-# attest job signed (`gh attestation verify`, signer release.yml at this tag). So the npm
-# package, the image in the registry and the release asset are the same bytes, and no
-# third-party code runs in these jobs: no checkout of dependencies, no `npm ci`, no tests
-# (release.yml ran them on this tag).
+# file from the release and checks it against the build provenance release.yml's attest job
+# signed for this tag (`gh attestation verify`, signer release.yml, source ref this tag) before
+# anything leaves this run. A file swapped on the release after it was cut fails that check. So
+# the npm package, the image in the registry and the release asset are the same bytes, and no
+# third-party code runs in these jobs: no `npm ci`, no tests (release.yml ran them on this tag).
 #
 # Two independent jobs, each safe to re-run alone (`gh run rerun <id> --failed`): a version
 # already published with the same bytes is skipped, with other bytes it fails.
 #  - npm:    npm Trusted Publishing (OIDC), no NPM_TOKEN stored anywhere. One-time setup on
 #            npmjs.com: the package -> Settings -> Trusted Publisher -> GitHub Actions, this
 #            repo, workflow `publish.yml`.
-#  - images: the image archive to Amazon ECR Public, with a role assumed through GitHub OIDC.
-#            Runs in the environment `ecr-public` (deployment policy: tags v*), whose variables
-#            AWS_ECR_ROLE_ARN and ECR_REGISTRY (public.ecr.aws/<alias>) name the role and the
-#            registry; the role trusts only this environment of this repository. Without the
-#            variables the job ends with a notice.
+#  - images: the image archive to the GitHub Container Registry (ghcr.io), with this run's
+#            GITHUB_TOKEN (packages: write); no stored credential. GitHub creates a new package
+#            as private: make it public once (package settings -> Change visibility); until then
+#            the anonymous read-back is a warning.
 on:
   workflow_dispatch:
 
@@ -41,6 +38,7 @@ env:
   PACKAGE: '@maschinenlesbar.org/abgeordnetenwatch-cli'
   TARBALL_PREFIX: maschinenlesbar.org-abgeordnetenwatch-cli
   IMAGE: abgeordnetenwatch-cli
+  IMAGE_REF: ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli
 
 jobs:
   npm:
@@ -96,7 +94,6 @@ jobs:
         run: |
           tarball="${TARBALL_PREFIX}-${VERSION}.tgz"
           gh release download "$GITHUB_REF_NAME" --pattern "$tarball" --dir release
-          gh release verify-asset "$GITHUB_REF_NAME" "release/$tarball"
           gh attestation verify "release/$tarball" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref "$GITHUB_REF"
@@ -124,14 +121,13 @@ jobs:
           npm publish "$TARBALL" --provenance --access public
 
   images:
-    name: Push the image to ECR Public
+    name: Push the image to the GitHub Container Registry
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ecr-public
     permissions:
       contents: read
       attestations: read # gh attestation verify
-      id-token: write # the GitHub OIDC token the AWS role trusts
+      packages: write # push to ghcr.io/<owner>/<image>
 
     steps:
       - name: Take the version from the release tag
@@ -151,123 +147,84 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Check the environment's variables
-        id: vars
-        env:
-          ROLE: ${{ vars.AWS_ECR_ROLE_ARN }}
-          REGISTRY: ${{ vars.ECR_REGISTRY }}
-        run: |
-          if [ -z "$ROLE" ] || [ -z "$REGISTRY" ]; then
-            echo "::notice::AWS_ECR_ROLE_ARN or ECR_REGISTRY is not set in the environment ecr-public; no image is pushed."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf '%s' "$ROLE" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$' || { echo "::error::AWS_ECR_ROLE_ARN is not a role ARN."; exit 1; }
-          printf '%s' "$REGISTRY" | grep -Eq '^public\.ecr\.aws/[a-z0-9][a-z0-9_-]*$' || { echo "::error::ECR_REGISTRY must be public.ecr.aws/<alias>."; exit 1; }
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-
       # The tag's tools/image (push.mjs), never its dependencies.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.vars.outputs.skip == 'false'
         with:
           persist-credentials: false
 
       - name: Use Node.js
-        if: steps.vars.outputs.skip == 'false'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.x
           package-manager-cache: false
 
       - name: Download and verify the image archive
-        if: steps.vars.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           archive="${IMAGE}-${VERSION}.oci.tar"
           gh release download "$GITHUB_REF_NAME" --pattern "$archive" --dir release
-          gh release verify-asset "$GITHUB_REF_NAME" "release/$archive"
           gh attestation verify "release/$archive" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref "$GITHUB_REF"
           echo "ARCHIVE=release/$archive" >> "$GITHUB_ENV"
+          echo "INDEX=$(tar -xOf "release/$archive" index.json | jq -r '.manifests[0].digest')" >> "$GITHUB_ENV"
 
-      # The GitHub OIDC token goes into a file the AWS CLI reads itself (AWS_WEB_IDENTITY_TOKEN_FILE),
-      # so no access key passes through this shell or its log; skopeo keeps its login in a file
-      # under RUNNER_TEMP, removed at the end.
-      - name: Log in to ECR Public through GitHub OIDC
-        if: steps.vars.outputs.skip == 'false'
+      # skopeo keeps the login in a file under RUNNER_TEMP, removed at the end.
+      - name: Log in to ghcr.io with this run's token
         env:
-          ROLE: ${{ vars.AWS_ECR_ROLE_ARN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           umask 077
-          curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value > "$RUNNER_TEMP/oidc.jwt"
-          {
-            echo "AWS_ROLE_ARN=$ROLE"
-            echo "AWS_WEB_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/oidc.jwt"
-            echo "AWS_ROLE_SESSION_NAME=publish-${GITHUB_RUN_ID}"
-            echo "AWS_REGION=us-east-1"
-            echo "REGISTRY_AUTH_FILE=$RUNNER_TEMP/registry-auth.json"
-          } >> "$GITHUB_ENV"
-          export AWS_ROLE_ARN="$ROLE" AWS_WEB_IDENTITY_TOKEN_FILE="$RUNNER_TEMP/oidc.jwt" AWS_ROLE_SESSION_NAME="publish-${GITHUB_RUN_ID}" AWS_REGION=us-east-1 REGISTRY_AUTH_FILE="$RUNNER_TEMP/registry-auth.json"
-          aws ecr-public get-login-password --region us-east-1 | skopeo login --username AWS --password-stdin public.ecr.aws
+          echo "REGISTRY_AUTH_FILE=$RUNNER_TEMP/registry-auth.json" >> "$GITHUB_ENV"
+          printf '%s' "$GH_TOKEN" | REGISTRY_AUTH_FILE="$RUNNER_TEMP/registry-auth.json" \
+            skopeo login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
 
       - name: Push the version tag
-        if: steps.vars.outputs.skip == 'false'
-        env:
-          REGISTRY: ${{ vars.ECR_REGISTRY }}
         run: |
-          index="$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')"
           set +e
-          existing="$(aws ecr-public describe-images --repository-name "$IMAGE" --image-ids imageTag="$VERSION" \
-            --query 'imageDetails[0].imageDigest' --output text 2>"$RUNNER_TEMP/describe.err")"
+          raw="$(skopeo inspect --raw "docker://$IMAGE_REF:$VERSION" 2>"$RUNNER_TEMP/inspect.err")"
           status=$?
           set -e
           if [ "$status" -eq 0 ]; then
-            if [ "$existing" = "$index" ]; then
-              echo "::notice::$REGISTRY/$IMAGE:$VERSION is already this image ($index); nothing to push."
-              echo "INDEX=$index" >> "$GITHUB_ENV"
+            existing="sha256:$(printf '%s' "$raw" | sha256sum | cut -d ' ' -f 1)"
+            if [ "$existing" = "$INDEX" ]; then
+              echo "::notice::$IMAGE_REF:$VERSION is already this image ($INDEX); nothing to push."
               exit 0
             fi
-            echo "::error::$REGISTRY/$IMAGE:$VERSION is $existing, the release's image is $index."
+            echo "::error::$IMAGE_REF:$VERSION is $existing, the release's image is $INDEX."
             exit 1
           fi
-          if ! grep -q ImageNotFoundException "$RUNNER_TEMP/describe.err"; then
-            cat "$RUNNER_TEMP/describe.err"
-            echo "::error::Could not ask ECR whether $IMAGE:$VERSION exists."
+          if ! grep -qiE 'manifest unknown|name unknown|not found' "$RUNNER_TEMP/inspect.err"; then
+            cat "$RUNNER_TEMP/inspect.err"
+            echo "::error::Could not ask ghcr.io whether $IMAGE:$VERSION exists."
             exit 1
           fi
-          node tools/image/push.mjs --archive "$ARCHIVE" --to "$REGISTRY/$IMAGE:$VERSION"
-          echo "INDEX=$index" >> "$GITHUB_ENV"
+          node tools/image/push.mjs --archive "$ARCHIVE" --to "$IMAGE_REF:$VERSION"
 
       # `latest` names the highest released version, never an older one re-published later.
       - name: Move latest when this is the highest version
-        if: steps.vars.outputs.skip == 'false'
-        env:
-          REGISTRY: ${{ vars.ECR_REGISTRY }}
         run: |
-          highest="$(aws ecr-public describe-image-tags --repository-name "$IMAGE" --query 'imageTagDetails[].imageTag' --output text \
-            | tr '\t' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          highest="$(skopeo list-tags "docker://$IMAGE_REF" | jq -r '.Tags[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
           if [ "$highest" != "$VERSION" ]; then
             echo "::notice::$highest is newer than $VERSION; latest stays."
             exit 0
           fi
-          skopeo copy --all --preserve-digests "docker://$REGISTRY/$IMAGE:$VERSION" "docker://$REGISTRY/$IMAGE:latest"
+          skopeo copy --all --preserve-digests "docker://$IMAGE_REF:$VERSION" "docker://$IMAGE_REF:latest"
 
-      - name: Read the image back without credentials
-        if: steps.vars.outputs.skip == 'false'
-        env:
-          REGISTRY: ${{ vars.ECR_REGISTRY }}
+      - name: Read the image back
         run: |
-          served="sha256:$(skopeo inspect --raw --no-creds "docker://$REGISTRY/$IMAGE:$VERSION" | sha256sum | cut -d ' ' -f 1)"
+          served="sha256:$(skopeo inspect --raw "docker://$IMAGE_REF:$VERSION" | sha256sum | cut -d ' ' -f 1)"
           if [ "$served" != "$INDEX" ]; then
-            echo "::error::$REGISTRY/$IMAGE:$VERSION serves $served, the release's image is $INDEX."
+            echo "::error::$IMAGE_REF:$VERSION serves $served, the release's image is $INDEX."
             exit 1
           fi
-          echo "::notice::$REGISTRY/$IMAGE:$VERSION@$INDEX"
+          if ! skopeo inspect --raw --no-creds "docker://$IMAGE_REF:$VERSION" > /dev/null 2>&1; then
+            echo "::warning::$IMAGE_REF is not public yet: https://github.com/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/package/${IMAGE} -> Package settings -> Change visibility -> Public."
+          fi
+          echo "::notice::$IMAGE_REF:$VERSION@$INDEX"
 
-      - name: Remove the login and the token
+      - name: Remove the login
         if: always()
-        run: rm -f "$RUNNER_TEMP/oidc.jwt" "$RUNNER_TEMP/registry-auth.json" "$RUNNER_TEMP/describe.err"
+        run: rm -f "$RUNNER_TEMP/registry-auth.json" "$RUNNER_TEMP/inspect.err"

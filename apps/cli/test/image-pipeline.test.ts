@@ -108,23 +108,22 @@ const publishJob = (name: string): string => {
   return text;
 };
 
-test("publish.yml publishes the release's own files, checked against the immutable release and release.yml's attestation", () => {
+test("publish.yml publishes the release's own files, checked against release.yml's attestation for the tag", () => {
   for (const name of ["npm", "images"]) {
     const job = publishJob(name);
     assert.match(job, /gh release download/, name);
-    assert.match(job, /gh release verify-asset/, name);
-    assert.match(job, /gh attestation verify [^\n]*\n[^\n]*--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml"/, name);
+    assert.match(job, /gh attestation verify [^\n]*\n[^\n]*--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml"[^\n]*\n[^\n]*--source-ref "\$GITHUB_REF"/, name);
     assert.doesNotMatch(job, /npm (ci|install|test|pack)\b|npm run\b/, `${name} runs no dependency code`);
   }
   assert.match(publishJob("npm"), /npm publish "\$TARBALL" --provenance/);
 });
 
-test("publish.yml's image push runs in the environment the AWS role trusts, with no AWS action and no key in the shell", () => {
+test("publish.yml pushes the image with the run's own token, no stored credential, and removes the login", () => {
   const images = publishJob("images");
-  assert.match(images, /environment:\s*ecr-public/);
-  assert.doesNotMatch(images, /aws-actions\/|assume-role-with-web-identity|AWS_SECRET_ACCESS_KEY|set -x/);
-  assert.match(images, /AWS_WEB_IDENTITY_TOKEN_FILE/);
+  assert.match(images, /packages:\s*write/);
+  assert.doesNotMatch(images, /secrets\.|id-token|environment:|set -x/);
+  assert.match(images, /skopeo login --username "\$GITHUB_ACTOR" --password-stdin ghcr\.io/);
   assert.match(images, /tools\/image\/push\.mjs/);
-  assert.match(images, /if: always\(\)\s+run: rm -f "\$RUNNER_TEMP\/oidc\.jwt"/);
-  assert.doesNotMatch(publishJob("npm"), /environment:/, "the npm job can't mint a token the AWS role trusts");
+  assert.match(images, /if: always\(\)\s+run: rm -f "\$RUNNER_TEMP\/registry-auth\.json"/);
+  assert.doesNotMatch(publishJob("npm"), /packages:\s*write/, "the npm job can't push images");
 });

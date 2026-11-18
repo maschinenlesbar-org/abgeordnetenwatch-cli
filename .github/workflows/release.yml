@@ -185,7 +185,7 @@ jobs:
   # digest that job recorded, with tools/image (pins.json: base, BuildKit, registry). No npm runs
   # here and no scanner or SBOM tool: this job records the archive's digest, which the release
   # job trusts. The archive is pushed to a local registry with push.mjs (the script publish.yml
-  # pushes to ECR with) and smoke-tested from there. Reproducible: SOURCE_DATE_EPOCH is the
+  # pushes to ghcr.io with) and smoke-tested from there. Reproducible: SOURCE_DATE_EPOCH is the
   # tagged commit's time, so a rebuild from the tarball gives the same index digest.
   image:
     name: Container image

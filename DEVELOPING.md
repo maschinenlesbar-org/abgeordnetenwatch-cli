@@ -525,7 +525,7 @@ security fix reaches the image only through a new base digest, so it means a pat
 | Script | What it does |
 |---|---|
 | `build.mjs` | Multi-arch OCI archive (amd64, arm64), reproducible: no provenance or SBOM attestation, timestamps from `SOURCE_DATE_EPOCH` (default: the HEAD commit's time). Two builds give the same index digest; compare index digests, not files. |
-| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ECR. |
+| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ghcr.io. |
 | `smoke.mjs` | Runs the image read-only, without capabilities, as an arbitrary uid: `--version`, `--help`, a network error, one request to a mock upstream (`smoke.json`), and `docker stop`, which must end a waiting call with 143 in under 5 s. |
 | `sbom.mjs` | One CycloneDX SBOM per platform with syft, and with `--gate true` grype over them: a fixable high or critical finding fails. Accepted findings go into `.grype.yaml` with a reason. CI only. |
 
@@ -545,8 +545,9 @@ an arm64 runner and the vulnerability gate. In `release.yml` the job `image` bui
 checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
 scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
 and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
-`publish.yml` publishes the release's own files: the tarball to npm and the archive to ECR
-Public, each checked against the immutable release and the attestation first.
+`publish.yml` publishes the release's own files: the tarball to npm and the archive to
+`ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli` (with the run's `GITHUB_TOKEN`), each checked
+first against the provenance `release.yml` signed for that tag (`gh attestation verify`).
 `apps/cli/test/image-pipeline.test.ts` pins these rules.
 
 As PID 1 the bin shim listens for SIGINT, SIGTERM and SIGHUP (`exitOnSignalsAsPid1`): without
