@@ -5,7 +5,7 @@
 // failure is a tool result with isError and a message saying what to change, never a protocol
 // error (an unknown tool or malformed call is the SDK's -32602).
 
-import { AbgeordnetenwatchClient, AwError, AwNetworkError, cutForMessage, DEFAULT_BASE_URL, type Transport } from "@maschinenlesbar.org/abgeordnetenwatch-client";
+import { AbgeordnetenwatchClient, AwError, AwNetworkError, cutForMessage, DEFAULT_BASE_URL, sizeLimitMessage, type Transport } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 import type { Logger } from "@maschinenlesbar.org/abgeordnetenwatch-log";
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import type { McpConfig } from "./config.js";
@@ -14,6 +14,9 @@ import { ANNOTATIONS, TOOLS, type ToolDefinition } from "./tools.js";
 import { PROGRAM, USER_AGENT, VERSION } from "./version.js";
 
 export const LICENCE = "CC0 1.0 (abgeordnetenwatch.de), https://creativecommons.org/publicdomain/zero/1.0/";
+
+/** The largest upstream answer the server reads (the client's maxResponseBytes). */
+export const MAX_UPSTREAM_BYTES = 16 * 1024 * 1024;
 
 /** The longest error message a tool result carries. */
 export const MAX_ERROR_MESSAGE = 5000;
@@ -44,7 +47,7 @@ export function createServerFactory(deps: ServerDeps): () => McpServer {
     ...(config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl }),
     timeoutMs: config.timeoutMs,
     userAgent: config.userAgent ?? USER_AGENT,
-    maxResponseBytes: 16 * 1024 * 1024,
+    maxResponseBytes: MAX_UPSTREAM_BYTES,
     onRetry: (event) => log.warn("http", `retry ${event.retry}/${event.maxRetries} of ${event.url} in ${event.delayMs} ms${event.status === undefined ? "" : ` (HTTP ${event.status})`}`),
     onWarning: (message) => log.warn("api", message),
   });
@@ -90,6 +93,12 @@ export async function callTool(
       );
     }
     if (err instanceof AwNetworkError && cancelled.aborted) return errorResult("The call was cancelled.");
+    // The client's size-cap text names the CLI's option, which a model calling this server can't use.
+    if (err instanceof AwNetworkError && err.message.includes(sizeLimitMessage(MAX_UPSTREAM_BYTES))) {
+      return errorResult(
+        `The answer from abgeordnetenwatch.de is larger than this server accepts (${MAX_UPSTREAM_BYTES / 1024 / 1024} MiB). Ask for fewer results (limit) or a narrower filter.`,
+      );
+    }
     if (err instanceof AwError) return errorResult(err.message);
     // A bug, not an answer: the details go to the log, the caller gets a fixed text.
     env.log.error("server", `${tool.name} failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);

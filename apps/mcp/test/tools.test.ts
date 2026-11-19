@@ -182,3 +182,14 @@ test("a bug is a fixed text for the caller and an ERROR record with the details"
   assert.equal(result.content[0]?.text, "countEntities failed with an internal error; the server's log has the details.");
   assert.match(lines.join("\n"), /ERROR \[abgeordnetenwatch-mcp\.server\] countEntities failed: TypeError: secret detail/);
 });
+
+test("an answer over the server's size cap is a tool error that says what to ask instead, not a CLI option", async () => {
+  const huge = makeMockTransport(() => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.alloc(17 * 1024 * 1024, 0x20) }));
+  const connection = await connect({ transport: huge });
+  const result = await connection.call("listEntities", { collection: "parties", limit: 100 });
+  assert.equal(result.isError, true);
+  const text = result.content[0]?.text ?? "";
+  assert.doesNotMatch(text, /--max-response-bytes|on the CLI/);
+  assert.match(text, /larger than this server accepts \(16 MiB\)\. Ask for fewer results \(limit\) or a narrower filter\./);
+  await connection.close();
+});
