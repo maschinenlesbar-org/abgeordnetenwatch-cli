@@ -76,7 +76,12 @@ async function serveOnHttp(factory: ReturnType<typeof createServerFactory>, conf
   const port = typeof address === "object" && address !== null ? address.port : config.port;
   log.info("mcp", `${PROGRAM} ${VERSION} serving MCP on http://${config.host.includes(":") ? `[${config.host}]` : config.host}:${port}/mcp`);
   if (!isLoopback(config.host)) {
-    log.warn("http", `listening on ${config.host}, not loopback: anyone who reaches this port can call the tools. The server has no authentication; put it behind a proxy that has.`);
+    // In a container the server can't see Docker's port mapping: `-p 127.0.0.1:…` keeps it local,
+    // `-p 3000:3000` doesn't. Say both, without claiming which one this is.
+    log.warn(
+      "http",
+      `listening on ${config.host}: reachable from outside this container or machine, and the server has no authentication. Publish the port on 127.0.0.1 only (docker run -p 127.0.0.1:<host port>:${port}) or put an authenticating proxy in front.`,
+    );
   }
   deps.onListening?.(server);
   await deps.stopped;

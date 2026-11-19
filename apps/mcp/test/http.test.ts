@@ -92,7 +92,10 @@ test("a body over 1 MiB is 413", async () => {
 
 test("a non-loopback address is a WARN record: the server has no authentication", async () => {
   const lines = await withServer(["--host", "0.0.0.0", "--allowed-hosts", "localhost,127.0.0.1"], async () => {});
-  assert.match(lines.join("\n"), /WARN  \[abgeordnetenwatch-mcp\.http\] listening on 0\.0\.0\.0, not loopback/);
+  assert.match(
+    lines.join("\n"),
+    /WARN  \[abgeordnetenwatch-mcp\.http\] listening on 0\.0\.0\.0: reachable from outside this container or machine, and the server has no authentication\. Publish the port on 127\.0\.0\.1 only \(docker run -p 127\.0\.0\.1:<host port>:\d+\) or put an authenticating proxy in front\./,
+  );
 });
 
 test("a usage error is one ERROR record and exit 2; a port in use is exit 1", async () => {
