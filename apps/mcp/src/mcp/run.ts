@@ -3,9 +3,9 @@
 
 import { existsSync } from "node:fs";
 import type { Server } from "node:http";
-import { nodeHttpTransport, type Transport } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 import { createLogger, type Logger } from "@maschinenlesbar.org/abgeordnetenwatch-log";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { nodeHttpTransport, type Transport } from "./api.js";
 import { HELP, parseConfig, type McpConfig } from "./config.js";
 import { createHttpServer, isLoopback } from "./http.js";
 import { limitTransport } from "./limiter.js";

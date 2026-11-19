@@ -3,8 +3,9 @@
 // the client's own rules for the base URL, whole numbers within bounds, a known log format.
 
 import { parseArgs } from "node:util";
-import { baseUrlProblem, MAX_TIMEOUT_MS } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 import { DEFAULT_LOG_FORMAT, logFormatProblem, type LogFormat } from "@maschinenlesbar.org/abgeordnetenwatch-log";
+import { baseUrlProblem, DEFAULT_BASE_URL, MAX_TIMEOUT_MS } from "./api.js";
+import { DESCRIPTION, PROGRAM } from "./version.js";
 
 export interface McpConfig {
   transport: "stdio" | "http";
@@ -36,10 +37,9 @@ export const DEFAULTS = {
   maxPages: 10,
 } as const;
 
-export const HELP = `Usage: abgeordnetenwatch-mcp [options]
+export const HELP = `Usage: ${PROGRAM} [options]
 
-MCP server for the open abgeordnetenwatch.de parliamentary data API: politicians, voting
-records, side jobs, polls and their results, as tools for AI agents. Read-only; no API key.
+${wrap(DESCRIPTION, 92)}
 
 Options:
   --transport <stdio|http>   stdio (default), or Streamable HTTP on POST /mcp
@@ -51,16 +51,29 @@ Options:
   --allowed-origins <list>   HTTP: browser origins allowed to call, comma-separated, exactly as
                              the browser sends them (https://app.example.org,
                              http://localhost:6274); none by default
-  --base-url <url>           API base URL (default https://www.abgeordnetenwatch.de)
+  --base-url <url>           API base URL (default ${DEFAULT_BASE_URL})
   --timeout <ms>             per upstream request, whole response included (default ${DEFAULTS.timeoutMs})
   --call-timeout <ms>        per tool call, retries included (default ${DEFAULTS.callTimeoutMs})
   --max-result-chars <n>     cap on one tool result's JSON (default ${DEFAULTS.maxResultChars})
-  --max-pages <n>            pages of 1000 read per collection and call (default ${DEFAULTS.maxPages})
+  --max-pages <n>            pages a tool reads per list and call (default ${DEFAULTS.maxPages})
   --user-agent <ua>          User-Agent header value
   --log-format <text|jsonl>  the records on stderr (default text)
   -h, --help                 show this help
   -V, --version              show the version
 `;
+
+/** `text` in lines of at most `width` characters, broken at spaces. */
+function wrap(text: string, width: number): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter((w) => w !== "")) {
+    if (line !== "" && line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else line = line === "" ? word : `${line} ${word}`;
+  }
+  return [...lines, line].join("\n");
+}
 
 /** Parse argv; never throws. */
 export function parseConfig(argv: readonly string[]): ParsedArgs {

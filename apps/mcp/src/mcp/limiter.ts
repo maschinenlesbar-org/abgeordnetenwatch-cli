@@ -1,13 +1,14 @@
 // One limiter per server process, shared by every tool call and every HTTP client, around the
-// client's transport: abgeordnetenwatch.de is someone else's production service, and one tool
-// call can mean several requests (paging, name -> mandate -> votes).
+// client's transport: the API is someone else's production service, and one tool call can mean
+// several requests (paging, a name resolved before the answer's own requests).
 //  - at most `inFlight` requests at once (default 2);
 //  - at most `perMinute` request starts in any 60 s (default 120);
 //  - a 429 pauses every start for its Retry-After (or 5 s), on top of the engine's own retry;
-//  - at most `queue` requests wait (default 32); one more is refused at once (AwNetworkError);
+//  - at most `queue` requests wait (default 32); one more is refused at once (the client's
+//    network error, so the call's answer says so);
 //  - a waiting request whose signal aborts leaves the queue.
 
-import { AwNetworkError, parseRetryAfter, type HttpRequest, type HttpResponse, type Transport } from "@maschinenlesbar.org/abgeordnetenwatch-client";
+import { NetworkError, type HttpRequest, type HttpResponse, type Transport } from "./api.js";
 
 export interface LimiterOptions {
   inFlight?: number;
@@ -62,7 +63,7 @@ export function limitTransport(transport: Transport, options: LimiterOptions = {
 
   return async (request: HttpRequest): Promise<HttpResponse> => {
     if (waiting.length >= queueSize) {
-      throw new AwNetworkError(`The server is busy: ${queueSize} requests to the API are already waiting. Try again shortly.`);
+      throw new NetworkError(`The server is busy: ${queueSize} requests to the API are already waiting. Try again shortly.`);
     }
     await new Promise<void>((resolve, reject) => {
       const waiter: Waiter = { start: resolve, fail: reject };
@@ -72,7 +73,7 @@ export function limitTransport(transport: Transport, options: LimiterOptions = {
           const at = waiting.indexOf(waiter);
           if (at >= 0) {
             waiting.splice(at, 1);
-            reject(signal.reason instanceof Error ? signal.reason : new AwNetworkError("aborted"));
+            reject(signal.reason instanceof Error ? signal.reason : new NetworkError("aborted"));
           }
         };
         if (signal.aborted) return leave();
@@ -88,7 +89,7 @@ export function limitTransport(transport: Transport, options: LimiterOptions = {
     try {
       const response = await transport(request);
       if (response.status === 429) {
-        const retryAfter = parseRetryAfter(response.headers["retry-after"], now());
+        const retryAfter = retryAfterMs(response.headers["retry-after"], now());
         pausedUntil = Math.max(pausedUntil, now() + (retryAfter ?? DEFAULT_PAUSE_MS));
       }
       return response;
@@ -97,4 +98,14 @@ export function limitTransport(transport: Transport, options: LimiterOptions = {
       pump();
     }
   };
+}
+
+/** A Retry-After header in ms from `now`: delta-seconds or an HTTP date; undefined for anything else. */
+function retryAfterMs(header: string | string[] | undefined, now: number): number | undefined {
+  const value = (Array.isArray(header) ? header[0] : header)?.trim();
+  if (value === undefined || value === "") return undefined;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  if (!/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value)) return undefined;
+  const when = Date.parse(value);
+  return Number.isNaN(when) ? undefined : Math.max(0, when - now);
 }

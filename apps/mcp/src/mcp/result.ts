@@ -3,7 +3,7 @@
 // under a size the client and the model can take, by dropping whole list entries, never by
 // cutting the JSON.
 
-import { cutText, toWellFormed } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
+import { cutText, toWellFormed } from "./api.js";
 
 /** The longest string a result keeps; longer upstream text is cut, with an ellipsis. */
 export const MAX_FIELD_LENGTH = 2000;
