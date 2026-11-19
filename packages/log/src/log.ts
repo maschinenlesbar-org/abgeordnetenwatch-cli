@@ -1,14 +1,15 @@
-// The apps' log (CLI and MCP server): every diagnostic line on stderr — errors, warnings, notes — is one
-// record with a timestamp, a level and a topic. Two formats, chosen with the global
-// `--log-format`:
+// The apps' log (CLI and MCP server): every diagnostic line on stderr — errors, warnings,
+// notes — is one record with a timestamp, a level and a topic. Two formats, chosen with the
+// apps' `--log-format`:
 //
 //   text   2026-10-09T14:03:12.481Z WARN  [abgeordnetenwatch.http] requests to … are sent unencrypted …
 //   jsonl  {"ts":"2026-10-09T14:03:12.481Z","level":"WARN","topic":"abgeordnetenwatch.http","msg":"…"}
 //
 // The text form follows log4j's pattern (`%d %-5p [%c] %m`), with the time in UTC
 // ISO 8601. The topic is a dotted logger name: the program, then the area the record
-// comes from (`abgeordnetenwatch.cli`, `abgeordnetenwatch.api`, `abgeordnetenwatch.http`,
-// `abgeordnetenwatch.output`).
+// comes from (`abgeordnetenwatch.cli`, `abgeordnetenwatch.api`, `abgeordnetenwatch.http`;
+// `abgeordnetenwatch-mcp.mcp` for the MCP server). Each app binds its program name
+// (`createLogger({ program })`).
 // stdout carries data only and is not touched; neither is `--help`/`--version`.
 
 import { cutText, toWellFormed } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
@@ -20,11 +21,9 @@ export type LogFormat = (typeof LOG_FORMATS)[number];
 /** The format without `--log-format`. */
 export const DEFAULT_LOG_FORMAT: LogFormat = "text";
 
-export type LogLevel = "ERROR" | "WARN" | "INFO";
+type LogLevel = "ERROR" | "WARN" | "INFO";
 
-/** The program's name in every topic: `abgeordnetenwatch.<area>`. */
-
-export interface LogRecord {
+interface LogRecord {
   /** ISO 8601, UTC, milliseconds. */
   ts: string;
   level: LogLevel;
@@ -112,7 +111,7 @@ export interface Logger {
   /**
    * The format records are written in. Mutable for one reason: it is read from argv
    * before commander parses (for commander's own errors), then set again from what
-   * commander parsed, before the action runs (`run()`'s preAction hook).
+   * commander parsed, before the action runs (the CLI program's first preAction hook).
    */
   format: LogFormat;
   error(area: string, msg: string): void;
@@ -153,14 +152,14 @@ export function logFormatProblem(value: string): string | undefined {
 }
 
 /** What `installWarningLog` needs of the process. */
-export interface WarningSource {
+interface WarningSource {
   removeAllListeners(event: "warning"): unknown;
   on(event: "warning", listener: (warning: Error) => void): unknown;
 }
 
 /**
  * Node's own process warnings (`(node:PID) Warning: …`, e.g. for
- * `NODE_TLS_REJECT_UNAUTHORIZED=0`) as WARN records of `abgeordnetenwatch.cli`:
+ * `NODE_TLS_REJECT_UNAUTHORIZED=0`) as WARN records of `area` (the CLI's `cli`):
  * `(node) <name>: <message>`, in the log's format and with its redaction. Node's default
  * listener, which prints the plain line, is removed (checked on Node 22, 24 and 26: that
  * silences it; `--no-warnings` is not needed). The bin shim installs it once, before
