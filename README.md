@@ -47,6 +47,9 @@ docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
   ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli:latest list parties --range-end 3
 ```
 
+The image's entrypoint is the program, so the command follows the image name directly;
+`… abgeordnetenwatch-cli:latest abgeordnetenwatch list …` works too.
+
 `latest` is the newest release. For scripts, name a release and pin its digest, which the
 [release notes](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/releases) give:
 `…/abgeordnetenwatch-cli:0.10.0@sha256:<digest>`. Each image carries signed build provenance;

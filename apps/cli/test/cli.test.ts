@@ -842,3 +842,21 @@ test("a --base-url typed without its scheme never names its user name or passwor
     );
   }
 });
+
+test("a leading program name is dropped: `docker run <image> abgeordnetenwatch list …` works like `… list …`", async () => {
+  const calls: string[] = [];
+  const { deps, cap } = makeDeps({
+    count: async (collection) => {
+      calls.push(collection);
+      return 3;
+    },
+  });
+  assert.equal(await run(["abgeordnetenwatch", "count", "parties"], deps), 0);
+  assert.deepEqual(calls, ["parties"]);
+  assert.match(cap.out.join(""), /"total": 3/);
+  // Only in first place, and only the program's own name.
+  const second = makeDeps({ count: async () => 3 });
+  assert.equal(await run(["count", "abgeordnetenwatch"], second.deps), 2);
+  const other = makeDeps({ count: async () => 3 });
+  assert.equal(await run(["abgeordnetenwatch-cli", "count", "parties"], other.deps), 2);
+});
