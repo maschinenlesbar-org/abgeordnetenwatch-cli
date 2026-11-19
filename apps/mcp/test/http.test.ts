@@ -31,7 +31,7 @@ const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize",
 const headers = (port: number, extra: Record<string, string> = {}) => ({ "content-type": "application/json", accept: "application/json, text/event-stream", host: `127.0.0.1:${port}`, ...extra });
 
 /** Run the server on a free port; `use` gets the port; the records are returned. */
-async function withServer(argv: string[], use: (port: number) => Promise<void>): Promise<string[]> {
+async function withServer(argv: string[], use: (port: number) => Promise<void>, inContainer = false): Promise<string[]> {
   const lines: string[] = [];
   let stop: () => void = () => {};
   const stopped = new Promise<void>((resolve) => (stop = resolve));
@@ -43,6 +43,7 @@ async function withServer(argv: string[], use: (port: number) => Promise<void>):
     transport: upstream(() => []).transport,
     stopped,
     onListening: (server) => listening((server.address() as AddressInfo).port),
+    inContainer: () => inContainer,
   });
   try {
     await use(await port);
@@ -110,4 +111,13 @@ test("a usage error is one ERROR record and exit 2; a port in use is exit 1", as
     assert.equal(again, 1);
     assert.match(busy.join("\n"), /ERROR \[abgeordnetenwatch-mcp\.http\] Could not listen/);
   });
+});
+
+test("loopback inside a container is a WARN: a published port can't reach it, --host 0.0.0.0 can", async () => {
+  const inside = await withServer([], async () => {}, true);
+  assert.match(inside.join("\n"), /WARN  \[abgeordnetenwatch-mcp\.http\] listening on 127\.0\.0\.1 inside a container: a published port \(docker run -p\) can't reach it\. Add --host 0\.0\.0\.0 to serve through the published port\./);
+  const outside = await withServer([], async () => {}, false);
+  assert.doesNotMatch(outside.join("\n"), /inside a container/);
+  const opened = await withServer(["--host", "0.0.0.0"], async () => {}, true);
+  assert.doesNotMatch(opened.join("\n"), /inside a container/);
 });

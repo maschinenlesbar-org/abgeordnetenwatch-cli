@@ -1,6 +1,7 @@
 // argv -> exit code, testable: no process.exit, the streams, the upstream transport and the
 // moments to stop come in as deps (index.ts passes the real ones).
 
+import { existsSync } from "node:fs";
 import type { Server } from "node:http";
 import { nodeHttpTransport, type Transport } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 import { createLogger, type Logger } from "@maschinenlesbar.org/abgeordnetenwatch-log";
@@ -26,7 +27,11 @@ export interface RunDeps {
   /** Called with the HTTP server once it listens (tests read its port). */
   onListening?: (server: Server) => void;
   now?: () => Date;
+  /** True when running in a container (default: Docker's /.dockerenv or Podman's /run/.containerenv). */
+  inContainer?: () => boolean;
 }
+
+const inContainer = (): boolean => existsSync("/.dockerenv") || existsSync("/run/.containerenv");
 
 export async function run(argv: readonly string[], deps: RunDeps): Promise<number> {
   const parsed = parseConfig(argv);
@@ -75,6 +80,10 @@ async function serveOnHttp(factory: ReturnType<typeof createServerFactory>, conf
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : config.port;
   log.info("mcp", `${PROGRAM} ${VERSION} serving MCP on http://${config.host.includes(":") ? `[${config.host}]` : config.host}:${port}/mcp`);
+  if (isLoopback(config.host) && (deps.inContainer ?? inContainer)()) {
+    // Docker forwards a published port to the container's own interface, never to its loopback.
+    log.warn("http", `listening on ${config.host} inside a container: a published port (docker run -p) can't reach it. Add --host 0.0.0.0 to serve through the published port.`);
+  }
   if (!isLoopback(config.host)) {
     // In a container the server can't see Docker's port mapping: `-p 127.0.0.1:…` keeps it local,
     // `-p 3000:3000` doesn't. Say both, without claiming which one this is.
