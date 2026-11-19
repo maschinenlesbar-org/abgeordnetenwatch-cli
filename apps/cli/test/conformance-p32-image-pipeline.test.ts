@@ -1,16 +1,23 @@
-// The container image's pipeline rules (the pilot of .plans/2026-11-18-mcp-server-and-images-…
-// in the workspace; P31 covers the npm side and stays shared). Reads the workflows and
-// tools/image as text, no YAML parser:
+// Conformance test P32 (the image pipeline of the MCP rollout, 2026-11-19; P31 covers the npm
+// side). Reads the workflows and tools/image as text, no YAML parser:
 // - The image job records the archive's digest and runs no npm, scanner or SBOM tool; the SBOM
 //   job comes after it and its outputs are trusted for nothing; no gate in a release run.
 // - The attest job checks out nothing and has exactly the permissions attesting needs.
 // - The release job checks the archive against the image job's digest.
 // - Every image and tool is pinned by digest or sha256; the Dockerfile pulls no frontend.
+// - publish.yml publishes the release's own files (one npm job per app) and pushes the images
+//   with the run's own token.
+// Shared across the repos with images; only the adapter differs.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+// ---- adapter (per repo) -------------------------------------------------------------
+/** The repository's topic: the images and release files are `<topic>-cli` and `<topic>-mcp`. */
+const TOPIC = "abgeordnetenwatch";
+// --------------------------------------------------------------------------------------
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const read = (path: string): string => readFileSync(`${repoRoot}${path}`, "utf8");
@@ -75,7 +82,7 @@ test("the release job checks the image archive against the image job's digest an
   assert.match(rel, /"\$ARCHIVE_SHA256" "image\/\$ARCHIVE" \| sha256sum --check --strict/);
   assert.match(rel, /"\$MCP_TARBALL_SHA256" "package\/\$MCP_TARBALL" "\$MCP_ARCHIVE_SHA256" "image\/\$MCP_ARCHIVE" \| sha256sum --check --strict/);
   assert.match(rel, /needs:.*\battest\b/);
-  for (const asset of ['"image/$ARCHIVE"', '"image/$MCP_ARCHIVE"', '"package/$MCP_TARBALL"', "abgeordnetenwatch-cli-${VERSION}.amd64.image.cdx.json", "abgeordnetenwatch-mcp-${VERSION}.arm64.image.cdx.json", "abgeordnetenwatch-mcp-${VERSION}.cdx.json", "SHA256SUMS"]) {
+  for (const asset of ['"image/$ARCHIVE"', '"image/$MCP_ARCHIVE"', '"package/$MCP_TARBALL"', `${TOPIC}-cli-\${VERSION}.amd64.image.cdx.json`, `${TOPIC}-mcp-\${VERSION}.arm64.image.cdx.json`, `${TOPIC}-mcp-\${VERSION}.cdx.json`, "SHA256SUMS"]) {
     assert.ok(rel.includes(asset), asset);
   }
 });
