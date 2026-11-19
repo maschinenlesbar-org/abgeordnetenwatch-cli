@@ -8,7 +8,6 @@ name: Images
 #  - sbom:        one CycloneDX SBOM per platform and the vulnerability gate (a fixable high
 #                 or critical finding fails). Weekly too: the scanner's database changes, and
 #                 a red run means a new base pin and a patch release.
-# Pilot repo only until the rollout (see .plans/ in the workspace).
 
 on:
   push:

@@ -1,0 +1,136 @@
+{
+  "comment": "What tools/interop/interop.mjs needs that is particular to this repo: the mock upstream's answer per path, how many tools the server lists, and the calls to make with what each must answer.",
+  "answers": {
+    "/api/v2/politicians": {
+      "meta": {
+        "status": "ok",
+        "status_message": "",
+        "result": {
+          "count": 1,
+          "total": 1,
+          "range_start": 0,
+          "range_end": 1
+        }
+      },
+      "data": [
+        {
+          "id": 7,
+          "label": "Olaf Scholz",
+          "party": {
+            "id": 1,
+            "label": "SPD"
+          },
+          "year_of_birth": 1958
+        }
+      ]
+    },
+    "/api/v2/candidacies-mandates": {
+      "meta": {
+        "status": "ok",
+        "status_message": "",
+        "result": {
+          "count": 1,
+          "total": 1,
+          "range_start": 0,
+          "range_end": 1
+        }
+      },
+      "data": [
+        {
+          "id": 70,
+          "type": "mandate",
+          "label": "Bundestag 2025 - 2029",
+          "parliament_period": {
+            "id": 161,
+            "label": "Bundestag 2025 - 2029"
+          }
+        }
+      ]
+    },
+    "/api/v2/votes": {
+      "meta": {
+        "status": "ok",
+        "status_message": "",
+        "result": {
+          "count": 2,
+          "total": 2,
+          "range_start": 0,
+          "range_end": 2
+        }
+      },
+      "data": [
+        {
+          "id": 1,
+          "vote": "yes",
+          "poll": {
+            "id": 9,
+            "label": "Haushalt"
+          },
+          "fraction": {
+            "id": 3,
+            "label": "SPD"
+          }
+        },
+        {
+          "id": 2,
+          "vote": "no_show",
+          "poll": {
+            "id": 8,
+            "label": "Rente"
+          },
+          "fraction": {
+            "id": 3,
+            "label": "SPD"
+          }
+        }
+      ]
+    },
+    "/api/v2/parties": {
+      "meta": {
+        "status": "ok",
+        "status_message": "",
+        "result": {
+          "count": 1,
+          "total": 1,
+          "range_start": 0,
+          "range_end": 1
+        }
+      },
+      "data": [
+        {
+          "id": 1,
+          "label": "SPD"
+        }
+      ]
+    }
+  },
+  "tools": 8,
+  "calls": [
+    {
+      "name": "getVotingRecord",
+      "arguments": {
+        "name": "Scholz"
+      },
+      "expect": {
+        "tally.no_show": 1
+      }
+    },
+    {
+      "name": "listEntities",
+      "arguments": {
+        "collection": "parties"
+      },
+      "expect": {
+        "total": 1
+      }
+    },
+    {
+      "name": "findPolitician",
+      "arguments": {
+        "name": "x",
+        "limit": 500
+      },
+      "error": true
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 // Copy an OCI image archive to a registry, every platform and the index digest unchanged, and
 // check that the registry now serves that digest. The same script pushes to the local test
-// registry (images.yml, the local smoke run) and to ECR Public (publish.yml).
+// registry (images.yml, the local smoke run) and to ghcr.io (publish.yml).
 //
-//   node tools/image/push.mjs --archive x.oci.tar --to 127.0.0.1:5000/abgeordnetenwatch-cli:test
+//   node tools/image/push.mjs --archive x.oci.tar --to 127.0.0.1:5000/<topic>-cli:test
 //
 // skopeo on PATH is used as it is (in CI, with REGISTRY_AUTH_FILE for a login). Without one,
 // outside CI, a digest-pinned skopeo container does it, with no credentials of any kind.

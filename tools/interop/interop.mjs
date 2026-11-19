@@ -1,31 +1,30 @@
 // The built MCP server against the official MCP client, the way clients connect: over stdio
 // (the bin as a child process) and over Streamable HTTP, each in the client's three modes:
 // legacy (the 2025-11-25 handshake), auto (probes server/discover, 2026-07-28) and pinned
-// 2026-07-28. Every tool is listed and three are called against a mock upstream on loopback.
-// Exits 1 on the first failure.
+// 2026-07-28. Every tool is listed and the calls of interop.json are made against a mock upstream
+// on loopback, which answers each path with interop.json's answer for it. Exits 1 on the first
+// failure.
 //
 //   npm ci --ignore-scripts --prefix tools/interop && node tools/interop/interop.mjs
+//
+// interop.json (per repository): `answers` (path -> the JSON the mock sends), `tools` (how many
+// the server lists) and `calls`: each { name, arguments } and either `expect` (dotted paths into
+// structuredContent and the value each must have) or `"error": true` (a tool error).
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const bin = fileURLToPath(new URL("../../apps/mcp/dist/src/mcp/index.js", import.meta.url));
+const config = JSON.parse(readFileSync(new URL("interop.json", import.meta.url), "utf8"));
 
-const data = {
-  politicians: [{ id: 7, label: "Olaf Scholz", party: { id: 1, label: "SPD" }, year_of_birth: 1958 }],
-  "candidacies-mandates": [{ id: 70, type: "mandate", label: "Bundestag 2025 - 2029", parliament_period: { id: 161, label: "Bundestag 2025 - 2029" } }],
-  votes: [{ id: 1, vote: "yes", poll: { id: 9, label: "Haushalt" }, fraction: { id: 3, label: "SPD" } }, { id: 2, vote: "no_show", poll: { id: 8, label: "Rente" }, fraction: { id: 3, label: "SPD" } }],
-  parties: [{ id: 1, label: "SPD" }],
-};
 const upstream = http.createServer((req, res) => {
-  const url = new URL(req.url, "http://x");
-  const items = data[url.pathname.split("/")[3]] ?? [];
-  const page = items.slice(0, Number(url.searchParams.get("range_end") ?? 100));
-  res.writeHead(200, { "content-type": "application/json" });
-  res.end(JSON.stringify({ meta: { status: "ok", status_message: "", result: { count: page.length, total: items.length, range_start: 0, range_end: page.length } }, data: page }));
+  const body = config.answers[new URL(req.url, "http://x").pathname];
+  res.writeHead(body === undefined ? 404 : 200, { "content-type": "application/json" });
+  res.end(JSON.stringify(body ?? { error: "no such path" }));
 });
 await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
 const baseUrl = `http://127.0.0.1:${upstream.address().port}`;
@@ -40,6 +39,9 @@ const endpoint = await new Promise((resolve, reject) => {
   });
   httpServer.once("exit", (code) => reject(new Error(`the HTTP server exited with ${code}: ${log}`)));
 });
+
+/** The value at a dotted path (`tally.no_show`, `items.0.id`) of `value`. */
+const at = (value, path) => path.split(".").reduce((node, key) => (node === undefined || node === null ? undefined : node[key]), value);
 
 let failed = false;
 const modes = [["legacy", "legacy", "2025-11-25"], ["auto", "auto", "2026-07-28"], ["pinned", { pin: "2026-07-28" }, "2026-07-28"]];
@@ -56,13 +58,19 @@ try {
         const version = client.getNegotiatedProtocolVersion();
         if (version !== expected) throw new Error(`negotiated ${version}, expected ${expected}`);
         const tools = (await client.listTools()).tools;
-        if (tools.length !== 8) throw new Error(`${tools.length} tools`);
-        const record = await client.callTool({ name: "getVotingRecord", arguments: { name: "Scholz" } });
-        if (record.isError || record.structuredContent?.tally?.no_show !== 1) throw new Error(`getVotingRecord: ${JSON.stringify(record).slice(0, 300)}`);
-        const listed = await client.callTool({ name: "listEntities", arguments: { collection: "parties" } });
-        if (listed.isError || listed.structuredContent?.total !== 1) throw new Error(`listEntities: ${JSON.stringify(listed).slice(0, 300)}`);
-        const bad = await client.callTool({ name: "findPolitician", arguments: { name: "x", limit: 500 } });
-        if (bad.isError !== true) throw new Error("bad arguments were not a tool error");
+        if (tools.length !== config.tools) throw new Error(`${tools.length} tools, expected ${config.tools}`);
+        for (const call of config.calls) {
+          const result = await client.callTool({ name: call.name, arguments: call.arguments });
+          const shown = JSON.stringify(result).slice(0, 300);
+          if (call.error === true) {
+            if (result.isError !== true) throw new Error(`${call.name}: expected a tool error, got ${shown}`);
+            continue;
+          }
+          if (result.isError) throw new Error(`${call.name}: ${shown}`);
+          for (const [path, value] of Object.entries(call.expect ?? {})) {
+            if (JSON.stringify(at(result.structuredContent, path)) !== JSON.stringify(value)) throw new Error(`${call.name}: ${path} is not ${JSON.stringify(value)}: ${shown}`);
+          }
+        }
         console.log(`ok ${kind} ${label} (${version})`);
       } catch (err) {
         failed = true;

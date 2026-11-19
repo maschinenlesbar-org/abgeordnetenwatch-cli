@@ -1,7 +1,7 @@
 // SBOMs of an OCI image archive, one CycloneDX file per platform, and optionally the
 // vulnerability gate over them. CI only: it needs skopeo and downloads its tools.
 //
-//   node tools/image/sbom.mjs --archive x.oci.tar --name abgeordnetenwatch-cli-0.10.0 --out sbom [--gate true]
+//   node tools/image/sbom.mjs --archive x.oci.tar --name <topic>-cli-1.2.3 --out sbom [--gate true]
 //
 // syft and grype are release binaries pinned by sha256 in pins.json, with their update checks
 // off. Each platform is cut out of the multi-arch archive with skopeo before syft reads it.
