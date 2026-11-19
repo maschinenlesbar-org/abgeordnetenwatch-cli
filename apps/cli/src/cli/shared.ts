@@ -1,7 +1,7 @@
 // Shared helpers used across CLI command groups: option parsers, the global
 // option resolver, the filter parser, and the JSON result renderer.
 
-import { responseCapFor } from "./limits.js";
+import { assertEnoughPids, responseCapFor } from "./limits.js";
 import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
@@ -325,8 +325,10 @@ export function action(
     const options = toEngineOptions(global);
     // In a memory-limited container the 100 MiB default can't be held: cap by the memory instead,
     // so an oversized answer is the cap's error, not an OOM kill. An explicit option wins.
+    const limits = deps.limits?.() ?? {};
+    assertEnoughPids(limits);
     const given = command.getOptionValueSourceWithGlobals("maxResponseBytes");
-    const memory = given === undefined || given === "default" ? deps.limits?.().memoryBytes : undefined;
+    const memory = given === undefined || given === "default" ? limits.memoryBytes : undefined;
     if (memory !== undefined) options.maxResponseBytes = responseCapFor(memory);
     options.onRetry = (event) => logOf(deps).warn("http", retryMessage(event));
     // An answer delivered changed (invalid text replaced with U+FFFD) is never silent.

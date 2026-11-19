@@ -53,3 +53,25 @@ test("in a memory-limited container the default cap follows the memory; --max-re
   assert.equal(await capUnder({}), 100 * MiB, "no limit: the option's default, 100 MiB");
   assert.equal(await capUnder({ memoryBytes: 128 * MiB }, ["--max-response-bytes", "5000"]), 5000);
 });
+
+test("under a pids limit below 12 a request is refused with one ERROR record and exit 1, not a crash", async () => {
+  const run8 = async (pids: number) => {
+    const err: string[] = [];
+    let created = false;
+    const deps: CliDeps = {
+      io: { out: () => {}, err: (text) => err.push(text) },
+      createClient: () => {
+        created = true;
+        return { count: async () => 1 } as unknown as AbgeordnetenwatchClient;
+      },
+      limits: () => ({ pids }),
+    };
+    return { code: await run(["count", "parties"], deps), err: err.join(""), created };
+  };
+  const tight = await run8(8);
+  assert.equal(tight.code, 1);
+  assert.equal(tight.created, false, "no request is attempted");
+  assert.match(tight.err, /ERROR \[abgeordnetenwatch\.cli\] the container allows only 8 processes and threads \(--pids-limit 8\); the CLI needs at least 12\. Run it with --pids-limit 12 or more\./);
+  const enough = await run8(12);
+  assert.equal(enough.code, 0);
+});

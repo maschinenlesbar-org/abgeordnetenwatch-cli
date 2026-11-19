@@ -53,6 +53,8 @@ The image's entrypoint is the program, so the command follows the image name dir
 In a container with a memory limit (`--memory`) the default `--max-response-bytes` is an eighth
 of that limit (at most the usual 100 MiB), so an oversized answer is refused with a clear
 error instead of the container being killed for memory.
+The CLI needs at least 12 processes and threads (`--pids-limit 12`): below that it refuses with
+an error, and with 4 or fewer Node.js itself hangs before the CLI can check.
 
 `latest` is the newest release. For scripts, name a release and pin its digest, which the
 [release notes](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/releases) give:
