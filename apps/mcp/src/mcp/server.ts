@@ -110,7 +110,11 @@ export async function callTool(
   cancelled: AbortSignal,
   env: { client: Client; apiBase: string; config: McpConfig; log: Pick<Logger, "error" | "info"> },
 ): Promise<{ content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown>; isError?: boolean }> {
-  const deadline = AbortSignal.timeout(env.config.callTimeoutMs);
+  // A timer of our own, not AbortSignal.timeout: that one's timer doesn't keep the process
+  // alive, so a call waiting on nothing else (Node 22) would end the process instead of the call.
+  const timer = new AbortController();
+  const deadline = timer.signal;
+  const stopAt = setTimeout(() => timer.abort(), env.config.callTimeoutMs);
   const signal = AbortSignal.any([cancelled, deadline]);
   try {
     // Inside callSignal, every request of the call carries its signal (limiter.ts); the race ends
@@ -134,6 +138,8 @@ export async function callTool(
     // A bug, not an answer: the details go to the log, the caller gets a fixed text.
     env.log.error("server", `${tool.name} failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     return errorResult(`${tool.name} failed with an internal error; the server's log has the details.`);
+  } finally {
+    clearTimeout(stopAt);
   }
 }
 
