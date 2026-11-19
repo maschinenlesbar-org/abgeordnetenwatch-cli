@@ -19,14 +19,21 @@ const ANSWER = (_request: HttpRequest): HttpResponse =>
   jsonResponse({ meta: { status: "ok", status_message: "", result: { count: 0, total: 7, range_start: 0, range_end: 0 } }, data: [] });
 // --------------------------------------------------------------------------------------
 
-/** Run the HTTP server with an upstream that answers after `delayMs` (or never). */
-function slowServer(delayMs: number | undefined, drainMs: number) {
+/**
+ * Run the HTTP server with an upstream that answers after `delayMs` (or never). `reached`
+ * resolves when the call's first request reaches the upstream: the call is in flight then, on a
+ * slow machine too (a fixed wait raced the request on CI's Linux runners).
+ */
+async function slowServer(delayMs: number | undefined, drainMs: number) {
+  let reachedNow = (): void => {};
+  const reached = new Promise<void>((resolve) => (reachedNow = resolve));
   const transport = (request: HttpRequest) =>
     new Promise<HttpResponse>((resolve, reject) => {
+      reachedNow();
       if (delayMs !== undefined) setTimeout(() => resolve(ANSWER(request)), delayMs);
       request.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
     });
-  return startHttp([], { transport, drainMs });
+  return { ...(await startHttp([], { transport, drainMs })), reached };
 }
 
 const call = JSON.stringify({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: CALL.name, arguments: CALL.arguments } });
@@ -34,7 +41,7 @@ const call = JSON.stringify({ jsonrpc: "2.0", id: 5, method: "tools/call", param
 test("stopping drains: a call in flight still gets its answer, then the server ends", async () => {
   const server = await slowServer(300, 5000);
   const answer = send(server.port, { headers: headers(server.port), body: call });
-  await new Promise((r) => setTimeout(r, 50));
+  await server.reached;
   const stoppedAt = Date.now();
   server.stop();
   const result = await answer;
@@ -54,7 +61,7 @@ test("the drain is bounded: a call that doesn't finish is cut off after the drai
     () => "answered",
     (err: Error) => err.message,
   );
-  await new Promise((r) => setTimeout(r, 50));
+  await server.reached;
   const stoppedAt = Date.now();
   server.stop();
   assert.equal(await server.done, 0);
