@@ -525,8 +525,9 @@ published app under `apps/` together, one version, one tag. Its npm README is th
 |---|---|
 | `packages/client/src/operations.ts` | The skills' use cases as library functions (findPolitician, getVotingRecord, findPolls, getPollResult, getSideJobs; resolveMandate, readAll), with their traps built in. Public API of both packages. |
 | `packages/log` | The log records (text/jsonl), shared by both apps; `createLogger({ program })`. |
-| `src/mcp/tools.ts` | The eight tools: flat input schemas with limits (no root combinators), one object output schema each, descriptions under 2000 characters. |
-| `src/mcp/server.ts` | The McpServer factory, the instructions, `callTool`: deadline (`--call-timeout`) plus the client's cancellation, cleaned and fitted answers, failures as `isError` results. |
+| `src/mcp/tools.ts` | This repo's: the eight tools (flat input schemas with limits, no root combinators; one object output schema each; descriptions under 2000 characters), the instructions, the licence, the hints the server's messages give. |
+| `src/mcp/api.ts` | This repo's: how the kit reaches the client (`AbgeordnetenwatchClient` as `Client`, `AwError` as `ClientError`, …, `apiBase`). |
+| `src/mcp/server.ts` | The McpServer factory, the tool types, `callTool`: deadline (`--call-timeout`) plus the client's cancellation, cleaned and fitted answers, failures as `isError` results. |
 | `src/mcp/result.ts` | `cleanStrings` (control, bidi, zero-width characters dropped in the value), `fitResult` (whole list entries dropped under `--max-result-chars`, `nextOffset`). |
 | `src/mcp/limiter.ts` | One per process around the upstream transport: 2 in flight, 120 a minute, pause on 429, a bounded queue. |
 | `src/mcp/http.ts` | node:http adapter for the SDK's `createMcpHandler`: POST /mcp, /healthz, Host and Origin checks (the SDK does neither), 1 MiB body, 8 requests at once, timeouts. |
@@ -543,11 +544,24 @@ late, at the next event on the connection, because `serveStdio` decides the prot
 the opening exchange. Real clients wait (the official one: three concurrent calls in ~10 ms), so
 nothing is worked around here (decision D5, `.reviews/2026-11-19-exploratory-containers/`).
 
-Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC
-(`helpers.ts`), plus `http.test.ts` on a free port and `stdio.test.ts` with the built bin
-(30 s, it starts processes). `tools/interop/` checks the built server against the official
+**The kit.** Everything in `apps/mcp` but `tools.ts`, `api.ts`, `test/helpers.ts`,
+`test/tools.test.ts` and the conformance tests' adapter blocks, plus `packages/log`,
+`apps/cli/src/cli/limits.ts`, `tools/image/` (but `smoke.json`), `tools/interop/` (but
+`interop.json`), `tools/bump.mjs`, `tools/pack/` and the workflows `ci.yml`, `images.yml`,
+`release.yml` and `publish.yml`, is the kit of `create-cli-template` (in the api-cli workspace),
+the same in every repository with an MCP server: a fix lands there first and comes here with
+`npm run sync-kit -- ../abgeordnetenwatch-cli` (run in create-cli-template; `--check` lists the
+drift). This repository was the pilot the kit was taken from (2026-11-19).
+
+Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC (the
+kit's `harness.ts`). The rules every server follows are the shared conformance tests
+`conformance-m1-…` to `conformance-m10-…` (protocol and tool rules, HTTP, Host and Origin,
+stdio with the built bin, config, limiter, result shaping, drain, call errors, MCP.md), each with
+an adapter block naming this repo's calls and mock answers; `tools.test.ts` holds this server's
+own (the eight tools, the traps). The stdio tests start the built bin (30 s each). `tools/interop/` checks the built server against the official
 client 2.4.0 (stdio and HTTP; legacy, auto and pinned 2026-07-28) in ci.yml's `interop` job;
-it has its own lockfile and is never installed by the workspace, release or publish runs.
+it has its own lockfile and is never installed by the workspace, release or publish runs; the
+calls it makes and the mock's answers are in `tools/interop/interop.json`.
 
 ## Container image
 
@@ -584,7 +598,7 @@ and the image index, and the release attaches the archive, the image SBOMs and `
 `ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli` and `…/abgeordnetenwatch-mcp` (with the run's `GITHUB_TOKEN`), each checked
 first against the immutable release (`gh release verify-asset`) and the provenance `release.yml`
 signed for that tag (`gh attestation verify`).
-`apps/cli/test/image-pipeline.test.ts` pins these rules.
+`apps/cli/test/conformance-p32-image-pipeline.test.ts` (shared) pins these rules.
 
 As PID 1 the bin shim listens for SIGINT, SIGTERM and SIGHUP (`exitOnSignalsAsPid1`): without
 a listener the kernel drops them, and `docker stop` would wait 10 s and kill.
