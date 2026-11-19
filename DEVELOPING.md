@@ -537,6 +537,12 @@ The protocol is the SDK's: `@modelcontextprotocol/server` 2.4.0, bundled with it
 statelessly, on stdio (`serveStdio`) and HTTP. The SDK bundles AJV 8.18 into its own code to
 validate tool arguments against the input schemas; an SBOM doesn't list that copy.
 
+Accepted SDK behaviour on stdio: a client that sends `notifications/initialized` and a request
+before the answer to its `initialize` (the MCP lifecycle says it must wait) gets its answers
+late, at the next event on the connection, because `serveStdio` decides the protocol era from
+the opening exchange. Real clients wait (the official one: three concurrent calls in ~10 ms), so
+nothing is worked around here (decision D5, `.reviews/2026-11-19-exploratory-containers/`).
+
 Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC
 (`helpers.ts`), plus `http.test.ts` on a free port and `stdio.test.ts` with the built bin
 (30 s, it starts processes). `tools/interop/` checks the built server against the official
