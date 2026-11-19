@@ -1,9 +1,11 @@
-// The limiter around the upstream transport: requests in flight, the per-minute window, a 429's
-// pause, the bounded queue, and an abort that leaves the queue.
+// Conformance test M6 (MCP kit, rollout plan 2026-11-19): the limiter around the upstream
+// transport: requests in flight, the per-minute window, a 429's pause (seconds or an HTTP date),
+// the bounded queue (refused with the client's network error), and an abort that leaves the
+// queue. Shared whole across the repos with an MCP server.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AwNetworkError, type HttpRequest, type HttpResponse } from "@maschinenlesbar.org/abgeordnetenwatch-client";
+import { NetworkError, type HttpRequest, type HttpResponse } from "../src/mcp/api.js";
 import { limitTransport } from "../src/mcp/limiter.js";
 
 const ok = (status = 200, headers: Record<string, string> = {}): HttpResponse => ({ status, headers, body: Buffer.from("{}") });
@@ -61,14 +63,33 @@ test("a 429 pauses every start for its Retry-After", async () => {
   assert.equal(await pending, "left");
 });
 
+test("a 429's Retry-After as an HTTP date pauses until then; an unreadable one pauses 5 s", async () => {
+  for (const [header, pausedFor] of [[new Date(30_000).toUTCString(), 30_000], ["soon", 5_000]] as const) {
+    let t = 0;
+    let first = true;
+    const limited = limitTransport(async () => (first ? ((first = false), ok(429, { "retry-after": header })) : ok()), { now: () => t });
+    await limited(request());
+    t = pausedFor - 1;
+    let started = false;
+    const controller = new AbortController();
+    const pending = limited(request(controller.signal)).then(() => (started = true), () => "left");
+    await tick();
+    assert.equal(started, false, `still paused just before ${pausedFor} ms (${header})`);
+    controller.abort();
+    assert.equal(await pending, "left");
+    t = pausedFor;
+    assert.equal((await limited(request())).status, 200, `starts again at ${pausedFor} ms`);
+  }
+});
+
 test("a full queue refuses at once; an aborted waiter leaves the queue", async () => {
   const { started, transport } = gated();
   const limited = limitTransport(transport, { inFlight: 1, queue: 1 });
   const first = limited(request());
   const controller = new AbortController();
   const waiting = limited(request(controller.signal));
-  await assert.rejects(limited(request()), (err: unknown) => err instanceof AwNetworkError && /busy/.test(err.message));
-  controller.abort(new AwNetworkError("aborted by the test"));
+  await assert.rejects(limited(request()), (err: unknown) => err instanceof NetworkError && /busy/.test(err.message));
+  controller.abort(new NetworkError("aborted by the test"));
   await assert.rejects(waiting, /aborted by the test/);
   const next = limited(request());
   started[0]?.();

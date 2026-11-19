@@ -1,4 +1,6 @@
-// The server's options: defaults, bounds, and the refusals that happen before anything starts.
+// Conformance test M5 (MCP kit, rollout plan 2026-11-19): the server's options: defaults, bounds,
+// and the refusals that happen before anything starts (a credential in --base-url among them: a
+// server runs for others). Shared whole across the repos with an MCP server.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

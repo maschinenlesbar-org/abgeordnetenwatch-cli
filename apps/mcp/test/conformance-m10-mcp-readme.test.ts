@@ -1,6 +1,7 @@
-// MCP.md is the npm page of the MCP package (prepack packs it as its README): its tool table
-// must name exactly the server's tools, and its links must be absolute, since npm shows the file
-// outside the repository.
+// Conformance test M10 (MCP kit, rollout plan 2026-11-19): MCP.md is the npm page of the MCP
+// package (prepack packs it as its README): its tool table must name exactly the server's tools,
+// in order, and its links must be absolute, since npm shows the file outside the repository.
+// Shared whole across the repos with an MCP server.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
