@@ -1,7 +1,7 @@
 // Shared helpers used across CLI command groups: option parsers, the global
 // option resolver, the filter parser, and the JSON result renderer.
 
-import { assertEnoughPids, responseCapFor } from "./limits.js";
+import { pidsProblem, responseCapFor } from "./limits.js";
 import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
@@ -305,6 +305,9 @@ export interface ActionContext {
   opts: Record<string, unknown>;
 }
 
+/** The container can't run the CLI as it is limited (limits.ts): an ERROR record of the cli area and exit 1. */
+export class EnvironmentError extends AwError {}
+
 /**
  * Wrap an async command action with consistent global-option resolution and
  * client construction. The callback receives a context (client + resolved global
@@ -326,7 +329,8 @@ export function action(
     // In a memory-limited container the 100 MiB default can't be held: cap by the memory instead,
     // so an oversized answer is the cap's error, not an OOM kill. An explicit option wins.
     const limits = deps.limits?.() ?? {};
-    assertEnoughPids(limits);
+    const problem = pidsProblem(limits);
+    if (problem !== undefined) throw new EnvironmentError(problem);
     const given = command.getOptionValueSourceWithGlobals("maxResponseBytes");
     const memory = given === undefined || given === "default" ? limits.memoryBytes : undefined;
     if (memory !== undefined) options.maxResponseBytes = responseCapFor(memory);

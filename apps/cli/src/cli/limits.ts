@@ -4,24 +4,21 @@
 // Outside a container (or on macOS) nothing is found and nothing changes.
 
 import { readFileSync } from "node:fs";
-import { AwError } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/errors";
 
 /**
  * The fewest processes and threads Node needs for a request (its libuv pool and V8's platform
  * threads): under 12 it died with exit 133 (8) or hung (4, before any code of the CLI runs).
  */
-export const MIN_PIDS = 12;
+const MIN_PIDS = 12;
 
-/** The container can't run the CLI as it is limited: an ERROR record of the cli area and exit 1. */
-export class EnvironmentError extends AwError {}
-
-/** Refuse to start a request under a pids limit Node can't work with. */
-export function assertEnoughPids(limits: ContainerLimits): void {
-  if (limits.pids !== undefined && limits.pids < MIN_PIDS) {
-    throw new EnvironmentError(
-      `the container allows only ${limits.pids} processes and threads (--pids-limit ${limits.pids}); the CLI needs at least ${MIN_PIDS}. Run it with --pids-limit ${MIN_PIDS} or more.`,
-    );
-  }
+/**
+ * Why the CLI can't start a request under these limits, or undefined: a pids limit Node can't
+ * work with. The CLI's `action()` raises it as an error of the cli area (exit 1) before any
+ * request.
+ */
+export function pidsProblem(limits: ContainerLimits): string | undefined {
+  if (limits.pids === undefined || limits.pids >= MIN_PIDS) return undefined;
+  return `the container allows only ${limits.pids} processes and threads (--pids-limit ${limits.pids}); the CLI needs at least ${MIN_PIDS}. Run it with --pids-limit ${MIN_PIDS} or more.`;
 }
 
 export interface ContainerLimits {
@@ -32,7 +29,7 @@ export interface ContainerLimits {
 }
 
 /** The client's default response cap (100 MiB), the most a memory-derived cap gives. */
-export const DEFAULT_RESPONSE_CAP = 100 * 1024 * 1024;
+const DEFAULT_RESPONSE_CAP = 100 * 1024 * 1024;
 
 // cgroup v1 writes "no limit" as a huge number (about 2^63) instead of "max".
 const UNLIMITED = 2 ** 50;
