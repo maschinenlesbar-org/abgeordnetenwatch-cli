@@ -6,8 +6,12 @@
 //  - a 429 pauses every start for its Retry-After (or 5 s), on top of the engine's own retry;
 //  - at most `queue` requests wait (default 32); one more is refused at once (the client's
 //    network error, so the call's answer says so);
-//  - a waiting request whose signal aborts leaves the queue.
+//  - a waiting request whose signal aborts leaves the queue;
+//  - a request made inside a tool call (callSignal.run) carries the call's signal too, so the
+//    call's deadline and cancellation reach the transport even through a client whose calls
+//    take no signal of their own; once that signal has aborted, nothing more is sent.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { NetworkError, type HttpRequest, type HttpResponse, type Transport } from "./api.js";
 
 export interface LimiterOptions {
@@ -17,6 +21,9 @@ export interface LimiterOptions {
   /** The clock (ms); tests inject one. */
   now?: () => number;
 }
+
+/** The signal of the tool call a request belongs to (server.ts runs every call inside it). */
+export const callSignal = new AsyncLocalStorage<AbortSignal>();
 
 const WINDOW_MS = 60_000;
 const DEFAULT_PAUSE_MS = 5_000;
@@ -61,7 +68,11 @@ export function limitTransport(transport: Transport, options: LimiterOptions = {
     }
   };
 
-  return async (request: HttpRequest): Promise<HttpResponse> => {
+  return async (sent: HttpRequest): Promise<HttpResponse> => {
+    const call = callSignal.getStore();
+    if (call?.aborted === true) throw new NetworkError(`${sent.method} ${sent.url} failed: aborted`);
+    const request: HttpRequest =
+      call === undefined ? sent : { ...sent, signal: sent.signal === undefined ? call : AbortSignal.any([sent.signal, call]) };
     if (waiting.length >= queueSize) {
       throw new NetworkError(`The server is busy: ${queueSize} requests to the API are already waiting. Try again shortly.`);
     }

@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NetworkError, type HttpRequest, type HttpResponse } from "../src/mcp/api.js";
-import { limitTransport } from "../src/mcp/limiter.js";
+import { callSignal, limitTransport } from "../src/mcp/limiter.js";
 
 const ok = (status = 200, headers: Record<string, string> = {}): HttpResponse => ({ status, headers, body: Buffer.from("{}") });
 const request = (signal?: AbortSignal): HttpRequest => ({ method: "GET", url: "https://x/", headers: {}, ...(signal === undefined ? {} : { signal }) }) as HttpRequest;
@@ -98,4 +98,19 @@ test("a full queue refuses at once; an aborted waiter leaves the queue", async (
   assert.equal(started.length, 2, "the aborted waiter never started");
   started[1]?.();
   await next;
+});
+
+test("inside a call, a request carries the call's signal; after its abort none is sent", async () => {
+  const seen: (AbortSignal | undefined)[] = [];
+  const limited = limitTransport(async (r) => {
+    seen.push(r.signal);
+    return ok();
+  });
+  const controller = new AbortController();
+  await callSignal.run(controller.signal, () => limited(request()));
+  assert.equal(seen.length, 1);
+  controller.abort();
+  assert.equal(seen[0]?.aborted, true);
+  await assert.rejects(callSignal.run(controller.signal, () => limited(request())), (err: unknown) => err instanceof NetworkError && /aborted/.test(err.message));
+  assert.equal(seen.length, 1);
 });

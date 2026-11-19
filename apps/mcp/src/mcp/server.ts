@@ -12,6 +12,7 @@ import type { Logger } from "@maschinenlesbar.org/abgeordnetenwatch-log";
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { apiBase, Client, ClientError, cutText, NetworkError, sizeLimitMessage, type Transport } from "./api.js";
 import type { McpConfig } from "./config.js";
+import { callSignal } from "./limiter.js";
 import { cleanStrings, fitResult } from "./result.js";
 import { DEADLINE_HINT, INSTRUCTIONS, LICENCE, SIZE_HINT, TITLE, TOOLS } from "./tools.js";
 import { PROGRAM, USER_AGENT, VERSION } from "./version.js";
@@ -112,7 +113,11 @@ export async function callTool(
   const deadline = AbortSignal.timeout(env.config.callTimeoutMs);
   const signal = AbortSignal.any([cancelled, deadline]);
   try {
-    const answer = await tool.run(args, { client: env.client, signal, maxPages: env.config.maxPages, apiBase: env.apiBase });
+    // Inside callSignal, every request of the call carries its signal (limiter.ts); the race ends
+    // the call at the deadline even when the client's code still waits (a retry's backoff).
+    const answer = await callSignal.run(signal, () =>
+      untilAborted(tool.run(args, { client: env.client, signal, maxPages: env.config.maxPages, apiBase: env.apiBase }), signal),
+    );
     const source = `${env.apiBase}/${typeof tool.source === "function" ? tool.source(args) : tool.source}`;
     const shaped = fitResult(cleanStrings({ ...answer, source, licence: LICENCE }), env.config.maxResultChars, tool.paged?.(args));
     return { content: [{ type: "text", text: JSON.stringify(shaped) }], structuredContent: shaped };
@@ -130,6 +135,17 @@ export async function callTool(
     env.log.error("server", `${tool.name} failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     return errorResult(`${tool.name} failed with an internal error; the server's log has the details.`);
   }
+}
+
+/** `promise`, unless `signal` aborts first: then a rejection with the client's network error. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new NetworkError("aborted"));
+  let onAbort = (): void => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new NetworkError("aborted"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return Promise.race([promise, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
 }
 
 function errorResult(message: string): { content: { type: "text"; text: string }[]; isError: true } {

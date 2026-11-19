@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { apiBase, Client, type Transport } from "../src/mcp/api.js";
+import { limitTransport } from "../src/mcp/limiter.js";
 import { callTool, type ToolDefinition } from "../src/mcp/server.js";
 import { TOOLS } from "../src/mcp/tools.js";
 import { PROGRAM } from "../src/mcp/version.js";
@@ -44,6 +45,25 @@ test("the call deadline stops a call that waits on the upstream, with advice to 
   const result = await callTool(tool, CALL.arguments, new AbortController().signal, e);
   assert.equal(result.isError, true);
   assert.match(result.content[0]?.text ?? "", /^The call took longer than 0 s and was stopped\. \S/);
+});
+
+test("the deadline stops a call even when the tool's code ignores the signal", async () => {
+  const { env: e } = env(hanging.transport, { callTimeoutMs: 30 });
+  const deaf: ToolDefinition = { ...tool, run: () => new Promise(() => {}) };
+  const result = await callTool(deaf, CALL.arguments, new AbortController().signal, e);
+  assert.match(result.content[0]?.text ?? "", /^The call took longer than 0 s and was stopped\./);
+});
+
+test("a request of a call that ignores the signal still carries it, and none is sent after the abort", async () => {
+  const seen: (AbortSignal | undefined)[] = [];
+  const recording: Transport = (request) => {
+    seen.push(request.signal);
+    return new Promise(() => {});
+  };
+  const { env: e } = env(limitTransport(recording), { callTimeoutMs: 30 });
+  const deaf: ToolDefinition = { ...tool, run: (args, context) => tool.run(args, { ...context, signal: new AbortController().signal }) };
+  await callTool(deaf, CALL.arguments, new AbortController().signal, e);
+  assert.ok(seen.length >= 1 && seen.every((signal) => signal?.aborted === true), "every request's signal aborted with the call");
 });
 
 test("a cancelled call says so", async () => {
