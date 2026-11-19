@@ -63,8 +63,8 @@ test("a 429 pauses every start for its Retry-After", async () => {
   assert.equal(await pending, "left");
 });
 
-test("a 429's Retry-After as an HTTP date pauses until then; an unreadable one pauses 5 s", async () => {
-  for (const [header, pausedFor] of [[new Date(30_000).toUTCString(), 30_000], ["soon", 5_000]] as const) {
+test("a 429's Retry-After in seconds or as an HTTP date pauses until then; an unreadable one pauses 5 s", async () => {
+  for (const [header, pausedFor] of [["30", 30_000], [new Date(30_000).toUTCString(), 30_000], ["soon", 5_000]] as const) {
     let t = 0;
     let first = true;
     const limited = limitTransport(async () => (first ? ((first = false), ok(429, { "retry-after": header })) : ok()), { now: () => t });
