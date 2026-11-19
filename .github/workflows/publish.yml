@@ -131,7 +131,18 @@ jobs:
               echo "::notice::$PACKAGE@$VERSION is already on npm with these bytes; nothing to do."
               exit 0
             fi
-            echo "::error::$PACKAGE@$VERSION is on npm with other bytes ($theirs)."
+            # A version published outside this workflow (a package's first one) may hold the same
+            # files in an archive npm made anew: compare the files before calling it a conflict.
+            published="$RUNNER_TEMP/published"
+            mkdir -p "$published/npm" "$published/release"
+            curl -sSfL -o "$published/npm.tgz" "$(npm view "$PACKAGE@$VERSION" dist.tarball)"
+            tar -xzf "$published/npm.tgz" -C "$published/npm"
+            tar -xzf "$TARBALL" -C "$published/release"
+            if diff -r "$published/npm" "$published/release" > /dev/null; then
+              echo "::notice::$PACKAGE@$VERSION is already on npm with the same files (in another archive); nothing to do."
+              exit 0
+            fi
+            echo "::error::$PACKAGE@$VERSION is on npm with other files ($theirs)."
             exit 1
           fi
           npm publish "$TARBALL" --provenance --access public
