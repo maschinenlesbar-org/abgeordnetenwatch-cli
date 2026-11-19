@@ -47,7 +47,9 @@ async function withServer(argv: string[], use: (port: number) => Promise<void>, 
     inContainer: () => inContainer,
   });
   try {
-    await use(await port);
+    // A server that ends before it listens (a usage error) fails the test instead of hanging it.
+    const listeningPort = await Promise.race([port, done.then((code) => Promise.reject(new Error(`the server ended with ${code} before listening: ${lines.join(" | ")}`)))]);
+    await use(listeningPort);
   } finally {
     stop();
     assert.equal(await done, 0);
@@ -75,13 +77,22 @@ test("a foreign Host is refused (DNS rebinding), an allowed one served", async (
   });
 });
 
-test("a browser Origin must be localhost, an allowed host or an allowed origin; Origin null is refused", async () => {
-  await withServer(["--allowed-origins", "app.example.org"], async (port) => {
+test("a browser Origin must be one of --allowed-origins exactly (scheme, host and port); none is allowed by default", async () => {
+  await withServer(["--allowed-origins", "https://app.example.org,http://localhost:6274"], async (port) => {
     const status = async (origin: string) => (await send(port, { headers: headers(port, { origin }), body: initialize })).status;
+    assert.equal(await status("https://app.example.org"), 200);
+    assert.equal(await status("http://localhost:6274"), 200);
     assert.equal(await status("http://evil.example"), 403);
     assert.equal(await status("null"), 403);
-    assert.equal(await status(`http://localhost:${port}`), 200);
-    assert.equal(await status("https://app.example.org"), 200);
+    assert.equal(await status("http://localhost:9999"), 403, "another port is another origin");
+    assert.equal(await status(`http://localhost:${port}`), 403, "the server serves no pages: its own origin isn't allowed either");
+    assert.equal(await status("http://app.example.org"), 403, "another scheme");
+    assert.equal(await status("https://app.example.org:8443"), 403);
+    assert.equal(await status("https://app.example.org.evil.example"), 403);
+  });
+  await withServer([], async (port) => {
+    assert.equal((await send(port, { headers: headers(port, { origin: "http://localhost:9999" }), body: initialize })).status, 403);
+    assert.equal((await send(port, { headers: headers(port), body: initialize })).status, 200, "no Origin (not a browser) passes");
   });
 });
 

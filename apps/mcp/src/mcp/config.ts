@@ -12,7 +12,7 @@ export interface McpConfig {
   port: number;
   /** Host header names the HTTP server answers to; default: localhost, 127.0.0.1, [::1]. */
   allowedHosts: string[];
-  /** Origin host names a browser may call from, besides the server's own. */
+  /** Browser origins (scheme://host[:port]) that may call; none by default. */
   allowedOrigins: string[];
   baseUrl: string | undefined;
   /** Per upstream request, whole response included (ms). */
@@ -48,7 +48,9 @@ Options:
   --port <n>                 HTTP: the port (default ${DEFAULTS.port})
   --allowed-hosts <list>     HTTP: Host header names to answer, comma-separated
                              (default localhost,127.0.0.1,[::1])
-  --allowed-origins <list>   HTTP: browser origin host names to accept, comma-separated
+  --allowed-origins <list>   HTTP: browser origins allowed to call, comma-separated, exactly as
+                             the browser sends them (https://app.example.org,
+                             http://localhost:6274); none by default
   --base-url <url>           API base URL (default https://www.abgeordnetenwatch.de)
   --timeout <ms>             per upstream request, whole response included (default ${DEFAULTS.timeoutMs})
   --call-timeout <ms>        per tool call, retries included (default ${DEFAULTS.callTimeoutMs})
@@ -118,7 +120,7 @@ export function parseConfig(argv: readonly string[]): ParsedArgs {
         host,
         port: wholeNumber("--port", str("port"), DEFAULTS.port, 0, 65535),
         allowedHosts: list("--allowed-hosts", str("allowed-hosts")) ?? ["localhost", "127.0.0.1", "[::1]"],
-        allowedOrigins: list("--allowed-origins", str("allowed-origins")) ?? [],
+        allowedOrigins: origins("--allowed-origins", str("allowed-origins")) ?? [],
         baseUrl,
         timeoutMs: wholeNumber("--timeout", str("timeout"), DEFAULTS.timeoutMs, 0, MAX_TIMEOUT_MS),
         callTimeoutMs: wholeNumber("--call-timeout", str("call-timeout"), DEFAULTS.callTimeoutMs, 1000, MAX_TIMEOUT_MS),
@@ -139,6 +141,25 @@ function wholeNumber(name: string, value: string | undefined, fallback: number, 
     throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
   }
   return Number(value);
+}
+
+/** Comma-separated origins (http or https, a host, an optional port, nothing else), normalised. */
+function origins(name: string, value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  return value.split(",").map((item) => {
+    const text = item.trim();
+    let url: URL | undefined;
+    try {
+      url = new URL(text);
+    } catch {
+      url = undefined;
+    }
+    const bare = url !== undefined && url.pathname === "/" && url.search === "" && url.hash === "" && url.username === "" && url.password === "" && !text.endsWith("/");
+    if (url === undefined || (url.protocol !== "http:" && url.protocol !== "https:") || !bare) {
+      throw new Error(`${name} must be comma-separated origins such as https://app.example.org or http://localhost:6274, got ${JSON.stringify(item)}.`);
+    }
+    return url.origin;
+  });
 }
 
 function list(name: string, value: string | undefined): string[] | undefined {

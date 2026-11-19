@@ -4,8 +4,10 @@
 //  - one endpoint, POST /mcp (the SDK answers GET and DELETE with 405); GET /healthz for
 //    orchestrators; anything else 404;
 //  - DNS-rebinding protection: the Host header must be an allowed name (default localhost,
-//    127.0.0.1, [::1]) and an Origin, when a browser sends one, a localhost one, an allowed host
-//    or one of --allowed-origins; else 403. (The SDK's handler accepted a foreign Host and Origin.)
+//    127.0.0.1, [::1]), and an Origin, when a browser sends one, exactly one of --allowed-origins
+//    (scheme, host and port; none by default: the server serves no pages); else 403. The SDK's
+//    handler accepted a foreign Host and Origin, and its Origin helper compares host names only,
+//    so a page on any localhost port passed.
 //  - limits: a body of at most 1 MiB (413), at most 8 requests at once (503), explicit timeouts;
 //  - a client that disconnects aborts its request, and with it the tool call.
 // No authentication: the data is public and the tools only read. Exposed beyond localhost, the
@@ -13,7 +15,7 @@
 
 import http from "node:http";
 import type { Logger } from "@maschinenlesbar.org/abgeordnetenwatch-log";
-import { createMcpHandler, localhostAllowedOrigins, validateHostHeader, validateOriginHeader, type McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler, validateHostHeader, type McpServer } from "@modelcontextprotocol/server";
 import type { McpConfig } from "./config.js";
 
 export const MAX_BODY_BYTES = 1024 * 1024;
@@ -23,7 +25,7 @@ export function createHttpServer(factory: () => McpServer, config: McpConfig, lo
   // The default response mode answers with one JSON body unless a tool sends a message before its
   // result, which none does. ("json" made the SDK print a warning outside the log.)
   const handler = createMcpHandler(factory, { onerror: (error) => log.warn("http", error.message) });
-  const originHosts = [...localhostAllowedOrigins(), ...config.allowedHosts, ...config.allowedOrigins];
+  const allowedOrigins = new Set(config.allowedOrigins);
   let active = 0;
 
   const server = http.createServer((req, res) => {
@@ -40,9 +42,9 @@ export function createHttpServer(factory: () => McpServer, config: McpConfig, lo
     if (path !== "/mcp") return plain(res, 404, "Not found. The MCP endpoint is POST /mcp.\n");
     const host = validateHostHeader(req.headers.host, config.allowedHosts);
     if (!host.ok) return rpcError(res, 403, "Forbidden: this Host is not allowed (--allowed-hosts).");
-    // The SDK's check refuses `Origin: null` and anything not a URL too; no Origin (not a browser) passes.
+    // No Origin (not a browser) passes; `null`, anything not a URL and any other origin don't.
     const origin = req.headers.origin;
-    if (origin !== undefined && !validateOriginHeader(origin, originHosts).ok) {
+    if (origin !== undefined && !allowedOrigins.has(originOf(origin))) {
       return rpcError(res, 403, "Forbidden: this Origin is not allowed (--allowed-origins).");
     }
     if (active >= MAX_ACTIVE_REQUESTS) return rpcError(res, 503, "The server is busy; try again shortly.", { "Retry-After": "1" });
@@ -102,6 +104,16 @@ function plain(res: http.ServerResponse, status: number, text: string, headers: 
 function rpcError(res: http.ServerResponse, status: number, message: string, headers: Record<string, string> = {}): void {
   res.writeHead(status, { "Content-Type": "application/json", ...headers, Connection: "close" });
   res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }));
+}
+
+/** The origin of an Origin header value (scheme://host[:port], normalised), or "" for anything else. */
+function originOf(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : "";
+  } catch {
+    return "";
+  }
 }
 
 /** True for an address only this machine reaches. */

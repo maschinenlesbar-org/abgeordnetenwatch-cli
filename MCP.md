@@ -83,7 +83,7 @@ Every tool only reads. An answer is JSON (`structuredContent` and the same as te
 --host <address>           HTTP: the address to listen on (default 127.0.0.1)
 --port <n>                 HTTP: the port (default 3000)
 --allowed-hosts <list>     HTTP: Host header names to answer (default localhost,127.0.0.1,[::1])
---allowed-origins <list>   HTTP: browser origin host names to accept
+--allowed-origins <list>   HTTP: browser origins allowed to call, exactly (https://app.example.org); none by default
 --base-url <url>           API base URL (default https://www.abgeordnetenwatch.de)
 --timeout <ms>             per upstream request (default 30000)
 --call-timeout <ms>        per tool call, retries included (default 45000)
@@ -96,8 +96,9 @@ Every tool only reads. An answer is JSON (`structuredContent` and the same as te
 ## What it does and doesn't do
 
 - **Read-only.** No tool changes anything, here or upstream.
-- **No authentication** on HTTP. It listens on loopback by default; it checks the `Host` and
-  `Origin` headers against DNS rebinding. Exposed beyond localhost (it logs a warning then), it
+- **No authentication** on HTTP. It listens on loopback by default; it checks the `Host` header
+  and, from a browser, the `Origin` (only the origins given with `--allowed-origins`, matched
+  exactly) against DNS rebinding and other web pages. Exposed beyond localhost (it logs a warning then), it
   belongs behind a proxy that authenticates.
 - **Gentle with the upstream.** One server process sends at most 2 requests at a time and 120 a
   minute to abgeordnetenwatch.de, pauses on HTTP 429, and stops a tool call after its deadline.
