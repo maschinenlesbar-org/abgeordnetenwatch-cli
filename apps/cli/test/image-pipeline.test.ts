@@ -120,6 +120,11 @@ test("publish.yml publishes the release's own files, checked against the immutab
     assert.doesNotMatch(job, /npm (ci|install|test|pack)\b|npm run\b/, `${name} runs no dependency code`);
   }
   assert.match(publishJob("npm"), /npm publish "\$TARBALL" --provenance/);
+  // One leg per app: a base key the include entries attach to. Without it, include entries that
+  // share their keys collapse into one job and the CLI went unpublished (v0.11.0).
+  const npm = publishJob("npm");
+  assert.match(npm, /^\s+app: \[cli, mcp\]\s*$/m);
+  assert.equal([...npm.matchAll(/^\s+- app: (cli|mcp)\s*$/gm)].length, 2);
   // Without ./ npm reads `release/x.tgz` as the GitHub repository release/x.tgz (0.10.0's publish run).
   assert.match(publishJob("npm"), /echo "TARBALL=\.\/release\/\$tarball"/);
 });

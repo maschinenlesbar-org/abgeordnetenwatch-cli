@@ -50,10 +50,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The base key makes one job per app. An include-only matrix whose entries share their
+        # keys collapses into ONE job (the last entry wins): v0.11.0's run published no CLI.
+        app: [cli, mcp]
         include:
-          - package: '@maschinenlesbar.org/abgeordnetenwatch-cli'
+          - app: cli
+            package: '@maschinenlesbar.org/abgeordnetenwatch-cli'
             tarball-prefix: maschinenlesbar.org-abgeordnetenwatch-cli
-          - package: '@maschinenlesbar.org/abgeordnetenwatch-mcp'
+          - app: mcp
+            package: '@maschinenlesbar.org/abgeordnetenwatch-mcp'
             tarball-prefix: maschinenlesbar.org-abgeordnetenwatch-mcp
     env:
       PACKAGE: ${{ matrix.package }}
