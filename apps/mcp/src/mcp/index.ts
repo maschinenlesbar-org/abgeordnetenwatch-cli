@@ -18,10 +18,21 @@ const stdio = !argv.some((arg, i) => arg === "--transport=http" || (arg === "--t
 
 let received = false;
 if (stdio) process.stdin.on("data", () => (received = true));
+let stop: () => void = () => {};
 const stopped = new Promise<void>((resolve) => {
+  stop = resolve;
   if (stdio) process.stdin.once("end", () => resolve()).once("close", () => resolve());
 });
-for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) process.once(signal, () => process.exit(code));
+// stdio ends at once; HTTP drains first (run.ts: calls in flight answer, up to 5 s), and a second
+// signal ends it at once. The exit code is the signal's either way.
+let signalCode: number | undefined;
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  process.on(signal, () => {
+    if (stdio || signalCode !== undefined) process.exit(code);
+    signalCode = code;
+    stop();
+  });
+}
 // A stdio client that went away: nothing left to answer.
 process.stdout.on("error", () => process.exit(0));
 
@@ -37,4 +48,4 @@ const code = await run(argv, {
     console.log = console.info = console.debug = console.warn = console.error = toLog;
   },
 });
-process.exit(code);
+process.exit(signalCode ?? code);

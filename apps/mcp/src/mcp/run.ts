@@ -14,6 +14,9 @@ import { PROGRAM, VERSION } from "./version.js";
 
 export const USAGE_EXIT = 2;
 
+/** How long a stopping HTTP server waits for calls in flight before it cuts them off (ms). */
+export const DRAIN_MS = 5000;
+
 export interface RunDeps {
   stdout: (text: string) => void;
   /** One stderr line, without the newline. */
@@ -27,6 +30,8 @@ export interface RunDeps {
   /** Called with the HTTP server once it listens (tests read its port). */
   onListening?: (server: Server) => void;
   now?: () => Date;
+  /** How long a stopping HTTP server waits for calls in flight (default DRAIN_MS). */
+  drainMs?: number;
   /** On stdio: whether any input arrived before stdin ended (index.ts watches stdin). */
   stdinReceived?: () => boolean;
   /** True when running in a container (default: Docker's /.dockerenv or Podman's /run/.containerenv). */
@@ -104,6 +109,19 @@ async function serveOnHttp(factory: ReturnType<typeof createServerFactory>, conf
   }
   deps.onListening?.(server);
   await deps.stopped;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  // Drain: accept no new connection, close idle ones, let calls in flight answer, up to the drain time.
+  const drainMs = deps.drainMs ?? DRAIN_MS;
+  const calls = server.inFlight();
+  if (calls > 0) log.info("mcp", `stopping: waiting up to ${drainMs / 1000} s for ${calls} call${calls === 1 ? "" : "s"} in flight`);
+  const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+  // A keep-alive connection that answered its call turns idle and would hold close() until the
+  // keep-alive timeout: close every connection as soon as no call is in flight.
+  const idle = setInterval(() => {
+    if (server.inFlight() === 0) server.closeAllConnections();
+  }, 25);
+  const cutOff = setTimeout(() => server.closeAllConnections(), drainMs);
+  await closed;
+  clearInterval(idle);
+  clearTimeout(cutOff);
   return 0;
 }

@@ -143,3 +143,58 @@ test("loopback inside a container is a WARN: a published port can't reach it, --
   const opened = await withServer(["--host", "0.0.0.0"], async () => {}, true);
   assert.doesNotMatch(opened.join("\n"), /inside a container/);
 });
+
+/** Run an HTTP server whose upstream answers after `delayMs` (or never); returns the controls. */
+async function slowServer(delayMs: number | undefined, drainMs: number) {
+  const lines: string[] = [];
+  let stop: () => void = () => {};
+  const stopped = new Promise<void>((resolve) => (stop = resolve));
+  let listening: (port: number) => void = () => {};
+  const port = new Promise<number>((resolve) => (listening = resolve));
+  const body = JSON.stringify({ meta: { status: "ok", status_message: "", result: { count: 0, total: 7, range_start: 0, range_end: 0 } }, data: [] });
+  const transport = (request: { signal?: AbortSignal }) =>
+    new Promise<{ status: number; headers: Record<string, string>; body: Buffer }>((resolve, reject) => {
+      if (delayMs !== undefined) setTimeout(() => resolve({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(body) }), delayMs);
+      request.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    });
+  const done = run(["--transport", "http", "--port", "0"], {
+    stdout: () => {},
+    stderr: (line) => lines.push(line),
+    transport: transport as never,
+    stopped,
+    drainMs,
+    onListening: (server) => listening((server.address() as AddressInfo).port),
+  });
+  return { lines, stop, done, port: await port };
+}
+
+const countCall = JSON.stringify({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "countEntities", arguments: { collection: "parties" } } });
+
+test("stopping drains: a call in flight still gets its answer, then the server ends", async () => {
+  const server = await slowServer(300, 5000);
+  const answer = send(server.port, { headers: headers(server.port), body: countCall });
+  await new Promise((r) => setTimeout(r, 50));
+  const stoppedAt = Date.now();
+  server.stop();
+  const result = await answer;
+  assert.equal(result.status, 200);
+  assert.match(result.body, /\\"total\\":7/);
+  assert.equal(await server.done, 0);
+  assert.ok(Date.now() - stoppedAt < 2000, "ends once the call is answered, not after the whole drain time");
+  assert.match(server.lines.join("\n"), /INFO  \[abgeordnetenwatch-mcp\.mcp\] stopping: waiting up to 5 s for 1 call in flight/);
+});
+
+test("the drain is bounded: a call that doesn't finish is cut off after the drain time", async () => {
+  const server = await slowServer(undefined, 200);
+  const cut = send(server.port, { headers: headers(server.port), body: countCall }).then(
+    () => "answered",
+    (err: Error) => err.message,
+  );
+  await new Promise((r) => setTimeout(r, 50));
+  const stoppedAt = Date.now();
+  server.stop();
+  assert.equal(await server.done, 0);
+  const took = Date.now() - stoppedAt;
+  assert.ok(took >= 150 && took < 2000, `took ${took} ms`);
+  assert.equal(await cut, "socket hang up", "the call was cut off, not answered");
+});

@@ -21,7 +21,10 @@ import type { McpConfig } from "./config.js";
 export const MAX_BODY_BYTES = 1024 * 1024;
 export const MAX_ACTIVE_REQUESTS = 8;
 
-export function createHttpServer(factory: () => McpServer, config: McpConfig, log: Pick<Logger, "warn">): http.Server {
+/** The HTTP server, and how many MCP requests it is answering right now. */
+export type McpHttpServer = http.Server & { inFlight(): number };
+
+export function createHttpServer(factory: () => McpServer, config: McpConfig, log: Pick<Logger, "warn">): McpHttpServer {
   // The default response mode answers with one JSON body unless a tool sends a message before its
   // result, which none does. ("json" made the SDK print a warning outside the log.)
   const handler = createMcpHandler(factory, { onerror: (error) => log.warn("http", error.message) });
@@ -79,7 +82,7 @@ export function createHttpServer(factory: () => McpServer, config: McpConfig, lo
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 5_000;
   server.maxHeadersCount = 100;
-  return server;
+  return Object.assign(server, { inFlight: () => active });
 }
 
 /** The body, or undefined when it is over MAX_BODY_BYTES (the rest is not read). */

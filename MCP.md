@@ -105,6 +105,9 @@ Every tool only reads. An answer is JSON (`structuredContent` and the same as te
 - **Results are data.** Text from the API is cleaned (control, bidi and zero-width characters
   removed), but it is still other people's text: a model can be told things in it. The server
   can't act on that (it has no tool that writes), but other tools in the same session could.
+- **Stops cleanly.** On `docker stop` (SIGTERM) or Ctrl-C the HTTP server takes no new
+  connection and lets calls in flight answer for up to 5 s, then exits 143 (130); a second signal
+  ends it at once. On stdio it ends at once, and when stdin ends.
 - **Logs** go to stderr, one record per line; stdout carries only the protocol.
 - **Never installs anything** and needs no key.
 
