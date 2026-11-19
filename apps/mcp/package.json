@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/abgeordnetenwatch-mcp",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "MCP server for the open abgeordnetenwatch.de parliamentary data API: politicians, voting records, side jobs, polls and their results, for AI agents (stdio and Streamable HTTP)",
   "type": "module",
   "bin": {
@@ -32,7 +32,7 @@
     "transparency",
     "germany"
   ],
-  "author": "Sebastian Sch\u00fcrmann <sebs@2xs.org>",
+  "author": "Sebastian Schürmann <sebs@2xs.org>",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
