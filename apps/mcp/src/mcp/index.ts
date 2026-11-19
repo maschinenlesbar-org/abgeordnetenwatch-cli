@@ -16,6 +16,8 @@ console.warn = console.error;
 const argv = process.argv.slice(2);
 const stdio = !argv.some((arg, i) => arg === "--transport=http" || (arg === "--transport" && argv[i + 1] === "http"));
 
+let received = false;
+if (stdio) process.stdin.on("data", () => (received = true));
 const stopped = new Promise<void>((resolve) => {
   if (stdio) process.stdin.once("end", () => resolve()).once("close", () => resolve());
 });
@@ -27,6 +29,7 @@ const code = await run(argv, {
   stdout: (text) => process.stdout.write(text),
   stderr: (line) => process.stderr.write(`${line}\n`),
   stopped,
+  stdinReceived: () => received,
   onLogger: (log) => {
     installWarningLog(process, log, "mcp");
     // What a dependency prints is a record too: every stderr line is one.

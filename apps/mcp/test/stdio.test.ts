@@ -60,3 +60,12 @@ test("--version and --help print to stdout and exit 0; a usage error is one reco
   assert.equal((await usage.exited).code, 2);
   assert.equal(records(usage.err()).length, 1);
 });
+
+test("stdin closed before any message (docker run without -i) is an ERROR record that says so, and exit 1", STARTS_A_PROCESS, async () => {
+  const server = start();
+  server.child.stdin.end();
+  assert.deepEqual(await server.exited, { code: 1, signal: null });
+  const lines = records(server.err());
+  assert.match(lines.at(-1) ?? "", /ERROR \[abgeordnetenwatch-mcp\.mcp\] stdin ended before any MCP message: no client is connected on stdio\. In a container, run it with docker run -i \(an MCP client does\); for HTTP use --transport http --host 0\.0\.0\.0\./);
+  assert.equal(server.out(), "", "stdout stays empty");
+});

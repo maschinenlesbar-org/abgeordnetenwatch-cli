@@ -27,6 +27,8 @@ export interface RunDeps {
   /** Called with the HTTP server once it listens (tests read its port). */
   onListening?: (server: Server) => void;
   now?: () => Date;
+  /** On stdio: whether any input arrived before stdin ended (index.ts watches stdin). */
+  stdinReceived?: () => boolean;
   /** True when running in a container (default: Docker's /.dockerenv or Podman's /run/.containerenv). */
   inContainer?: () => boolean;
 }
@@ -63,6 +65,14 @@ async function serveOnStdio(factory: ReturnType<typeof createServerFactory>, dep
   log.info("mcp", `${PROGRAM} ${VERSION} serving MCP on stdio`);
   await deps.stopped;
   await handle.close();
+  if (deps.stdinReceived?.() === false) {
+    // `docker run <image>` without -i closes stdin at once: the server would end, exit 0, unexplained.
+    log.error(
+      "mcp",
+      "stdin ended before any MCP message: no client is connected on stdio. In a container, run it with docker run -i (an MCP client does); for HTTP use --transport http --host 0.0.0.0.",
+    );
+    return 1;
+  }
   return 0;
 }
 
