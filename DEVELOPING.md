@@ -514,10 +514,39 @@ colon left out, whose userinfo is everything between the first slashes and the l
   throws reaches the caller as an `AwNetworkError` (`GET <url> failed: <reason>`, the
   original as `cause`).
 
+## MCP server (apps/mcp)
+
+`apps/mcp` is the second published app, `@maschinenlesbar.org/abgeordnetenwatch-mcp` (bin
+`abgeordnetenwatch-mcp`), released in lockstep with the CLI: `npm run bump` bumps every
+published app under `apps/` together, one version, one tag. Its npm README is the root
+`MCP.md` (prepack packs `<APP>.md` for an app that has one).
+
+| Module | Role |
+|---|---|
+| `packages/client/src/operations.ts` | The skills' use cases as library functions (findPolitician, getVotingRecord, findPolls, getPollResult, getSideJobs; resolveMandate, readAll), with their traps built in. Public API of both packages. |
+| `packages/log` | The log records (text/jsonl), shared by both apps; `createLogger({ program })`. |
+| `src/mcp/tools.ts` | The eight tools: flat input schemas with limits (no root combinators), one object output schema each, descriptions under 2000 characters. |
+| `src/mcp/server.ts` | The McpServer factory, the instructions, `callTool`: deadline (`--call-timeout`) plus the client's cancellation, cleaned and fitted answers, failures as `isError` results. |
+| `src/mcp/result.ts` | `cleanStrings` (control, bidi, zero-width characters dropped in the value), `fitResult` (whole list entries dropped under `--max-result-chars`, `nextOffset`). |
+| `src/mcp/limiter.ts` | One per process around the upstream transport: 2 in flight, 120 a minute, pause on 429, a bounded queue. |
+| `src/mcp/http.ts` | node:http adapter for the SDK's `createMcpHandler`: POST /mcp, /healthz, Host and Origin checks (the SDK does neither), 1 MiB body, 8 requests at once, timeouts. |
+| `src/mcp/config.ts`, `run.ts`, `index.ts` | Options (`node:util` parseArgs), argv -> exit code, the bin (console into log records, SIGINT/SIGTERM, stdin's end). |
+
+The protocol is the SDK's: `@modelcontextprotocol/server` 2.4.0, bundled with its core and zod
+(prepack). It serves the 2026-07-28 revision and the 2025 handshake (2025-11-25, 2025-06-18)
+statelessly, on stdio (`serveStdio`) and HTTP. The SDK bundles AJV 8.18 into its own code to
+validate tool arguments against the input schemas; an SBOM doesn't list that copy.
+
+Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC
+(`helpers.ts`), plus `http.test.ts` on a free port and `stdio.test.ts` with the built bin
+(30 s, it starts processes). `tools/interop/` checks the built server against the official
+client 2.4.0 (stdio and HTTP; legacy, auto and pinned 2026-07-28) in ci.yml's `interop` job;
+it has its own lockfile and is never installed by the workspace, release or publish runs.
+
 ## Container image
 
-`tools/image/` builds the CLI's image from the release tarball (`npm pack` output), never from
-source: `ADD` unpacks it onto distroless Node 24 (Debian 13, `nonroot`, uid 65532), so the image
+`tools/image/` builds both apps' images (Dockerfile targets `cli` and `mcp`) from their release
+tarballs (`npm pack` output), never from source: `ADD` unpacks it onto distroless Node 24 (Debian 13, `nonroot`, uid 65532), so the image
 holds exactly the files npm users get. The base, BuildKit, the test registry, skopeo (local runs
 only), syft and grype are pinned in `pins.json`; bump them in the deps round. A Node or Debian
 security fix reaches the image only through a new base digest, so it means a patch release.
@@ -545,8 +574,8 @@ an arm64 runner and the vulnerability gate. In `release.yml` the job `image` bui
 checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
 scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
 and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
-`publish.yml` publishes the release's own files: the tarball to npm and the archive to
-`ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli` (with the run's `GITHUB_TOKEN`), each checked
+`publish.yml` publishes the release's own files: both tarballs to npm and both archives to
+`ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli` and `…/abgeordnetenwatch-mcp` (with the run's `GITHUB_TOKEN`), each checked
 first against the immutable release (`gh release verify-asset`) and the provenance `release.yml`
 signed for that tag (`gh attestation verify`).
 `apps/cli/test/image-pipeline.test.ts` pins these rules.

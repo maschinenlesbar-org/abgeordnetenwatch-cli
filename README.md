@@ -57,6 +57,20 @@ gh attestation verify oci://ghcr.io/maschinenlesbar-org/abgeordnetenwatch-cli:la
   --repo maschinenlesbar-org/abgeordnetenwatch-cli
 ```
 
+### MCP server
+
+From 0.11.0 the same data is also an [MCP](https://modelcontextprotocol.io/) server for AI agents,
+`@maschinenlesbar.org/abgeordnetenwatch-mcp` (command `abgeordnetenwatch-mcp`, image
+`ghcr.io/maschinenlesbar-org/abgeordnetenwatch-mcp`): eight read-only tools, among them a
+politician's voting record, side jobs and a poll's result fraction by fraction, on stdio or
+Streamable HTTP. Setup for Claude Code, Claude Desktop and VS Code:
+[MCP.md](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/blob/main/MCP.md).
+
+```bash
+npm i -g @maschinenlesbar.org/abgeordnetenwatch-mcp
+claude mcp add abgeordnetenwatch -- abgeordnetenwatch-mcp
+```
+
 ## Quickstart
 
 ```bash
