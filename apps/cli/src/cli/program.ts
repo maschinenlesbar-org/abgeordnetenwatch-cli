@@ -2,6 +2,7 @@
 // CliDeps so the entire CLI can be driven in tests with a mocked client and
 // captured output.
 
+import { readContainerLimits } from "./limits.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
@@ -36,6 +37,7 @@ export const VERSION = readVersion();
 export const defaultDeps: CliDeps = {
   io: defaultIO,
   createClient: (options) => new AbgeordnetenwatchClient(options),
+  limits: () => readContainerLimits(),
 };
 
 /** commander value-parser for `--log-format`. */

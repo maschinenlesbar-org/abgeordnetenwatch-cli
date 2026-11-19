@@ -4,6 +4,7 @@
 import { fstatSync, writeSync } from "node:fs";
 import type { AbgeordnetenwatchClient } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/client";
 import type { EngineOptions } from "@maschinenlesbar.org/abgeordnetenwatch-client/internal/engine";
+import type { ContainerLimits } from "./limits.js";
 import { createLogger, type Logger } from "./log.js";
 
 export interface CliIO {
@@ -22,6 +23,8 @@ export interface CliDeps {
   log?: Logger;
   /** The clock the log's timestamps come from. Unset, the real one. */
   now?: () => Date;
+  /** The container's limits (limits.ts); only the bin's defaultDeps reads them, never a test. */
+  limits?: () => ContainerLimits;
 }
 
 /** The deps' logger, or one that writes text records through `io.err`. */

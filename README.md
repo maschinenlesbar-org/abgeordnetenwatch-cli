@@ -50,6 +50,10 @@ docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
 The image's entrypoint is the program, so the command follows the image name directly;
 `… abgeordnetenwatch-cli:latest abgeordnetenwatch list …` works too.
 
+In a container with a memory limit (`--memory`) the default `--max-response-bytes` is an eighth
+of that limit (at most the usual 100 MiB), so an oversized answer is refused with a clear
+error instead of the container being killed for memory.
+
 `latest` is the newest release. For scripts, name a release and pin its digest, which the
 [release notes](https://github.com/maschinenlesbar-org/abgeordnetenwatch-cli/releases) give:
 `…/abgeordnetenwatch-cli:0.10.0@sha256:<digest>`. Each image carries signed build provenance;
