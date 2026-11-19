@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
 import type { AddressInfo } from "node:net";
 import { run } from "../src/mcp/run.js";
 import { upstream } from "./helpers.js";
@@ -86,8 +87,18 @@ test("a browser Origin must be localhost, an allowed host or an allowed origin; 
 
 test("a body over 1 MiB is 413", async () => {
   await withServer([], async (port) => {
-    const big = Buffer.alloc(1024 * 1024 + 1, 0x20);
-    assert.equal((await send(port, { headers: headers(port), body: big })).status, 413);
+    // Only the headers: the server answers from the declared length before reading a byte. (Sending
+    // the whole body raced with the server's close and sometimes ended in a reset, not the answer.)
+    const answer = await new Promise<string>((resolve, reject) => {
+      const socket = net.connect(port, "127.0.0.1", () =>
+        socket.write(`POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: ${1024 * 1024 + 1}\r\n\r\n`),
+      );
+      let data = "";
+      socket.on("data", (chunk: Buffer) => (data += chunk.toString("utf8")));
+      socket.on("close", () => resolve(data));
+      socket.on("error", reject);
+    });
+    assert.match(answer, /^HTTP\/1\.1 413 /);
   });
 });
 
