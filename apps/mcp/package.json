@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/abgeordnetenwatch-mcp",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "MCP server for the open abgeordnetenwatch.de parliamentary data API: politicians, voting records, side jobs, polls and their results, for AI agents (stdio and Streamable HTTP)",
   "type": "module",
   "bin": {
