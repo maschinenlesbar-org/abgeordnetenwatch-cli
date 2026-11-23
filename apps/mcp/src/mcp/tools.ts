@@ -218,10 +218,10 @@ export const TOOLS: readonly ToolDefinition[] = [
         ...(str(args, "sortBy") === undefined ? {} : { sortBy: str(args, "sortBy") }),
         ...(str(args, "sortDirection") === undefined ? {} : { sortDirection: str(args, "sortDirection") as "asc" | "desc" }),
       };
-      const answer = await context.client.list(args["collection"] as (typeof ENTITY_COLLECTIONS)[number], params, { signal: context.signal });
-      const total = answer.meta.result.total;
-      const next = offset + answer.data.length;
-      return { status: total === 0 ? "empty" : "ok", total, data: answer.data, ...(next < total ? { nextOffset: next } : {}) };
+      // page(), not list(): the total is checked, as countEntities' is.
+      const { total, data } = await context.client.page(args["collection"] as (typeof ENTITY_COLLECTIONS)[number], params, { signal: context.signal });
+      const next = offset + data.length;
+      return { status: total === 0 ? "empty" : "ok", total, data, ...(next < total ? { nextOffset: next } : {}) };
     },
   },
   {

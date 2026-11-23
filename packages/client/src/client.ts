@@ -4,6 +4,7 @@
 //   client.list("politicians", { filters: { sex: "f" }, rangeEnd: 10 })
 //   client.get("politicians", 184945)
 //   client.count("votes", { filters: { poll: 6569 } })
+//   client.page("parties", { rangeStart: 20, rangeEnd: 20 })   // { total, data }, total checked
 //
 // The API is uniform across all entity types — one envelope, list + detail —
 // so the client is generic over the collection name rather than exposing 18
@@ -125,6 +126,26 @@ export class AbgeordnetenwatchClient {
     assertEnvelope(body, request, this.engine);
     if (!isObject(body["data"])) throw shapeError(request, "a data object");
     return body as unknown as DetailResponse<T>;
+  }
+
+  /**
+   * One page of a collection and the number of all its matches: `{ total, data }`. Unlike
+   * list(), which returns the envelope as it came, the total is checked like count()'s: a
+   * `meta.result.total` that is not a whole number from 0 up, or that is smaller than the page's
+   * start plus its items (a total of 0 beside an item), raises AwParseError, so a caller never
+   * pages by a count the answer contradicts.
+   */
+  async page<T = Entity>(collection: EntityCollection, params: ListParams = {}, options?: RequestOptions): Promise<{ total: number; data: T[] }> {
+    const res = await this.list<T>(collection, params, options);
+    const total: unknown = (res.meta.result as unknown as { total?: unknown } | undefined)?.total;
+    const reached = (params.rangeStart ?? 0) + res.data.length;
+    if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
+      throw shapeError(this.describe(`${API_PREFIX}/${collection}`, this.toQuery(params)), "a numeric meta.result.total");
+    }
+    if (res.data.length > 0 && total < reached) {
+      throw shapeError(this.describe(`${API_PREFIX}/${collection}`, this.toQuery(params)), `a meta.result.total of at least ${reached} (the page's items reach that far), got ${total}`);
+    }
+    return { total, data: res.data };
   }
 
   /**

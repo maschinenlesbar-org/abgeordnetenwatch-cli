@@ -48,7 +48,9 @@ try {
 ```
 
 `list()` returns the `{ meta, data }` envelope (`data` an array), `get()` the envelope of one
-record (`data` an object), `count()` the number of matches. The collection names are
+record (`data` an object), `count()` the number of matches, `page()` one page as `{ total, data }`
+with the total checked like `count()`'s (a total that is no whole number from 0 up, or smaller than
+the page reaches, is an `AwParseError`; `list()` passes the envelope on as it came). The collection names are
 `ENTITY_COLLECTIONS`; the filters, operators and paging rules are the CLI's (see the README and
 [Input validation](#input-validation)), and every input is checked before any request. Every
 option may be omitted or given as `undefined`, which means the same (the default).

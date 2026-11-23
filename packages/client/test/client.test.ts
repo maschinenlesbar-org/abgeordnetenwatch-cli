@@ -688,3 +688,16 @@ test("requests go to the base URL as WHATWG parses it: host lower-cased, default
     assert.equal(mt.calls[0]?.url, sent, baseUrl);
   }
 });
+
+test("page() returns one page and the checked total; a total that is no count, or fewer than the page holds, is an AwParseError", async () => {
+  const answer = (total: unknown, data: unknown[]) =>
+    makeMockTransport(() => jsonResponse({ meta: { status: "ok", status_message: "", result: { count: data.length, total, range_start: 0, range_end: data.length } }, data })).transport;
+  const ok = await new AbgeordnetenwatchClient({ transport: answer(45, [{ id: 41 }, { id: 42 }]) }).page("parties", { rangeStart: 40, rangeEnd: 10 });
+  assert.deepEqual(ok, { total: 45, data: [{ id: 41 }, { id: 42 }] });
+  const past = await new AbgeordnetenwatchClient({ transport: answer(45, []) }).page("parties", { rangeStart: 1_000_000 });
+  assert.deepEqual(past, { total: 45, data: [] });
+  for (const [total, data] of [[-5, []], [1e20, [{ id: 1 }]], [0, [{ id: 1 }]], [1.5, []], ["3", []], [null, []], [undefined, []], [41, [{ id: 41 }, { id: 42 }]]] as const) {
+    const client = new AbgeordnetenwatchClient({ transport: answer(total, [...data]) });
+    await assert.rejects(client.page("parties", { rangeStart: total === 41 ? 40 : 0 }), (err: Error) => err instanceof AwParseError && /unexpected response shape: expected .*meta\.result\.total/.test(err.message) && err.message.includes("/api/v2/parties"), String(total));
+  }
+});
