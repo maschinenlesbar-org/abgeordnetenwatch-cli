@@ -116,3 +116,35 @@ test("listEntities refuses an answer whose total is no count, or fewer than the 
     await connection.close();
   }
 });
+
+test("source is the request the answer came from, not the bare collection", async () => {
+  const base = "https://www.abgeordnetenwatch.de/api/v2";
+  const connection = await connect({ transport: world });
+  const cases: [string, Record<string, unknown>, string][] = [
+    ["findPolitician", { name: "Olaf Scholz" }, "politicians?first_name%5Bcn%5D=Olaf&last_name%5Bcn%5D=Scholz"],
+    ["getVotingRecord", { name: "Scholz" }, "votes?mandate=70"],
+    ["getVotingRecord", { politicianId: 7, mandateId: 70 }, "votes?mandate=70"],
+    ["getSideJobs", { politicianId: 7 }, "sidejobs?mandates=70"],
+    ["findPolls", { parliamentPeriodId: 161, topicId: 4, from: "2026-01-01", to: "2026-12-31" }, "polls?field_legislature=161&field_topics=4&field_poll_date%5Bgte%5D=2026-01-01&field_poll_date%5Blte%5D=2026-12-31"],
+    ["getPollResult", { pollId: 9 }, "votes?poll=9"],
+    ["listEntities", { collection: "parties", limit: 1 }, "parties?range_start=0&range_end=1"],
+    ["listEntities", { collection: "parties", filters: { "label[cn]": " Grüne " }, sortBy: "label", sortDirection: "asc", offset: 20, limit: 5 }, "parties?label%5Bcn%5D=Gr%C3%BCne&range_start=20&range_end=5&sort_by=label&sort_direction=asc"],
+    ["getEntity", { collection: "parties", id: 2 }, "parties/2"],
+    ["countEntities", { collection: "parties", filters: { "label[cn]": "S" } }, "parties?label%5Bcn%5D=S"],
+  ];
+  for (const [name, args, path] of cases) {
+    const result = await connection.call(name, args);
+    assert.notEqual(result.isError, true, `${name}: ${result.content[0]?.text}`);
+    assert.equal(result.structuredContent?.["source"], `${base}/${path}`, `${name} ${JSON.stringify(args)}`);
+  }
+  await connection.close();
+  const two = upstream((collection) => (collection === "politicians" ? [politician(1, "Anna Müller"), politician(2, "Hans Müller")] : collection === "politicians/5" ? politician(5, "Nur Kandidat") : collection === "candidacies-mandates" ? [] : undefined));
+  const other = await connect({ transport: two });
+  const ambiguous = await other.call("getSideJobs", { name: "Müller" });
+  assert.equal(ambiguous.structuredContent?.["status"], "ambiguous");
+  assert.equal(ambiguous.structuredContent?.["source"], `${base}/politicians?last_name%5Bcn%5D=M%C3%BCller`);
+  const noMandate = await other.call("getVotingRecord", { politicianId: 5 });
+  assert.equal(noMandate.structuredContent?.["status"], "empty");
+  assert.equal(noMandate.structuredContent?.["source"], `${base}/candidacies-mandates?politician=5&current_on=all`);
+  await other.close();
+});

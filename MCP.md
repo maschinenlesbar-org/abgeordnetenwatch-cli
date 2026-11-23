@@ -74,7 +74,9 @@ For scripts and shared configs, pin a release and its digest from the
 | `countEntities` | How many records match. |
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
-`source` it came from (whole, never cut like the data; an answer a redirect fetched from another host says so there: "… (answered
+`source` it came from (the request a reader can follow to the record, e.g.
+`…/api/v2/votes?mandate=200` for a voting record or `…/politicians?last_name%5Bcn%5D=Scholz` for an
+ambiguous name; whole, never cut like the data; an answer a redirect fetched from another host says so there: "… (answered
 by https://other.example after a redirect)", and a WARN record names both) and the data licence.
 A text over 2000 characters is cut and ends in `…[cut, N characters in all]`, and the answer says
 `truncated`. An answer over `--max-result-chars` first loses entries from the end of its page

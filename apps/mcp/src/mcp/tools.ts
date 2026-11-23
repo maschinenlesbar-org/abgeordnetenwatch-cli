@@ -7,6 +7,7 @@
 // everything about the server that is particular to abgeordnetenwatch.de.
 
 import {
+  buildQueryString,
   ENTITY_COLLECTIONS,
   findPolitician,
   findPolls,
@@ -15,7 +16,12 @@ import {
   getVotingRecord,
   MAX_FILTER_KEY_LENGTH,
   NO_NAME_MATCH_ADVICE,
+  normalizeText,
+  type FilterValue,
   type ListParams,
+  type QueryParams,
+  type SideJobs,
+  type VotingRecord,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 
 import type { JsonSchema, ToolContext, ToolDefinition } from "./server.js";
@@ -85,6 +91,36 @@ const str = (args: Record<string, unknown>, key: string): string | undefined => 
 const ref = (args: Record<string, unknown>) => ({ politicianId: num(args, "politicianId"), name: str(args, "name"), mandateId: num(args, "mandateId") });
 const options = (context: ToolContext) => ({ signal: context.signal, maxPages: context.maxPages });
 
+// `source`: the request the answer came from, so a reader can follow it and see the record
+// (`votes?mandate=200`, not every vote of everyone under `votes`). The kit makes `source` from
+// the call's arguments; what a tool only learns while it runs (the mandate it resolved) it notes
+// here, under that call's arguments object, which callTool passes to run and then to source.
+const cited = new WeakMap<Record<string, unknown>, string>();
+
+/** The longest query a `source` cites; a longer one (ten long non-Latin filter values) cites the collection. */
+const MAX_SOURCE_QUERY = 2000;
+
+/** `path?query` as the client sends it (text values NFC and trimmed). */
+function request(path: string, query: QueryParams): string {
+  const sent: QueryParams = {};
+  for (const [key, value] of Object.entries(query)) sent[key] = typeof value === "string" ? normalizeText(value) : value;
+  const text = buildQueryString(sent);
+  return text === "" || text.length > MAX_SOURCE_QUERY ? path : `${path}?${text}`;
+}
+
+/** The `source` of a tool that notes its request in run; `fallback` until it has. */
+const noted = (fallback: string) => (args: Record<string, unknown>): string => cited.get(args) ?? fallback;
+
+/** Where getVotingRecord's or getSideJobs' answer came from: the mandate's records, the name search, or the mandates. */
+function citeRecord(args: Record<string, unknown>, answer: VotingRecord | SideJobs, collection: "votes" | "sidejobs", filter: "mandate" | "mandates"): void {
+  if (answer.status === "ok") cited.set(args, request(collection, { [filter]: answer.mandate.id }));
+  else if (answer.search !== undefined) cited.set(args, request("politicians", answer.search.searched));
+  else if (answer.status === "empty" && answer.politician !== undefined) cited.set(args, request("candidacies-mandates", { politician: answer.politician.id, current_on: "all" }));
+}
+
+/** The filters argument of listEntities and countEntities. */
+const filtersOf = (args: Record<string, unknown>) => (args["filters"] as Record<string, FilterValue> | undefined) ?? {};
+
 /**
  * Why findPolls found nothing, from what was asked: advice to widen dates or drop a topic that
  * were never given sent a model looking for a cause that isn't there (and let it conclude the
@@ -113,9 +149,10 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ name, limit: limit(25, 10) }, ["name"]),
     outputSchema: output({ searched: obj, total: int, candidates: arr, complete: { type: "boolean" } }),
-    source: "politicians",
+    source: noted("politicians"),
     async run(args, context) {
       const search = await findPolitician(context.client, { name: str(args, "name") ?? "", limit: num(args, "limit") }, options(context));
+      cited.set(args, request("politicians", search.searched));
       return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: `No politician's name contains that. ${NO_NAME_MATCH_ADVICE}` } : {}) };
     },
   },
@@ -129,9 +166,11 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ politicianId: id("The politician's id."), name, mandateId: id("A mandate of that politician (default: the most recent)."), limit: limit(100, 20) }),
     outputSchema: output({ ...politicianFields, total: int, tally: obj, recent: arr }),
-    source: "votes",
+    source: noted("votes"),
     async run(args, context) {
-      return { ...(await getVotingRecord(context.client, { ...ref(args), limit: num(args, "limit") }, options(context))) };
+      const record = await getVotingRecord(context.client, { ...ref(args), limit: num(args, "limit") }, options(context));
+      citeRecord(args, record, "votes", "mandate");
+      return { ...record };
     },
   },
   {
@@ -147,7 +186,13 @@ export const TOOLS: readonly ToolDefinition[] = [
       ["parliamentPeriodId"],
     ),
     outputSchema: output({ total: int, polls: arr, complete: { type: "boolean" } }),
-    source: "polls",
+    source: (args) =>
+      request("polls", {
+        field_legislature: num(args, "parliamentPeriodId"),
+        field_topics: num(args, "topicId"),
+        "field_poll_date[gte]": str(args, "from"),
+        "field_poll_date[lte]": str(args, "to"),
+      }),
     async run(args, context) {
       const search = await findPolls(
         context.client,
@@ -167,7 +212,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ pollId: id("The poll's id.") }, ["pollId"]),
     outputSchema: output({ poll: obj, total: int, tally: obj, fractions: arr }),
-    source: "votes",
+    source: (args) => request("votes", { poll: num(args, "pollId") }),
     async run(args, context) {
       return { status: "ok", ...(await getPollResult(context.client, { pollId: num(args, "pollId") ?? 0 }, options(context))) };
     },
@@ -182,9 +227,11 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ politicianId: id("The politician's id."), name, mandateId: id("A mandate of that politician (default: the most recent).") }),
     outputSchema: output({ ...politicianFields, total: int, sideJobs: arr }),
-    source: "sidejobs",
+    source: noted("sidejobs"),
     async run(args, context) {
-      return { ...(await getSideJobs(context.client, ref(args), options(context))) };
+      const jobs = await getSideJobs(context.client, ref(args), options(context));
+      citeRecord(args, jobs, "sidejobs", "mandates");
+      return { ...jobs };
     },
   },
   {
@@ -207,12 +254,19 @@ export const TOOLS: readonly ToolDefinition[] = [
       ["collection"],
     ),
     outputSchema: output({ total: int, data: arr, nextOffset: int }),
-    source: (args) => String(args["collection"]),
+    source: (args) =>
+      request(String(args["collection"]), {
+        ...filtersOf(args),
+        range_start: num(args, "offset") ?? 0,
+        range_end: num(args, "limit") ?? 20,
+        sort_by: str(args, "sortBy"),
+        sort_direction: str(args, "sortDirection"),
+      }),
     paged: (args) => ({ list: "data", offset: num(args, "offset") ?? 0 }),
     async run(args, context) {
       const offset = num(args, "offset") ?? 0;
       const params: ListParams = {
-        filters: (args["filters"] as Record<string, string | number | boolean> | undefined) ?? {},
+        filters: filtersOf(args),
         rangeStart: offset,
         rangeEnd: num(args, "limit") ?? 20,
         ...(str(args, "sortBy") === undefined ? {} : { sortBy: str(args, "sortBy") }),
@@ -233,7 +287,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ collection, id: id("The record's id.") }, ["collection", "id"]),
     outputSchema: output({ entity: obj }),
-    source: (args) => String(args["collection"]),
+    source: (args) => `${String(args["collection"])}/${num(args, "id") ?? ""}`,
     async run(args, context) {
       const answer = await context.client.get(args["collection"] as (typeof ENTITY_COLLECTIONS)[number], num(args, "id") ?? 0, { signal: context.signal });
       return { status: "ok", entity: answer.data };
@@ -248,11 +302,11 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ collection, filters }, ["collection"]),
     outputSchema: output({ total: int }),
-    source: (args) => String(args["collection"]),
+    source: (args) => request(String(args["collection"]), filtersOf(args)),
     async run(args, context) {
       const total = await context.client.count(
         args["collection"] as (typeof ENTITY_COLLECTIONS)[number],
-        { filters: (args["filters"] as Record<string, string | number | boolean> | undefined) ?? {} },
+        { filters: filtersOf(args) },
         { signal: context.signal },
       );
       return { status: "ok", total };
