@@ -75,6 +75,8 @@ export {
   getPollResult,
   getSideJobs,
   getVotingRecord,
+  NAME_PARTICLES,
+  NO_NAME_MATCH_ADVICE,
   readAll,
   resolveMandate,
 } from "./operations.js";

@@ -196,3 +196,45 @@ test("findPolls refuses a date that doesn't exist (Feb 30, Apr 31) instead of se
   assert.equal(mock.calls.length, 0);
   await findPolls(client, { parliamentPeriodId: 161, from: "2024-02-29", to: "2026-12-31" });
 });
+
+test("a name with a particle (von, von der, zu, van) keeps the particle with the last name, as the API splits such names", async () => {
+  const people = [
+    { ...politician(1, "Ursula von der Leyen"), first_name: "Ursula", last_name: "von der Leyen" },
+    { ...politician(2, "Karl-Theodor zu Guttenberg"), first_name: "Karl-Theodor", last_name: "zu Guttenberg" },
+    { ...politician(3, "Jan van Aken"), first_name: "Jan", last_name: "van Aken" },
+  ];
+  const mock = upstream((collection, url) => {
+    if (collection === "politicians") {
+      const first = url.searchParams.get("first_name[cn]");
+      const last = url.searchParams.get("last_name[cn]") ?? "";
+      return people.filter((p) => p.last_name.includes(last) && (first === null || p.first_name.includes(first)));
+    }
+    if (collection === "candidacies-mandates") return [mandate(70, "Bundestag 2025 - 2029")];
+    if (collection === "votes") return [vote(1, 9, "yes")];
+    return undefined;
+  });
+  const client = new AbgeordnetenwatchClient({ transport: mock.transport });
+  const cases: [string, Record<string, string>, number][] = [
+    ["Ursula von der Leyen", { "first_name[cn]": "Ursula", "last_name[cn]": "von der Leyen" }, 1],
+    ["Karl-Theodor zu Guttenberg", { "first_name[cn]": "Karl-Theodor", "last_name[cn]": "zu Guttenberg" }, 2],
+    ["Jan van Aken", { "first_name[cn]": "Jan", "last_name[cn]": "van Aken" }, 3],
+    ["von der Leyen", { "last_name[cn]": "von der Leyen" }, 1],
+    ["Olaf Scholz", { "first_name[cn]": "Olaf", "last_name[cn]": "Scholz" }, 0],
+  ];
+  for (const [name, searched, id] of cases) {
+    const search = await findPolitician(client, { name });
+    assert.deepEqual(search.searched, searched, name);
+    assert.deepEqual(search.candidates.map((c) => c.id), id === 0 ? [] : [id], name);
+  }
+  const record = await getVotingRecord(client, { name: "Ursula von der Leyen" });
+  assert.equal(record.status, "ok");
+});
+
+test("a name that matches nobody in getVotingRecord or getSideJobs advises the last name alone", async () => {
+  const mock = upstream((collection) => (collection === "politicians" ? [] : undefined));
+  const client = new AbgeordnetenwatchClient({ transport: mock.transport });
+  for (const record of [await getVotingRecord(client, { name: "Ursula Leyen" }), await getSideJobs(client, { name: "Ursula Leyen" })]) {
+    assert.equal(record.status, "empty");
+    if (record.status === "empty") assert.match(record.reason, /Try the last name alone/);
+  }
+});

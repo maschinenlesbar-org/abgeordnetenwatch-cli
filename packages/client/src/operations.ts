@@ -2,7 +2,7 @@
 // side jobs, find polls and a poll's result. Each composes list/get/count and carries the traps
 // the skills document, so no caller has to know them:
 // - a name search is a contains-match in the API's order: a full page is not all matches, so
-//   the total is counted and reported (`complete`);
+//   the total is counted and reported (`complete`); a particle (von, zu, van) starts the last name;
 // - mandates come with `current_on=all`, else only today's;
 // - votes and side jobs hang off a mandate; side jobs are filtered by `mandates` (plural);
 // - every page is fetched (page size 1000, the API's maximum) and the count checked, so a
@@ -39,7 +39,10 @@ export interface PoliticianSummary {
 
 /** The answer of {@link findPolitician}. */
 export interface PoliticianSearch {
-  /** The filters the name became, e.g. `{ "first_name[cn]": "Olaf", "last_name[cn]": "Scholz" }`. */
+  /**
+   * The filters the name became, e.g. `{ "first_name[cn]": "Olaf", "last_name[cn]": "Scholz" }`,
+   * `{ "first_name[cn]": "Ursula", "last_name[cn]": "von der Leyen" }`.
+   */
   searched: Record<string, string>;
   /** How many politicians match in all. */
   total: number;
@@ -134,7 +137,16 @@ export interface PoliticianRef {
   mandateId?: number | string | undefined;
 }
 
-/** Search politicians by name: "Scholz" (last name contains), "Olaf Scholz" (first and last). */
+/**
+ * The particles that belong to a last name ("von der Leyen", "zu Guttenberg", "van Aken"): a name
+ * search puts the first of them and everything after it into the last name.
+ */
+export const NAME_PARTICLES: ReadonlySet<string> = new Set(["von", "vom", "van", "de", "der", "den", "del", "della", "di", "da", "du", "la", "le", "ten", "ter", "zu", "zum", "zur"]);
+
+/**
+ * Search politicians by name: "Scholz" (last name contains), "Olaf Scholz" (first and last),
+ * "Ursula von der Leyen" (a particle and what follows it are the last name, see {@link NAME_PARTICLES}).
+ */
 export async function findPolitician(
   client: AbgeordnetenwatchClient,
   query: { name: string; limit?: number | undefined },
@@ -143,8 +155,13 @@ export async function findPolitician(
   const name = checkedText("name", query.name);
   const limit = checkedLimit("limit", query.limit, 10, 25);
   const words = name.split(/\s+/u);
-  const last = words.pop() ?? name;
-  const searched: Record<string, string> = words.length > 0 ? { "first_name[cn]": words.join(" "), "last_name[cn]": last } : { "last_name[cn]": last };
+  // The last word starts the last name, or the first particle before it does: the API files
+  // "Ursula von der Leyen" as first name "Ursula", last name "von der Leyen".
+  const particle = words.slice(0, -1).findIndex((word) => NAME_PARTICLES.has(word.toLowerCase()));
+  const split = particle === -1 ? words.length - 1 : particle;
+  const first = words.slice(0, split).join(" ");
+  const last = words.slice(split).join(" ");
+  const searched: Record<string, string> = first !== "" ? { "first_name[cn]": first, "last_name[cn]": last } : { "last_name[cn]": last };
   const total = await client.count("politicians", { filters: searched }, signalOf(options));
   const page = total === 0 ? [] : (await client.list("politicians", { filters: searched, rangeEnd: limit }, signalOf(options))).data;
   const candidates = page.map(politicianSummary);
@@ -253,7 +270,7 @@ export async function resolveMandate(client: AbgeordnetenwatchClient, query: Pol
     politician = politicianSummary((await client.get("politicians", checkedId("politicianId", query.politicianId), signalOf(options))).data);
   } else {
     const search = await findPolitician(client, { name: query.name ?? "", limit: 10 }, options);
-    if (search.total === 0) return { status: "empty", search, reason: `No politician matches ${describeSearch(search)}.` };
+    if (search.total === 0) return { status: "empty", search, reason: `No politician matches ${describeSearch(search)}. ${NO_NAME_MATCH_ADVICE}` };
     const only = search.candidates[0];
     if (search.total > 1 || only === undefined) return { status: "ambiguous", search };
     politician = only;
@@ -305,6 +322,9 @@ export async function readAll(
 function signalOf(options: OperationOptions): RequestOptions | undefined {
   return options.signal === undefined ? undefined : { signal: options.signal };
 }
+
+/** What to try when a name matches nobody. */
+export const NO_NAME_MATCH_ADVICE = "Try the last name alone, or another spelling.";
 
 function describeSearch(search: PoliticianSearch): string {
   return Object.entries(search.searched)

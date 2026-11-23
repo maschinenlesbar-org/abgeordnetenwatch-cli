@@ -13,6 +13,7 @@ import {
   getPollResult,
   getSideJobs,
   getVotingRecord,
+  NO_NAME_MATCH_ADVICE,
   type ListParams,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client";
 
@@ -42,7 +43,7 @@ const RULES =
 
 const id = (description: string): JsonSchema => ({ type: "integer", minimum: 1, maximum: 999_999_999, description });
 const limit = (max: number, fallback: number): JsonSchema => ({ type: "integer", minimum: 1, maximum: max, description: `How many to list (1-${max}, default ${fallback}).` });
-const name: JsonSchema = { type: "string", minLength: 1, maxLength: 100, description: 'A last name ("Scholz") or first and last name ("Olaf Scholz"); matched as "contains".' };
+const name: JsonSchema = { type: "string", minLength: 1, maxLength: 100, description: 'A last name ("Scholz", "von der Leyen") or first and last name ("Olaf Scholz", "Ursula von der Leyen"); matched as "contains".' };
 const date = (description: string): JsonSchema => ({ type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description });
 const collection: JsonSchema = { type: "string", enum: [...ENTITY_COLLECTIONS], description: "The collection (entity type)." };
 const filters: JsonSchema = {
@@ -113,7 +114,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     source: "politicians",
     async run(args, context) {
       const search = await findPolitician(context.client, { name: str(args, "name") ?? "", limit: num(args, "limit") }, options(context));
-      return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: "No politician's name contains that. Try the last name alone, or another spelling." } : {}) };
+      return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: `No politician's name contains that. ${NO_NAME_MATCH_ADVICE}` } : {}) };
     },
   },
   {
