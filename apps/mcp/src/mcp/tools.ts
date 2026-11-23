@@ -93,9 +93,8 @@ const options = (context: ToolContext) => ({ signal: context.signal, maxPages: c
 
 // `source`: the request the answer came from, so a reader can follow it and see the record
 // (`votes?mandate=200`, not every vote of everyone under `votes`). The kit makes `source` from
-// the call's arguments; what a tool only learns while it runs (the mandate it resolved) it notes
-// here, under that call's arguments object, which callTool passes to run and then to source.
-const cited = new WeakMap<Record<string, unknown>, string>();
+// the call's arguments and the tool's answer; what a tool only learns while it runs (the mandate
+// it resolved) it reads from that answer.
 
 /** The longest query a `source` cites; a longer one (ten long non-Latin filter values) cites the collection. */
 const MAX_SOURCE_QUERY = 2000;
@@ -108,15 +107,17 @@ function request(path: string, query: QueryParams): string {
   return text === "" || text.length > MAX_SOURCE_QUERY ? path : `${path}?${text}`;
 }
 
-/** The `source` of a tool that notes its request in run; `fallback` until it has. */
-const noted = (fallback: string) => (args: Record<string, unknown>): string => cited.get(args) ?? fallback;
-
 /** Where getVotingRecord's or getSideJobs' answer came from: the mandate's records, the name search, or the mandates. */
-function citeRecord(args: Record<string, unknown>, answer: VotingRecord | SideJobs, collection: "votes" | "sidejobs", filter: "mandate" | "mandates"): void {
-  if (answer.status === "ok") cited.set(args, request(collection, { [filter]: answer.mandate.id }));
-  else if (answer.search !== undefined) cited.set(args, request("politicians", answer.search.searched));
-  else if (answer.status === "empty" && answer.politician !== undefined) cited.set(args, request("candidacies-mandates", { politician: answer.politician.id, current_on: "all" }));
-}
+const citeRecord =
+  (collection: "votes" | "sidejobs", filter: "mandate" | "mandates") =>
+  (_args: Record<string, unknown>, _apiBase: string, answer: Record<string, unknown>): string => {
+    // The answer is this tool's own run's: a VotingRecord or SideJobs spread into an object.
+    const record = answer as unknown as VotingRecord | SideJobs;
+    if (record.status === "ok") return request(collection, { [filter]: record.mandate.id });
+    if (record.search !== undefined) return request("politicians", record.search.searched);
+    if (record.status === "empty" && record.politician !== undefined) return request("candidacies-mandates", { politician: record.politician.id, current_on: "all" });
+    return collection;
+  };
 
 /** The filters argument of listEntities and countEntities. */
 const filtersOf = (args: Record<string, unknown>) => (args["filters"] as Record<string, FilterValue> | undefined) ?? {};
@@ -149,10 +150,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ name, limit: limit(25, 10) }, ["name"]),
     outputSchema: output({ searched: obj, total: int, candidates: arr, complete: { type: "boolean" } }),
-    source: noted("politicians"),
+    source: (_args, _apiBase, answer) => request("politicians", (answer["searched"] as QueryParams | undefined) ?? {}),
     async run(args, context) {
       const search = await findPolitician(context.client, { name: str(args, "name") ?? "", limit: num(args, "limit") }, options(context));
-      cited.set(args, request("politicians", search.searched));
       return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: `No politician's name contains that. ${NO_NAME_MATCH_ADVICE}` } : {}) };
     },
   },
@@ -166,11 +166,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ politicianId: id("The politician's id."), name, mandateId: id("A mandate of that politician (default: the most recent)."), limit: limit(100, 20) }),
     outputSchema: output({ ...politicianFields, total: int, tally: obj, recent: arr }),
-    source: noted("votes"),
+    source: citeRecord("votes", "mandate"),
     async run(args, context) {
-      const record = await getVotingRecord(context.client, { ...ref(args), limit: num(args, "limit") }, options(context));
-      citeRecord(args, record, "votes", "mandate");
-      return { ...record };
+      return { ...(await getVotingRecord(context.client, { ...ref(args), limit: num(args, "limit") }, options(context))) };
     },
   },
   {
@@ -227,11 +225,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({ politicianId: id("The politician's id."), name, mandateId: id("A mandate of that politician (default: the most recent).") }),
     outputSchema: output({ ...politicianFields, total: int, sideJobs: arr }),
-    source: noted("sidejobs"),
+    source: citeRecord("sidejobs", "mandates"),
     async run(args, context) {
-      const jobs = await getSideJobs(context.client, ref(args), options(context));
-      citeRecord(args, jobs, "sidejobs", "mandates");
-      return { ...jobs };
+      return { ...(await getSideJobs(context.client, ref(args), options(context))) };
     },
   },
   {
