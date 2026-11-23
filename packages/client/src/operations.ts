@@ -333,9 +333,14 @@ function checkedId(name: string, value: number | string): string {
   return normalizeEntityId(value);
 }
 
+/**
+ * A calendar date as YYYY-MM-DD. `Date.parse` alone rolled an impossible day over
+ * (2026-02-30 became March 2) and the date went out as it was; a date must read back the same.
+ */
 function checkedDate(name: string, value: unknown): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
-    throw new AwValidationError(`Invalid ${name}: expected a date YYYY-MM-DD, got ${describeValue(value)}.`);
+  const time = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : Number.NaN;
+  if (Number.isNaN(time) || new Date(time).toISOString().slice(0, 10) !== value) {
+    throw new AwValidationError(`Invalid ${name}: expected an existing date YYYY-MM-DD, got ${describeValue(value)}.`);
   }
   return value;
 }

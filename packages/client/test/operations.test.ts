@@ -186,3 +186,13 @@ test("the signal reaches every request", async () => {
   await assert.rejects(findPolitician(new AbgeordnetenwatchClient({ transport: mock.transport }), { name: "Scholz" }, { signal: AbortSignal.abort() }), AwNetworkError);
   assert.equal(mock.calls.length, 0);
 });
+
+test("findPolls refuses a date that doesn't exist (Feb 30, Apr 31) instead of sending it", async () => {
+  const mock = upstream(() => []);
+  const client = new AbgeordnetenwatchClient({ transport: mock.transport });
+  for (const [key, value] of [["from", "2026-02-30"], ["to", "2025-04-31"], ["from", "2025-02-29"], ["to", "2026-13-01"], ["from", "2026-00-10"]] as const) {
+    await assert.rejects(findPolls(client, { parliamentPeriodId: 161, [key]: value }), (err: Error) => err instanceof AwValidationError && err.message.includes(`Invalid ${key}`), value);
+  }
+  assert.equal(mock.calls.length, 0);
+  await findPolls(client, { parliamentPeriodId: 161, from: "2024-02-29", to: "2026-12-31" });
+});
