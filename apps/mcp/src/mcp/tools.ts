@@ -13,6 +13,7 @@ import {
   getPollResult,
   getSideJobs,
   getVotingRecord,
+  MAX_FILTER_KEY_LENGTH,
   NO_NAME_MATCH_ADVICE,
   type ListParams,
 } from "@maschinenlesbar.org/abgeordnetenwatch-client";
@@ -49,6 +50,7 @@ const collection: JsonSchema = { type: "string", enum: [...ENTITY_COLLECTIONS], 
 const filters: JsonSchema = {
   type: "object",
   maxProperties: 10,
+  propertyNames: { minLength: 1, maxLength: MAX_FILTER_KEY_LENGTH },
   additionalProperties: { type: ["string", "number", "boolean"], maxLength: 200 },
   description:
     'Field filters as the API names them, e.g. {"last_name[cn]": "Scholz"} or {"mandate": 70}. Operators in brackets: eq, ne, gt, gte, lt, lte, cn (contains), sw (starts with). Filter by the JSON field name; for side jobs the mandate filter is "mandates" (plural).',

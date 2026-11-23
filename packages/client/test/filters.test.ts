@@ -67,3 +67,10 @@ test("validateFilters throws AwValidationError naming the filter, and skips omit
   assert.throws(() => validateFilters({ sex: "f", "sex[ne]": "m" }), /^AwValidationError: Invalid filters: Conflicting/);
   validateFilters({ sex: "f", "year_of_birth[gt]": 1990, skipped: undefined, alsoSkipped: null });
 });
+
+test("a filter key longer than a field name and an operator can be is refused before any request", () => {
+  const long = `f_${"k".repeat(99)}`;
+  assert.match(filterKeyProblem(long) ?? "", /at most 100 characters/);
+  assert.equal(filterKeyProblem(`f_${"k".repeat(98)}`), undefined);
+  assert.throws(() => validateFilters({ [`${"k".repeat(90_000)}`]: "x" }), (err: Error) => err instanceof AwValidationError && err.message.length < 1000);
+});

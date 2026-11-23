@@ -56,10 +56,20 @@ export const filterBlankProblem: Problem<readonly [string, FilterValue]> = ([key
 export const filterTextProblem: Problem<unknown> = (value) => (typeof value === "string" ? textProblem(value) : undefined);
 
 /**
- * Rule: the key is a field name with at most one bracket operator. The API ignores
- * anything else: `[gt]=1990` drops the filter, `field[gt]x` loses the trailing text.
+ * The longest filter key: a field name and an operator are far shorter. A longer key was sent
+ * (a 90 000-character one made a URL the upstream refused), where it can only be a mistake.
+ */
+export const MAX_FILTER_KEY_LENGTH = 100;
+
+/**
+ * Rule: the key is a field name with at most one bracket operator, at most
+ * {@link MAX_FILTER_KEY_LENGTH} characters. The API ignores anything else: `[gt]=1990` drops
+ * the filter, `field[gt]x` loses the trailing text.
  */
 export const filterKeyProblem: Problem<string> = (key) => {
+  if (key.length > MAX_FILTER_KEY_LENGTH) {
+    return `A filter key is a field name and an operator, at most ${MAX_FILTER_KEY_LENGTH} characters; this one has ${key.length}.`;
+  }
   if (!FILTER_KEY.test(key)) {
     return "Use a field name, optionally with one operator: sex=f or 'year_of_birth[gt]=1990'.";
   }

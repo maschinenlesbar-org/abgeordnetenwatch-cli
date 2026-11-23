@@ -92,3 +92,15 @@ test("findPolls' empty answer gives a reason that fits what was asked", async ()
   assert.match(await reason({ parliamentPeriodId: 161, from: "2026-05-01", to: "2026-01-01" }), /from \(2026-05-01\) is after to \(2026-01-01\)/);
   await connection.close();
 });
+
+test("filter keys are bounded in the schema: a 90 000-character key is a tool error and no request", async () => {
+  const connection = await connect({ transport: world });
+  const before = world.calls.length;
+  for (const tool of ["countEntities", "listEntities"]) {
+    const result = await connection.call(tool, { collection: "parties", filters: { [`f_${"k".repeat(90_000)}`]: "x" } });
+    assert.equal(result.isError, true, tool);
+    assert.ok((result.content[0]?.text ?? "").length < 3000, tool);
+  }
+  assert.equal(world.calls.length, before);
+  await connection.close();
+});

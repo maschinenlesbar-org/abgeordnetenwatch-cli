@@ -59,6 +59,7 @@ export {
   filterBlankProblem,
   filterTextProblem,
   filterKeyProblem,
+  MAX_FILTER_KEY_LENGTH,
   reservedFilterProblem,
   filterOperatorProblem,
   filterClashProblem,
