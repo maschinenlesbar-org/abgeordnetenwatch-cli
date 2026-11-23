@@ -82,6 +82,23 @@ const str = (args: Record<string, unknown>, key: string): string | undefined => 
 const ref = (args: Record<string, unknown>) => ({ politicianId: num(args, "politicianId"), name: str(args, "name"), mandateId: num(args, "mandateId") });
 const options = (context: ToolContext) => ({ signal: context.signal, maxPages: context.maxPages });
 
+/**
+ * Why findPolls found nothing, from what was asked: advice to widen dates or drop a topic that
+ * were never given sent a model looking for a cause that isn't there (and let it conclude the
+ * period had no votes, where the id may be wrong).
+ */
+function noPollReason(args: Record<string, unknown>): string {
+  const period = num(args, "parliamentPeriodId");
+  const from = str(args, "from");
+  const to = str(args, "to");
+  const topic = num(args, "topicId");
+  const check = "Check the id with listEntities on parliament-periods.";
+  if (from !== undefined && to !== undefined && from > to) return `No poll matches: from (${from}) is after to (${to}).`;
+  if (from === undefined && to === undefined && topic === undefined) return `abgeordnetenwatch.de records no roll-call votes for parliament period ${period}. ${check}`;
+  const narrowed = [from !== undefined || to !== undefined ? "widen the dates" : undefined, topic !== undefined ? "drop the topic" : undefined].filter((part) => part !== undefined);
+  return `No poll of parliament period ${period} matches; ${narrowed.join(" or ")}. If none matches without them either, the period has no roll-call votes recorded: ${check}`;
+}
+
 export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "findPolitician",
@@ -134,7 +151,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         { parliamentPeriodId: num(args, "parliamentPeriodId") ?? 0, topicId: num(args, "topicId"), from: str(args, "from"), to: str(args, "to"), limit: num(args, "limit") },
         options(context),
       );
-      return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: "No poll matches; widen the dates or drop the topic." } : {}) };
+      return { status: search.total === 0 ? "empty" : "ok", ...search, ...(search.total === 0 ? { reason: noPollReason(args) } : {}) };
     },
   },
   {

@@ -77,3 +77,18 @@ test("arguments that fail validation are a tool error the model can act on; an u
   await assert.rejects(connection.call("noSuchTool", {}), (err: Error & { rpc?: { code?: number } }) => err.rpc?.code === -32602);
   await connection.close();
 });
+
+test("findPolls' empty answer gives a reason that fits what was asked", async () => {
+  const none = upstream((collection) => (collection === "polls" ? [] : undefined));
+  const connection = await connect({ transport: none });
+  const reason = async (args: Record<string, unknown>) => String((await connection.call("findPolls", args)).structuredContent?.["reason"]);
+  const plain = await reason({ parliamentPeriodId: 999 });
+  assert.match(plain, /no roll-call votes for parliament period 999/i);
+  assert.match(plain, /listEntities on parliament-periods/);
+  assert.doesNotMatch(plain, /widen the dates|drop the topic/);
+  assert.match(await reason({ parliamentPeriodId: 161, from: "2026-01-01" }), /widen the dates/);
+  assert.doesNotMatch(await reason({ parliamentPeriodId: 161, from: "2026-01-01" }), /topic/);
+  assert.match(await reason({ parliamentPeriodId: 161, topicId: 5 }), /drop the topic/);
+  assert.match(await reason({ parliamentPeriodId: 161, from: "2026-05-01", to: "2026-01-01" }), /from \(2026-05-01\) is after to \(2026-01-01\)/);
+  await connection.close();
+});
