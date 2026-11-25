@@ -407,9 +407,12 @@ with an ERROR record, never exit 0; the `-o` cases are left out: this CLI has no
 - **The transport contract is enforced by the engine.** `timeoutMs` and
   `maxResponseBytes` hold for every transport, not only the built-in one: the engine
   runs each transport call under the overall deadline (it passes an `AbortSignal` in
-  `HttpRequest.signal`, which the built-in transport honours and a fetch transport
-  should pass on, and rejects at the deadline either way) and checks the size of the
-  body it gets back (the message names `maxResponseBytes` and `--max-response-bytes`).
+  `HttpRequest.signal`, with the timeout error as its reason, which the built-in transport
+  honours and a fetch transport should pass on, and rejects at the deadline either way) and
+  checks the size of the body it gets back (the message names `maxResponseBytes` and
+  `--max-response-bytes`). The built-in transport stops with the signal's reason; for a signal
+  some other caller aborted (the MCP server's tool call: its deadline, a cancellation) it says
+  "Request aborted by its caller before it finished", never a timeout it didn't have.
   The built-in transport joins the body's chunks as they arrive (every 1024 chunks or
   64 KiB), so the memory it holds follows the bytes, not the number of chunks a server
   sends: one Buffer per one-byte chunk took about 210 bytes of heap per byte.
